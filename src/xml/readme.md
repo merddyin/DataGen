@@ -11,8 +11,8 @@ External help files should _not_ be placed in this folder! The help files are ge
 
 There should be only one format file and one type extension file per project, as importing more than one of each will have a notable impact on import times.
 
- - The Format XML should be named `ENVReconnoiter.Format.ps1xml`
- - The Type Extension XML should be named `ENVReconnoiter.Types.ps1xml`
+ - The Format XML should be named `DataGen.Format.ps1xml`
+ - The Type Extension XML should be named `DataGen.Types.ps1xml`
 
 Note: Example files are included in this directory for your reference, however these files should be removed if they are not required.
 
