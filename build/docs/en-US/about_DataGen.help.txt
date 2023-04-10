@@ -1,0 +1,19 @@
+TOPIC
+    about_DataGen
+
+SHORT DESCRIPTION
+    Dymanically creates a set of data for use in populating lab environments, POCs, and demo setups
+
+LONG DESCRIPTION
+    This module serves as an extensible toolset framework that can dynamically generate data for use in various purposes and environments.
+    Unlike many other fake data generators, this generator is intended to generate more realistic looking content that can be leveraged for
+    a variety of purposes. 
+
+EXAMPLES
+    TBD
+
+KEYWORDS
+    Tools,data,generator
+
+SEE ALSO
+    https://github.com/merddyin/DataGen.git

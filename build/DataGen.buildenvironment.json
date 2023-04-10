@@ -1,0 +1,44 @@
+﻿{
+    "OptionAnalyzeCode":  true,
+    "FunctionTemplates":  "src\\templates",
+    "ModuleDescription":  "Dynamically creates data elements, such as people, identities, companies, etc, for use in labs, POCs, and demo/dev environments.",
+    "BaseReleaseFolder":  "release",
+    "BuildReportsFolder":  "buildreports",
+    "ScratchFolder":  "temp",
+    "BuildToolFolder":  "build",
+    "Encoding":  "utf8",
+    "OptionSensitiveTermsInitialized":  false,
+    "ModuleTags":  [
+                       "Tools",
+                       "Data",
+                       "Generator"
+                   ],
+    "PublicFunctionSource":  "src\\public",
+    "ModuleToBuild":  "DataGen",
+    "OptionRunPlatyPSVerbose":  false,
+    "ModuleCopyright":  "(c) 2023 Chris Whitfield. All rights reserved.",
+    "OptionCombineFiles":  true,
+    "AdditionalModulePaths":  [
+                                  "plugins"
+                              ],
+    "OptionSanitizeSensitiveTerms":  false,
+    "OptionGenerateReadTheDocs":  true,
+    "Force":  false,
+    "ModuleAuthor":  "Chris Whitfield",
+    "PrivateFunctionSource":  "src\\private",
+    "OtherModuleSource":  "src\\other",
+    "FirstRun":  false,
+    "NugetAPIKey":  "oy2hha7d5adfg4hw6dyagmo4fy3s6ljuzfkzmdxvy7puoi",
+    "OptionTranscriptLogFile":  "BuildTranscript.Log",
+    "OptionSensitiveTerms":  [
+                                 "chris.whitfield"
+                             ],
+    "ForceInstallModule":  false,
+    "ModuleWebsite":  "https://github.com/merddyin/DataGen.git",
+    "BaseSourceFolder":  "src",
+    "ModuleLicenseURI":  "https://github.com/merddyin/DataGen.git",
+    "ModuleVersion":  "0.1.0",
+    "OptionTranscriptEnabled":  false,
+    "OptionUpdateVersionAfterPublishing":  true,
+    "OptionCodeHealthReport":  true
+}

@@ -1,0 +1,479 @@
+<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">
+  <Obj RefId="0">
+    <TN RefId="0">
+      <T>System.Management.Automation.PSCustomObject</T>
+      <T>System.Object</T>
+    </TN>
+    <MS>
+      <S N="Name">PSFramework</S>
+      <S N="Version">1.7.270.0</S>
+      <Obj N="Type" RefId="1">
+        <TN RefId="1">
+          <T>Microsoft.PowerShell.PowerShellGet.UtilClasses.ResourceType</T>
+          <T>System.Enum</T>
+          <T>System.ValueType</T>
+          <T>System.Object</T>
+        </TN>
+        <ToString>Module, Command</ToString>
+        <I32>5</I32>
+      </Obj>
+      <S N="Description">General Scripting Framework, providing PowerShell-specific infrastructure for other modules.</S>
+      <S N="Author">Friedrich Weinmann</S>
+      <S N="CompanyName"></S>
+      <S N="Copyright"></S>
+      <DT N="PublishedDate">2023-02-06T15:23:19.26</DT>
+      <DT N="InstalledDate">2023-03-02T14:10:20.6616358-06:00</DT>
+      <B N="IsPrerelease">false</B>
+      <Nil N="UpdatedDate" />
+      <URI N="LicenseUri">https://github.com/PowershellFrameworkCollective/psframework/blob/master/LICENSE</URI>
+      <URI N="ProjectUri">http://psframework.org/</URI>
+      <Nil N="IconUri" />
+      <Obj N="Tags" RefId="2">
+        <TN RefId="2">
+          <T>System.String[]</T>
+          <T>System.Array</T>
+          <T>System.Object</T>
+        </TN>
+        <LST>
+          <S>scripting</S>
+          <S>infrastructure</S>
+          <S>logging</S>
+          <S>configuration</S>
+          <S>PSEdition_Core</S>
+          <S>PSEdition_Desktop</S>
+          <S>Linux</S>
+          <S>Mac</S>
+          <S>PSModule</S>
+          <S>PSCmdlet_ConvertTo-PSFHashtable</S>
+          <S>PSCommand_ConvertTo-PSFHashtable</S>
+          <S>PSCmdlet_Invoke-PSFCallback</S>
+          <S>PSCommand_Invoke-PSFCallback</S>
+          <S>PSCmdlet_Invoke-PSFProtectedCommand</S>
+          <S>PSCommand_Invoke-PSFProtectedCommand</S>
+          <S>PSCmdlet_Remove-PSFNull</S>
+          <S>PSCommand_Remove-PSFNull</S>
+          <S>PSCmdlet_Select-PSFObject</S>
+          <S>PSCommand_Select-PSFObject</S>
+          <S>PSCmdlet_Set-PSFConfig</S>
+          <S>PSCommand_Set-PSFConfig</S>
+          <S>PSCmdlet_Set-PSFObjectOrder</S>
+          <S>PSCommand_Set-PSFObjectOrder</S>
+          <S>PSCmdlet_Test-PSFShouldProcess</S>
+          <S>PSCommand_Test-PSFShouldProcess</S>
+          <S>PSCmdlet_Write-PSFMessage</S>
+          <S>PSCommand_Write-PSFMessage</S>
+          <S>PSIncludes_Cmdlet</S>
+          <S>PSFunction_Add-PSFFilterCondition</S>
+          <S>PSCommand_Add-PSFFilterCondition</S>
+          <S>PSFunction_Add-PSFLoggingProviderRunspace</S>
+          <S>PSCommand_Add-PSFLoggingProviderRunspace</S>
+          <S>PSFunction_Clear-PSFMessage</S>
+          <S>PSCommand_Clear-PSFMessage</S>
+          <S>PSFunction_Clear-PSFResultCache</S>
+          <S>PSCommand_Clear-PSFResultCache</S>
+          <S>PSFunction_Compare-PSFArray</S>
+          <S>PSCommand_Compare-PSFArray</S>
+          <S>PSFunction_ConvertFrom-PSFArray</S>
+          <S>PSCommand_ConvertFrom-PSFArray</S>
+          <S>PSFunction_ConvertFrom-PSFClixml</S>
+          <S>PSCommand_ConvertFrom-PSFClixml</S>
+          <S>PSFunction_ConvertTo-PSFClixml</S>
+          <S>PSCommand_ConvertTo-PSFClixml</S>
+          <S>PSFunction_Disable-PSFConsoleInterrupt</S>
+          <S>PSCommand_Disable-PSFConsoleInterrupt</S>
+          <S>PSFunction_Disable-PSFLoggingProvider</S>
+          <S>PSCommand_Disable-PSFLoggingProvider</S>
+          <S>PSFunction_Disable-PSFTaskEngineTask</S>
+          <S>PSCommand_Disable-PSFTaskEngineTask</S>
+          <S>PSFunction_Enable-PSFConsoleInterrupt</S>
+          <S>PSCommand_Enable-PSFConsoleInterrupt</S>
+          <S>PSFunction_Enable-PSFTaskEngineTask</S>
+          <S>PSCommand_Enable-PSFTaskEngineTask</S>
+          <S>PSFunction_Export-PSFClixml</S>
+          <S>PSCommand_Export-PSFClixml</S>
+          <S>PSFunction_Export-PSFConfig</S>
+          <S>PSCommand_Export-PSFConfig</S>
+          <S>PSFunction_Export-PSFModuleClass</S>
+          <S>PSCommand_Export-PSFModuleClass</S>
+          <S>PSFunction_Get-PSFCallback</S>
+          <S>PSCommand_Get-PSFCallback</S>
+          <S>PSFunction_Get-PSFConfig</S>
+          <S>PSCommand_Get-PSFConfig</S>
+          <S>PSFunction_Get-PSFConfigValue</S>
+          <S>PSCommand_Get-PSFConfigValue</S>
+          <S>PSFunction_Get-PSFDynamicContentObject</S>
+          <S>PSCommand_Get-PSFDynamicContentObject</S>
+          <S>PSFunction_Get-PSFFeature</S>
+          <S>PSCommand_Get-PSFFeature</S>
+          <S>PSFunction_Get-PSFFilterCondition</S>
+          <S>PSCommand_Get-PSFFilterCondition</S>
+          <S>PSFunction_Get-PSFFilterConditionSet</S>
+          <S>PSCommand_Get-PSFFilterConditionSet</S>
+          <S>PSFunction_Get-PSFLicense</S>
+          <S>PSCommand_Get-PSFLicense</S>
+          <S>PSFunction_Get-PSFLocalizedString</S>
+          <S>PSCommand_Get-PSFLocalizedString</S>
+          <S>PSFunction_Get-PSFLoggingProvider</S>
+          <S>PSCommand_Get-PSFLoggingProvider</S>
+          <S>PSFunction_Get-PSFLoggingProviderInstance</S>
+          <S>PSCommand_Get-PSFLoggingProviderInstance</S>
+          <S>PSFunction_Get-PSFMessage</S>
+          <S>PSCommand_Get-PSFMessage</S>
+          <S>PSFunction_Get-PSFMessageLevelModifier</S>
+          <S>PSCommand_Get-PSFMessageLevelModifier</S>
+          <S>PSFunction_Get-PSFPath</S>
+          <S>PSCommand_Get-PSFPath</S>
+          <S>PSFunction_Get-PSFPipeline</S>
+          <S>PSCommand_Get-PSFPipeline</S>
+          <S>PSFunction_Get-PSFResultCache</S>
+          <S>PSCommand_Get-PSFResultCache</S>
+          <S>PSFunction_Get-PSFRunspace</S>
+          <S>PSCommand_Get-PSFRunspace</S>
+          <S>PSFunction_Get-PSFScriptblock</S>
+          <S>PSCommand_Get-PSFScriptblock</S>
+          <S>PSFunction_Get-PSFTaskEngineCache</S>
+          <S>PSCommand_Get-PSFTaskEngineCache</S>
+          <S>PSFunction_Get-PSFTaskEngineTask</S>
+          <S>PSCommand_Get-PSFTaskEngineTask</S>
+          <S>PSFunction_Get-PSFTempItem</S>
+          <S>PSCommand_Get-PSFTempItem</S>
+          <S>PSFunction_Get-PSFTypeSerializationData</S>
+          <S>PSCommand_Get-PSFTypeSerializationData</S>
+          <S>PSFunction_Get-PSFUserChoice</S>
+          <S>PSCommand_Get-PSFUserChoice</S>
+          <S>PSFunction_Import-PSFClixml</S>
+          <S>PSCommand_Import-PSFClixml</S>
+          <S>PSFunction_Import-PSFCmdlet</S>
+          <S>PSCommand_Import-PSFCmdlet</S>
+          <S>PSFunction_Import-PSFConfig</S>
+          <S>PSCommand_Import-PSFConfig</S>
+          <S>PSFunction_Import-PSFLocalizedString</S>
+          <S>PSCommand_Import-PSFLocalizedString</S>
+          <S>PSFunction_Import-PSFLoggingProvider</S>
+          <S>PSCommand_Import-PSFLoggingProvider</S>
+          <S>PSFunction_Import-PSFPowerShellDataFile</S>
+          <S>PSCommand_Import-PSFPowerShellDataFile</S>
+          <S>PSFunction_Install-PSFLoggingProvider</S>
+          <S>PSCommand_Install-PSFLoggingProvider</S>
+          <S>PSFunction_Invoke-PSFCommand</S>
+          <S>PSCommand_Invoke-PSFCommand</S>
+          <S>PSFunction_Invoke-PSFFilter</S>
+          <S>PSCommand_Invoke-PSFFilter</S>
+          <S>PSFunction_Join-PSFPath</S>
+          <S>PSCommand_Join-PSFPath</S>
+          <S>PSFunction_New-PSFFilter</S>
+          <S>PSCommand_New-PSFFilter</S>
+          <S>PSFunction_New-PSFFilterCondition</S>
+          <S>PSCommand_New-PSFFilterCondition</S>
+          <S>PSFunction_New-PSFFilterConditionSet</S>
+          <S>PSCommand_New-PSFFilterConditionSet</S>
+          <S>PSFunction_New-PSFLicense</S>
+          <S>PSCommand_New-PSFLicense</S>
+          <S>PSFunction_New-PSFMessageLevelModifier</S>
+          <S>PSCommand_New-PSFMessageLevelModifier</S>
+          <S>PSFunction_New-PSFSessionContainer</S>
+          <S>PSCommand_New-PSFSessionContainer</S>
+          <S>PSFunction_New-PSFSupportPackage</S>
+          <S>PSCommand_New-PSFSupportPackage</S>
+          <S>PSFunction_New-PSFTempDirectory</S>
+          <S>PSCommand_New-PSFTempDirectory</S>
+          <S>PSFunction_New-PSFTempFile</S>
+          <S>PSCommand_New-PSFTempFile</S>
+          <S>PSFunction_New-PSFTempItem</S>
+          <S>PSCommand_New-PSFTempItem</S>
+          <S>PSFunction_New-PSFTeppCompletionResult</S>
+          <S>PSCommand_New-PSFTeppCompletionResult</S>
+          <S>PSFunction_New-PSFThrottle</S>
+          <S>PSCommand_New-PSFThrottle</S>
+          <S>PSFunction_Register-PSFCallback</S>
+          <S>PSCommand_Register-PSFCallback</S>
+          <S>PSFunction_Register-PSFConfig</S>
+          <S>PSCommand_Register-PSFConfig</S>
+          <S>PSFunction_Register-PSFConfigSchema</S>
+          <S>PSCommand_Register-PSFConfigSchema</S>
+          <S>PSFunction_Register-PSFConfigValidation</S>
+          <S>PSCommand_Register-PSFConfigValidation</S>
+          <S>PSFunction_Register-PSFFeature</S>
+          <S>PSCommand_Register-PSFFeature</S>
+          <S>PSFunction_Register-PSFLoggingProvider</S>
+          <S>PSCommand_Register-PSFLoggingProvider</S>
+          <S>PSFunction_Register-PSFMessageEvent</S>
+          <S>PSCommand_Register-PSFMessageEvent</S>
+          <S>PSFunction_Register-PSFMessageTransform</S>
+          <S>PSCommand_Register-PSFMessageTransform</S>
+          <S>PSFunction_Register-PSFParameterClassMapping</S>
+          <S>PSCommand_Register-PSFParameterClassMapping</S>
+          <S>PSFunction_Register-PSFRunspace</S>
+          <S>PSCommand_Register-PSFRunspace</S>
+          <S>PSFunction_Register-PSFSessionObjectType</S>
+          <S>PSCommand_Register-PSFSessionObjectType</S>
+          <S>PSFunction_Register-PSFTaskEngineTask</S>
+          <S>PSCommand_Register-PSFTaskEngineTask</S>
+          <S>PSFunction_Register-PSFTempProvider</S>
+          <S>PSCommand_Register-PSFTempProvider</S>
+          <S>PSFunction_Register-PSFTeppArgumentCompleter</S>
+          <S>PSCommand_Register-PSFTeppArgumentCompleter</S>
+          <S>PSFunction_Register-PSFTeppScriptblock</S>
+          <S>PSCommand_Register-PSFTeppScriptblock</S>
+          <S>PSFunction_Register-PSFTypeSerializationData</S>
+          <S>PSCommand_Register-PSFTypeSerializationData</S>
+          <S>PSFunction_Remove-PSFAlias</S>
+          <S>PSCommand_Remove-PSFAlias</S>
+          <S>PSFunction_Remove-PSFConfig</S>
+          <S>PSCommand_Remove-PSFConfig</S>
+          <S>PSFunction_Remove-PSFLicense</S>
+          <S>PSCommand_Remove-PSFLicense</S>
+          <S>PSFunction_Remove-PSFLoggingProviderRunspace</S>
+          <S>PSCommand_Remove-PSFLoggingProviderRunspace</S>
+          <S>PSFunction_Remove-PSFMessageLevelModifier</S>
+          <S>PSCommand_Remove-PSFMessageLevelModifier</S>
+          <S>PSFunction_Remove-PSFTempItem</S>
+          <S>PSCommand_Remove-PSFTempItem</S>
+          <S>PSFunction_Reset-PSFConfig</S>
+          <S>PSCommand_Reset-PSFConfig</S>
+          <S>PSFunction_Resolve-PSFDefaultParameterValue</S>
+          <S>PSCommand_Resolve-PSFDefaultParameterValue</S>
+          <S>PSFunction_Resolve-PSFPath</S>
+          <S>PSCommand_Resolve-PSFPath</S>
+          <S>PSFunction_Select-PSFConfig</S>
+          <S>PSCommand_Select-PSFConfig</S>
+          <S>PSFunction_Select-PSFPropertyValue</S>
+          <S>PSCommand_Select-PSFPropertyValue</S>
+          <S>PSFunction_Set-PSFDynamicContentObject</S>
+          <S>PSCommand_Set-PSFDynamicContentObject</S>
+          <S>PSFunction_Set-PSFFeature</S>
+          <S>PSCommand_Set-PSFFeature</S>
+          <S>PSFunction_Set-PSFLoggingProvider</S>
+          <S>PSCommand_Set-PSFLoggingProvider</S>
+          <S>PSFunction_Set-PSFPath</S>
+          <S>PSCommand_Set-PSFPath</S>
+          <S>PSFunction_Set-PSFResultCache</S>
+          <S>PSCommand_Set-PSFResultCache</S>
+          <S>PSFunction_Set-PSFScriptblock</S>
+          <S>PSCommand_Set-PSFScriptblock</S>
+          <S>PSFunction_Set-PSFTaskEngineCache</S>
+          <S>PSCommand_Set-PSFTaskEngineCache</S>
+          <S>PSFunction_Set-PSFTeppResult</S>
+          <S>PSCommand_Set-PSFTeppResult</S>
+          <S>PSFunction_Set-PSFTypeAlias</S>
+          <S>PSCommand_Set-PSFTypeAlias</S>
+          <S>PSFunction_Start-PSFRunspace</S>
+          <S>PSCommand_Start-PSFRunspace</S>
+          <S>PSFunction_Stop-PSFFunction</S>
+          <S>PSCommand_Stop-PSFFunction</S>
+          <S>PSFunction_Stop-PSFRunspace</S>
+          <S>PSCommand_Stop-PSFRunspace</S>
+          <S>PSFunction_Test-PSFFeature</S>
+          <S>PSCommand_Test-PSFFeature</S>
+          <S>PSFunction_Test-PSFFilter</S>
+          <S>PSCommand_Test-PSFFilter</S>
+          <S>PSFunction_Test-PSFFunctionInterrupt</S>
+          <S>PSCommand_Test-PSFFunctionInterrupt</S>
+          <S>PSFunction_Test-PSFLanguageMode</S>
+          <S>PSCommand_Test-PSFLanguageMode</S>
+          <S>PSFunction_Test-PSFParameterBinding</S>
+          <S>PSCommand_Test-PSFParameterBinding</S>
+          <S>PSFunction_Test-PSFPowerShell</S>
+          <S>PSCommand_Test-PSFPowerShell</S>
+          <S>PSFunction_Test-PSFTaskEngineCache</S>
+          <S>PSCommand_Test-PSFTaskEngineCache</S>
+          <S>PSFunction_Test-PSFTaskEngineTask</S>
+          <S>PSCommand_Test-PSFTaskEngineTask</S>
+          <S>PSFunction_Unregister-PSFCallback</S>
+          <S>PSCommand_Unregister-PSFCallback</S>
+          <S>PSFunction_Unregister-PSFConfig</S>
+          <S>PSCommand_Unregister-PSFConfig</S>
+          <S>PSFunction_Wait-PSFMessage</S>
+          <S>PSCommand_Wait-PSFMessage</S>
+          <S>PSFunction_Write-PSFHostColor</S>
+          <S>PSCommand_Write-PSFHostColor</S>
+          <S>PSFunction_Write-PSFMessageProxy</S>
+          <S>PSCommand_Write-PSFMessageProxy</S>
+          <S>PSIncludes_Function</S>
+        </LST>
+      </Obj>
+      <Obj N="Includes" RefId="3">
+        <TN RefId="3">
+          <T>System.Collections.Hashtable</T>
+          <T>System.Object</T>
+        </TN>
+        <DCT>
+          <En>
+            <S N="Key">DscResource</S>
+            <Obj N="Value" RefId="4">
+              <TNRef RefId="2" />
+              <LST />
+            </Obj>
+          </En>
+          <En>
+            <S N="Key">Command</S>
+            <Obj N="Value" RefId="5">
+              <TNRef RefId="2" />
+              <LST>
+                <S>ConvertTo-PSFHashtable</S>
+                <S>Invoke-PSFCallback</S>
+                <S>Invoke-PSFProtectedCommand</S>
+                <S>Remove-PSFNull</S>
+                <S>Select-PSFObject</S>
+                <S>Set-PSFConfig</S>
+                <S>Set-PSFObjectOrder</S>
+                <S>Test-PSFShouldProcess</S>
+                <S>Write-PSFMessage</S>
+                <S>Add-PSFFilterCondition</S>
+                <S>Add-PSFLoggingProviderRunspace</S>
+                <S>Clear-PSFMessage</S>
+                <S>Clear-PSFResultCache</S>
+                <S>Compare-PSFArray</S>
+                <S>ConvertFrom-PSFArray</S>
+                <S>ConvertFrom-PSFClixml</S>
+                <S>ConvertTo-PSFClixml</S>
+                <S>Disable-PSFConsoleInterrupt</S>
+                <S>Disable-PSFLoggingProvider</S>
+                <S>Disable-PSFTaskEngineTask</S>
+                <S>Enable-PSFConsoleInterrupt</S>
+                <S>Enable-PSFTaskEngineTask</S>
+                <S>Export-PSFClixml</S>
+                <S>Export-PSFConfig</S>
+                <S>Export-PSFModuleClass</S>
+                <S>Get-PSFCallback</S>
+                <S>Get-PSFConfig</S>
+                <S>Get-PSFConfigValue</S>
+                <S>Get-PSFDynamicContentObject</S>
+                <S>Get-PSFFeature</S>
+                <S>Get-PSFFilterCondition</S>
+                <S>Get-PSFFilterConditionSet</S>
+                <S>Get-PSFLicense</S>
+                <S>Get-PSFLocalizedString</S>
+                <S>Get-PSFLoggingProvider</S>
+                <S>Get-PSFLoggingProviderInstance</S>
+                <S>Get-PSFMessage</S>
+                <S>Get-PSFMessageLevelModifier</S>
+                <S>Get-PSFPath</S>
+                <S>Get-PSFPipeline</S>
+                <S>Get-PSFResultCache</S>
+                <S>Get-PSFRunspace</S>
+                <S>Get-PSFScriptblock</S>
+                <S>Get-PSFTaskEngineCache</S>
+                <S>Get-PSFTaskEngineTask</S>
+                <S>Get-PSFTempItem</S>
+                <S>Get-PSFTypeSerializationData</S>
+                <S>Get-PSFUserChoice</S>
+                <S>Import-PSFClixml</S>
+                <S>Import-PSFCmdlet</S>
+                <S>Import-PSFConfig</S>
+                <S>Import-PSFLocalizedString</S>
+                <S>Import-PSFLoggingProvider</S>
+                <S>Import-PSFPowerShellDataFile</S>
+                <S>Install-PSFLoggingProvider</S>
+                <S>Invoke-PSFCommand</S>
+                <S>Invoke-PSFFilter</S>
+                <S>Join-PSFPath</S>
+                <S>New-PSFFilter</S>
+                <S>New-PSFFilterCondition</S>
+                <S>New-PSFFilterConditionSet</S>
+                <S>New-PSFLicense</S>
+                <S>New-PSFMessageLevelModifier</S>
+                <S>New-PSFSessionContainer</S>
+                <S>New-PSFSupportPackage</S>
+                <S>New-PSFTempDirectory</S>
+                <S>New-PSFTempFile</S>
+                <S>New-PSFTempItem</S>
+                <S>New-PSFTeppCompletionResult</S>
+                <S>New-PSFThrottle</S>
+                <S>Register-PSFCallback</S>
+                <S>Register-PSFConfig</S>
+                <S>Register-PSFConfigSchema</S>
+                <S>Register-PSFConfigValidation</S>
+                <S>Register-PSFFeature</S>
+                <S>Register-PSFLoggingProvider</S>
+                <S>Register-PSFMessageEvent</S>
+                <S>Register-PSFMessageTransform</S>
+                <S>Register-PSFParameterClassMapping</S>
+                <S>Register-PSFRunspace</S>
+                <S>Register-PSFSessionObjectType</S>
+                <S>Register-PSFTaskEngineTask</S>
+                <S>Register-PSFTempProvider</S>
+                <S>Register-PSFTeppArgumentCompleter</S>
+                <S>Register-PSFTeppScriptblock</S>
+                <S>Register-PSFTypeSerializationData</S>
+                <S>Remove-PSFAlias</S>
+                <S>Remove-PSFConfig</S>
+                <S>Remove-PSFLicense</S>
+                <S>Remove-PSFLoggingProviderRunspace</S>
+                <S>Remove-PSFMessageLevelModifier</S>
+                <S>Remove-PSFTempItem</S>
+                <S>Reset-PSFConfig</S>
+                <S>Resolve-PSFDefaultParameterValue</S>
+                <S>Resolve-PSFPath</S>
+                <S>Select-PSFConfig</S>
+                <S>Select-PSFPropertyValue</S>
+                <S>Set-PSFDynamicContentObject</S>
+                <S>Set-PSFFeature</S>
+                <S>Set-PSFLoggingProvider</S>
+                <S>Set-PSFPath</S>
+                <S>Set-PSFResultCache</S>
+                <S>Set-PSFScriptblock</S>
+                <S>Set-PSFTaskEngineCache</S>
+                <S>Set-PSFTeppResult</S>
+                <S>Set-PSFTypeAlias</S>
+                <S>Start-PSFRunspace</S>
+                <S>Stop-PSFFunction</S>
+                <S>Stop-PSFRunspace</S>
+                <S>Test-PSFFeature</S>
+                <S>Test-PSFFilter</S>
+                <S>Test-PSFFunctionInterrupt</S>
+                <S>Test-PSFLanguageMode</S>
+                <S>Test-PSFParameterBinding</S>
+                <S>Test-PSFPowerShell</S>
+                <S>Test-PSFTaskEngineCache</S>
+                <S>Test-PSFTaskEngineTask</S>
+                <S>Unregister-PSFCallback</S>
+                <S>Unregister-PSFConfig</S>
+                <S>Wait-PSFMessage</S>
+                <S>Write-PSFHostColor</S>
+                <S>Write-PSFMessageProxy</S>
+              </LST>
+            </Obj>
+          </En>
+          <En>
+            <S N="Key">Workflow</S>
+            <Nil N="Value" />
+          </En>
+          <En>
+            <S N="Key">RoleCapability</S>
+            <Nil N="Value" />
+          </En>
+          <En>
+            <S N="Key">Function</S>
+            <Nil N="Value" />
+          </En>
+          <En>
+            <S N="Key">Cmdlet</S>
+            <Nil N="Value" />
+          </En>
+        </DCT>
+      </Obj>
+      <S N="PowerShellGetFormatVersion"></S>
+      <S N="ReleaseNotes"></S>
+      <Obj N="Dependencies" RefId="6">
+        <TN RefId="4">
+          <T>Microsoft.PowerShell.PowerShellGet.UtilClasses.Dependency[]</T>
+          <T>System.Array</T>
+          <T>System.Object</T>
+        </TN>
+        <LST />
+      </Obj>
+      <S N="RepositorySourceLocation"></S>
+      <S N="Repository">PSGallery</S>
+      <S N="PackageManagementProvider"></S>
+      <Obj N="AdditionalMetadata" RefId="7">
+        <TNRef RefId="0" />
+        <MS>
+          <S N="IsPrerelease">False</S>
+          <S N="NormalizedVersion">1.7.270.0</S>
+        </MS>
+      </Obj>
+      <S N="InstalledLocation">C:\Users\merdd\OneDrive\Documents\PowerShell\Modules</S>
+    </MS>
+  </Obj>
+</Objs>
