@@ -4,7 +4,7 @@
 	RootModule = 'DataGen.psm1'
 	
 	# Version number of this module.
-	ModuleVersion = '1.0.0'
+	ModuleVersion = '0.1.0'
 	
 	# ID used to uniquely identify this module
 	GUID = 'febf1dd1-6270-4b85-9b79-c8eaba3d1c67'
@@ -88,19 +88,22 @@
 		PSData = @{
 			
 			# Tags applied to this module. These help with module discovery in online galleries.
-			# Tags = @()
+			Tags = @("Tools", "Generator", "Data", "DataGen")
 			
 			# A URL to the license for this module.
-			# LicenseUri = ''
+			LicenseUri = 'https://github.com/merddyin/DataGen/blob/main/LICENSE'
 			
 			# A URL to the main website for this project.
-			# ProjectUri = 'https://github.com/merddyin/DataGen.git'
+			ProjectUri = 'https://github.com/merddyin/DataGen.git'
 			
 			# A URL to an icon representing this module.
 			# IconUri = ''
 			
 			# ReleaseNotes of this module
 			# ReleaseNotes = ''
+
+			# Indicates this is a pre-release/testing version of the module.
+			IsPrerelease = 'true'
 			
 		} # End of PSData hashtable
 		

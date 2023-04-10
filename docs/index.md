@@ -1,6 +1,6 @@
 # DataGen
 
-Creates a pre-engagement data gathering script for a customer to run, or runs enhanced data gathering as part of an assessment engagement. 
+Dynamically creates data elements, such as people, identities, companies, etc, for use in labs, POCs, and demo/dev environments. 
 
 Project Site: [https://github.com/merddyin/DataGen.git](https://github.com/merddyin/DataGen.git)
 
