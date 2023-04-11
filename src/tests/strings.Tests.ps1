@@ -9,7 +9,7 @@
 
 
 Describe "Testing localization strings" {
-	$moduleRoot = (Get-Module TestMePSFProject).ModuleBase
+	$moduleRoot = (Get-Module DataGen).ModuleBase
 	$stringsResults = Export-PSMDString -ModuleRoot $moduleRoot
 	$exceptions = & "$global:testroot\general\strings.Exceptions.ps1"
 	

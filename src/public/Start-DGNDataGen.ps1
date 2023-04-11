@@ -1,4 +1,4 @@
-function Start-DGDataGen {
+function Start-DGNDataGen {
     <#
     .SYNOPSIS
         Starts generation of the specified data set    

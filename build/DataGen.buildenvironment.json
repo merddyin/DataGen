@@ -28,7 +28,7 @@
     "PrivateFunctionSource":  "src\\private",
     "OtherModuleSource":  "src\\other",
     "FirstRun":  false,
-    "NugetAPIKey":  "oy2hha7d5adfg4hw6dyagmo4fy3s6ljuzfkzmdxvy7puoi",
+    "NugetAPIKey":  "",
     "OptionTranscriptLogFile":  "BuildTranscript.Log",
     "OptionSensitiveTerms":  [
                                  "chris.whitfield"

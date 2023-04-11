@@ -5,3 +5,4 @@
 # Example - Native:
     Register-ArgumentCompleter -CommandName Get-Alchohol -Parameter Type -Name ENVR.alcohol
 #>
+Register-ArgumentCompleter -CommandName Start-DGNDataGen -Parameter DataSet -Name DGNdataset

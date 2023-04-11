@@ -7,4 +7,6 @@
  empty. Even leaving this comment is good enough.
 
 #>
-"$ModulePath\internal\scripts\strings.ps1"
+[string]$ModulePath = Split-Path (get-variable myinvocation -scope script).value.Mycommand.Definition -Parent
+
+"$ModulePath\src\private\scripts\strings.ps1"
