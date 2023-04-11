@@ -1,4 +1,4 @@
-## PostLoad Ver 5.2.0
+## PostLoad Ver 1.0.0
 # Use this variable for any path-sepecific actions (like loading dlls and such) to ensure it will work in testing and after being built
 $MyModulePath = $(
     Function Get-ScriptPath {
