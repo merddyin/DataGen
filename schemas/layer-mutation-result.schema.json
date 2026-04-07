@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/layer-mutation-result.schema.json",
+  "title": "LayerMutationResult",
+  "type": "object",
+  "required": ["layerName", "regenerationMode", "outcome"],
+  "properties": {
+    "layerName": { "type": "string" },
+    "regenerationMode": { "type": "string" },
+    "outcome": { "type": "string" },
+    "replacedEntityCount": { "type": "integer", "minimum": 0 },
+    "mergedEntityCount": { "type": "integer", "minimum": 0 },
+    "removedEntityCount": { "type": "integer", "minimum": 0 },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

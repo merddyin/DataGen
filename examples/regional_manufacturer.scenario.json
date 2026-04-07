@@ -1,0 +1,35 @@
+{
+  "name": "Regional Manufacturer Demo",
+  "companies": [
+    {
+      "name": "Northwind Precision",
+      "industry": "Manufacturing",
+      "employeeCount": 180,
+      "businessUnitCount": 3,
+      "departmentCountPerBusinessUnit": 3,
+      "teamCountPerDepartment": 2,
+      "officeCount": 4,
+      "addressMode": "Hybrid",
+      "includeGeocodes": true,
+      "sharedMailboxCount": 6,
+      "serviceAccountCount": 10,
+      "includePrivilegedAccounts": true,
+      "workstationCoverageRatio": 0.94,
+      "serverCount": 26,
+      "networkAssetCountPerOffice": 7,
+      "telephonyAssetCountPerOffice": 18,
+      "databaseCount": 16,
+      "fileShareCount": 12,
+      "collaborationSiteCount": 18,
+      "countries": [ "United States", "Mexico" ]
+    }
+  ],
+  "anomalies": [
+    { "name": "PrivilegedNoMfa", "category": "Identity", "intensity": 0.4 },
+    { "name": "DisabledUsersInGroups", "category": "Identity", "intensity": 0.2 },
+    { "name": "NonCompliantEndpoints", "category": "Infrastructure", "intensity": 0.3 },
+    { "name": "UnownedServers", "category": "Infrastructure", "intensity": 0.2 },
+    { "name": "OpenShares", "category": "Repository", "intensity": 0.2 },
+    { "name": "OrphanedSites", "category": "Repository", "intensity": 0.15 }
+  ]
+}

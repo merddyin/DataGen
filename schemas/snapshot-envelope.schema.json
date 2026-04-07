@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/synthetic-enterprise/snapshot-envelope.schema.json",
+  "title": "Synthetic Enterprise Snapshot Envelope",
+  "type": "object",
+  "required": ["formatName", "schemaVersion", "generatorVersion", "savedUtc", "metadata", "payload"],
+  "properties": {
+    "formatName": { "type": "string" },
+    "schemaVersion": { "type": "string" },
+    "generatorVersion": { "type": "string" },
+    "savedUtc": { "type": "string", "format": "date-time" },
+    "isCompressed": { "type": "boolean" },
+    "metadata": { "type": "object" },
+    "payload": {}
+  },
+  "additionalProperties": true
+}

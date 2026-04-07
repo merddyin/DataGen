@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ModuleCommandDescriptor",
+  "type": "object",
+  "required": ["name", "category", "parameterSets", "acceptsPipelineInput", "supportsPassThru"],
+  "properties": {
+    "name": { "type": "string" },
+    "category": { "type": "string" },
+    "parameterSets": { "type": "array", "items": { "type": "string" } },
+    "acceptsPipelineInput": { "type": "boolean" },
+    "supportsPassThru": { "type": "boolean" }
+  },
+  "additionalProperties": false
+}

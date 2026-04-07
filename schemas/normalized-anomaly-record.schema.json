@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NormalizedAnomalyRecord",
+  "type": "object",
+  "required": [
+    "anomalyId",
+    "category",
+    "type",
+    "title",
+    "summary",
+    "severity",
+    "confidence",
+    "status",
+    "sourceLayer",
+    "generatedAtUtc"
+  ],
+  "properties": {
+    "anomalyId": { "type": "string" },
+    "category": { "type": "string" },
+    "type": { "type": "string" },
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "severity": {
+      "type": "string",
+      "enum": ["Informational", "Low", "Medium", "High", "Critical"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["New", "Triaged", "Suppressed", "Resolved"]
+    },
+    "rationale": { "type": ["string", "null"] },
+    "detectionHints": { "type": ["string", "null"] },
+    "sourceLayer": { "type": "string" },
+    "generatedAtUtc": { "type": "string", "format": "date-time" }
+  }
+}

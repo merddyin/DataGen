@@ -1,0 +1,31 @@
+{
+  "name": "Regional Manufacturer",
+  "description": "Mid-size manufacturer operating in Texas, Oklahoma, and Arkansas with hybrid identity and a moderate anomaly profile.",
+  "companyCount": 1,
+  "industryProfile": "Manufacturing",
+  "geographyProfile": "Regional-US",
+  "employeeSize": {
+    "minimum": 1800,
+    "maximum": 2600
+  },
+  "identity": {
+    "includeHybridDirectory": true,
+    "includeM365StyleGroups": true,
+    "staleAccountRate": 0.04
+  },
+  "infrastructure": {
+    "includeServers": true,
+    "includeWorkstations": true,
+    "includeNetworkAssets": true,
+    "includeTelephony": true
+  },
+  "repositories": {
+    "includeDatabases": true,
+    "includeFileShares": true,
+    "includeCollaborationSites": true
+  },
+  "anomalies": [
+    { "name": "DefaultMessyHybrid", "weight": 1.0 },
+    { "name": "AccessSprawl", "weight": 0.6 }
+  ]
+}

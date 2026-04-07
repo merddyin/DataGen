@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SyntheticEnterprise Export Manifest v2",
+  "type": "object",
+  "required": [
+    "exportId",
+    "schemaVersion",
+    "format",
+    "profile",
+    "exportedAtUtc",
+    "outputPath",
+    "artifacts"
+  ],
+  "properties": {
+    "exportId": { "type": "string" },
+    "schemaVersion": { "type": "string" },
+    "format": { "type": "string" },
+    "profile": { "type": "string" },
+    "exportedAtUtc": { "type": "string", "format": "date-time" },
+    "outputPath": { "type": "string" },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "logicalName",
+          "relativePath",
+          "artifactKind",
+          "mediaType",
+          "rowCount",
+          "sha256",
+          "sizeBytes",
+          "columns"
+        ],
+        "properties": {
+          "logicalName": { "type": "string" },
+          "relativePath": { "type": "string" },
+          "artifactKind": { "type": "string" },
+          "mediaType": { "type": "string" },
+          "rowCount": { "type": "integer" },
+          "sha256": { "type": "string" },
+          "sizeBytes": { "type": "integer" },
+          "columns": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

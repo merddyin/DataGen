@@ -1,0 +1,18 @@
+{
+  "package_name": "synthetic_enterprise_recovered_bundle.zip",
+  "created_from": "conversation-extracted summaries",
+  "contains_original_generated_binaries": false,
+  "items": [
+    "roadmap_summary.md",
+    "v10_idempotency_and_regeneration.md",
+    "v11_catalog_aware_pipeline.md",
+    "v12_world_session_manifest.md",
+    "v4_geography_slice.md",
+    "v5_identity_slice.md",
+    "v6_infrastructure_slice.md",
+    "v7_repository_slice.md",
+    "v8_pipeline_first_design.md",
+    "v9_pipeline_native_layers.md",
+    "README.md"
+  ]
+}

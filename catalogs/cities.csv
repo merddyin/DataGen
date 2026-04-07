@@ -1,0 +1,22 @@
+Region,Country,State,City,PostalCode,TimeZone,Latitude,Longitude
+North America,United States,Texas,Dallas,75201,America/Chicago,32.7767,-96.7970
+North America,United States,Illinois,Chicago,60601,America/Chicago,41.8781,-87.6298
+North America,United States,California,San Diego,92101,America/Los_Angeles,32.7157,-117.1611
+North America,Mexico,Jalisco,Guadalajara,44100,America/Mexico_City,20.6597,-103.3496
+North America,Mexico,Nuevo Leon,Monterrey,64000,America/Monterrey,25.6866,-100.3161
+South America,Brazil,Sao Paulo,Campinas,13010-000,America/Sao_Paulo,-22.9099,-47.0626
+South America,Brazil,Rio de Janeiro,Rio de Janeiro,20000-000,America/Sao_Paulo,-22.9068,-43.1729
+Europe,United Kingdom,England,Manchester,M1 1AE,Europe/London,53.4808,-2.2426
+Europe,United Kingdom,England,London,EC1A 1BB,Europe/London,51.5072,-0.1276
+Europe,Germany,Hesse,Frankfurt,60311,Europe/Berlin,50.1109,8.6821
+Europe,Germany,Bavaria,Munich,80331,Europe/Berlin,48.1351,11.5820
+Africa,Nigeria,Lagos,Lagos,100001,Africa/Lagos,6.5244,3.3792
+Africa,Nigeria,Federal Capital Territory,Abuja,900211,Africa/Lagos,9.0765,7.3986
+Africa,Kenya,Nairobi County,Nairobi,00100,Africa/Nairobi,-1.2864,36.8172
+Africa,Kenya,Mombasa County,Mombasa,80100,Africa/Nairobi,-4.0435,39.6682
+Asia,India,Karnataka,Bengaluru,560001,Asia/Kolkata,12.9716,77.5946
+Asia,India,Maharashtra,Pune,411001,Asia/Kolkata,18.5204,73.8567
+Asia,Japan,Tokyo,Tokyo,100-0001,Asia/Tokyo,35.6762,139.6503
+Asia,Japan,Osaka,Osaka,530-0001,Asia/Tokyo,34.6937,135.5023
+Asia,South Korea,Seoul,Seoul,04524,Asia/Seoul,37.5665,126.9780
+Asia,South Korea,Busan,Busan,46524,Asia/Seoul,35.1796,129.0756

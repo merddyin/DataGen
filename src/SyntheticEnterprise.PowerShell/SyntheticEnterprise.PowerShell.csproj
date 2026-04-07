@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" />
+  </ItemGroup>
+</Project>

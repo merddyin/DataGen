@@ -1,0 +1,9 @@
+Type,Pattern,OwnerHint,AccessModel
+Database,ERP_{dept}_{n},Finance,GroupBased
+Database,HRIS_{dept}_{n},Human Resources,Restricted
+Database,OPS_{dept}_{n},Operations,GroupBased
+FileShare,{dept}-share-{n},Department,Mixed
+FileShare,{dept}-archive-{n},Department,GroupBased
+CollaborationSite,{dept} Workspace,Department,Private
+CollaborationSite,{dept} Projects,Department,Private
+CollaborationSite,{dept} Operations,Department,Public

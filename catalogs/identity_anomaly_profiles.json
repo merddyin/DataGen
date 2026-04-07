@@ -1,0 +1,19 @@
+{
+  "profiles": [
+    {
+      "name": "PrivilegedNoMfa",
+      "category": "Identity",
+      "description": "Marks a subset of privileged accounts as lacking MFA."
+    },
+    {
+      "name": "DisabledUsersInGroups",
+      "category": "Identity",
+      "description": "Disables a subset of user accounts while leaving memberships intact."
+    },
+    {
+      "name": "StaleServiceAccounts",
+      "category": "Identity",
+      "description": "Flags service accounts as stale or lacking ownership."
+    }
+  ]
+}
