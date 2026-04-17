@@ -1111,6 +1111,9 @@ public sealed class ExternalPluginRuntimeTests
 
     private static void WriteAssemblyPluginProject(string rootPath, string projectName, string source)
     {
+        var contractsProjectPath = Path.Combine(GetRepositoryRoot(), "src", "SyntheticEnterprise.Contracts", "SyntheticEnterprise.Contracts.csproj");
+        Assert.True(File.Exists(contractsProjectPath), $"Contracts project was not found at '{contractsProjectPath}'.");
+
         File.WriteAllText(Path.Combine(rootPath, $"{projectName}.csproj"), $$"""
             <Project Sdk="Microsoft.NET.Sdk">
               <PropertyGroup>
@@ -1120,7 +1123,7 @@ public sealed class ExternalPluginRuntimeTests
               </PropertyGroup>
 
               <ItemGroup>
-                <ProjectReference Include="E:\source\DataGen\src\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" />
+                <ProjectReference Include="{{contractsProjectPath}}" />
               </ItemGroup>
             </Project>
             """);
@@ -1166,6 +1169,22 @@ public sealed class ExternalPluginRuntimeTests
 
             Assert.Fail($"Assembly plugin build failed.{Environment.NewLine}{output}{Environment.NewLine}{error}");
         }
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current is not null)
+        {
+            if (File.Exists(Path.Combine(current.FullName, "DataGen.slnx")))
+            {
+                return current.FullName;
+            }
+
+            current = current.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Unable to locate the repository root from the current test assembly path.");
     }
 
     private static ScenarioDefinition MinimalScenario(string companyName)

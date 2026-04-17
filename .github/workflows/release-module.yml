@@ -10,6 +10,16 @@ on:
         description: Numeric module version to package (for example 1.2.3)
         required: true
         type: string
+      publish_to_psgallery:
+        description: Publish the generated package to PowerShell Gallery
+        required: true
+        default: false
+        type: boolean
+      create_github_release:
+        description: Create or update a GitHub Release for the specified version
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -18,6 +28,14 @@ jobs:
   package-release:
     name: Package Release Module
     runs-on: windows-latest
+    env:
+      DIAGNOSTICS_DIR: artifacts/diagnostics
+      MODULE_LOG: artifacts/diagnostics/package-module.log
+      RESTORE_LOG: artifacts/diagnostics/dotnet-restore.log
+      TEST_LOG: artifacts/diagnostics/dotnet-test.log
+      CATALOG_LOG: artifacts/diagnostics/build-catalog.log
+      PSGALLERY_LOG: artifacts/diagnostics/psgallery-publish.log
+      RELEASE_LOG: artifacts/diagnostics/github-release.log
 
     steps:
       - name: Check out repository
@@ -28,9 +46,34 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Initialize diagnostics folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path $env:DIAGNOSTICS_DIR -Force | Out-Null
+          "Release workflow started at $(Get-Date -Format o)" | Set-Content (Join-Path $env:DIAGNOSTICS_DIR 'run-summary.txt')
+
+      - name: Capture toolchain versions
+        shell: pwsh
+        run: |
+          $summaryPath = Join-Path $env:DIAGNOSTICS_DIR 'tooling.txt'
+          @(
+            "dotnet --info"
+            (dotnet --info)
+            ""
+            "pwsh --version"
+            ($PSVersionTable | Out-String)
+            ""
+            "Get-Command Publish-PSResource"
+            ((Get-Command Publish-PSResource -ErrorAction SilentlyContinue | Format-List * | Out-String))
+          ) | Set-Content $summaryPath
+
       - name: Generate seeded catalog artifact
         shell: pwsh
-        run: .\scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot
+        run: |
+          .\scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot *>&1 | Tee-Object -FilePath $env:CATALOG_LOG
+          if ($LASTEXITCODE -ne 0) {
+            throw "Catalog artifact generation failed."
+          }
 
       - name: Resolve release version
         id: version
@@ -50,36 +93,113 @@ jobs:
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Restore solution
-        run: dotnet restore .\DataGen.slnx
+        shell: pwsh
+        run: |
+          dotnet restore .\DataGen.slnx *>&1 | Tee-Object -FilePath $env:RESTORE_LOG
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet restore failed."
+          }
 
       - name: Run solution tests
-        run: dotnet test .\DataGen.slnx -v minimal /p:UseSharedCompilation=false -m:1 --no-restore
+        shell: pwsh
+        run: |
+          dotnet test .\DataGen.slnx -v minimal /p:UseSharedCompilation=false -m:1 --no-restore *>&1 | Tee-Object -FilePath $env:TEST_LOG
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet test failed."
+          }
 
       - name: Package PowerShell module
         shell: pwsh
-        run: .\scripts\package-module.ps1 -Version ${{ steps.version.outputs.value }} -Configuration Release
+        run: |
+          .\scripts\package-module.ps1 -Version ${{ steps.version.outputs.value }} -Configuration Release *>&1 | Tee-Object -FilePath $env:MODULE_LOG
+          if ($LASTEXITCODE -ne 0) {
+            throw "Module packaging failed."
+          }
 
-      - name: Create gallery package and publish to PowerShell Gallery
+      - name: Verify release assets exist
+        shell: pwsh
+        run: |
+          $zipPath = Join-Path $PWD "artifacts\module\SyntheticEnterprise.PowerShell-${{ steps.version.outputs.value }}.zip"
+          $publishPath = Join-Path $PWD 'artifacts\module\publish\SyntheticEnterprise.PowerShell'
+          $catalogPath = Join-Path $PWD 'artifacts\catalog\catalogs.sqlite'
+
+          if (-not (Test-Path $zipPath)) {
+            throw "Expected release zip was not found at '$zipPath'."
+          }
+
+          if (-not (Test-Path $publishPath)) {
+            throw "Expected publish staging path was not found at '$publishPath'."
+          }
+
+          if (-not (Test-Path $catalogPath)) {
+            throw "Expected catalog artifact was not found at '$catalogPath'."
+          }
+
+          Get-ChildItem artifacts -Recurse |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize |
+            Out-String |
+            Set-Content (Join-Path $env:DIAGNOSTICS_DIR 'artifacts-inventory.txt')
+
+      - name: Create gallery package
         shell: pwsh
         env:
           PSGAL: ${{ secrets.PSGAL }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:PSGAL)) {
-            throw "The PSGAL secret is not configured."
-          }
-
           $publishPath = Join-Path $PWD 'artifacts\module\publish\SyntheticEnterprise.PowerShell'
           $nupkgOutput = Join-Path $PWD 'artifacts\psgallery'
+          $shouldPublish = '${{ github.event_name }}' -eq 'push' -or '${{ inputs.publish_to_psgallery }}' -eq 'true'
 
           New-Item -ItemType Directory -Path $nupkgOutput -Force | Out-Null
           Set-PSResourceRepository -Name PSGallery -Trusted
 
-          Publish-PSResource `
-            -Path $publishPath `
-            -Repository PSGallery `
-            -ApiKey $env:PSGAL `
-            -DestinationPath $nupkgOutput `
-            -SkipDependenciesCheck
+          if ($shouldPublish) {
+            if ([string]::IsNullOrWhiteSpace($env:PSGAL)) {
+              throw "The PSGAL secret is not configured."
+            }
+
+            try {
+              Publish-PSResource `
+                -Path $publishPath `
+                -Repository PSGallery `
+                -ApiKey $env:PSGAL `
+                -DestinationPath $nupkgOutput `
+                -SkipDependenciesCheck `
+                -ErrorAction Stop *>&1 | Tee-Object -FilePath $env:PSGALLERY_LOG
+            }
+            catch {
+              ($_ | Out-String) | Add-Content $env:PSGALLERY_LOG
+              throw "PowerShell Gallery publish failed. Review $env:PSGALLERY_LOG for details."
+            }
+          }
+          else {
+            try {
+              Publish-PSResource `
+                -Path $publishPath `
+                -Repository PSGallery `
+                -DestinationPath $nupkgOutput `
+                -SkipDependenciesCheck `
+                -ErrorAction Stop *>&1 | Tee-Object -FilePath $env:PSGALLERY_LOG
+            }
+            catch {
+              ($_ | Out-String) | Add-Content $env:PSGALLERY_LOG
+              Write-Host "Release-only mode: keeping the generated .nupkg and suppressing the expected PSGallery publish failure."
+            }
+          }
+
+      - name: Verify PSGallery package exists
+        shell: pwsh
+        run: |
+          $nupkg = Get-ChildItem artifacts\psgallery\*.nupkg -ErrorAction SilentlyContinue
+          if (-not $nupkg) {
+            throw "No .nupkg was produced in artifacts\\psgallery."
+          }
+
+          $nupkg |
+            Select-Object FullName, Length |
+            Format-Table -AutoSize |
+            Out-String |
+            Set-Content (Join-Path $env:DIAGNOSTICS_DIR 'psgallery-package.txt')
 
       - name: Upload release package artifact
         uses: actions/upload-artifact@v4
@@ -90,10 +210,21 @@ jobs:
             artifacts/catalog/catalogs.sqlite
             artifacts/psgallery/*.nupkg
 
+      - name: Upload diagnostics artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-diagnostics-${{ steps.version.outputs.value }}
+          path: artifacts/diagnostics/**
+
       - name: Publish GitHub release assets
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' || inputs.create_github_release
         uses: softprops/action-gh-release@v2
         with:
+          name: DataGen v${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.value }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
           files: |
             artifacts/module/*.zip
             artifacts/catalog/catalogs.sqlite

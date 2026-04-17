@@ -16,35 +16,35 @@
     <tspan x="516" y="126">canonical enterprise</tspan>
     <tspan x="516" y="146">dataset</tspan>
   </text>
-  <rect x="82" y="214" width="556" height="102" rx="22" fill="#101A2C" stroke="#223450"/>
+  <rect x="82" y="214" width="556" height="124" rx="22" fill="#101A2C" stroke="#223450"/>
   <text x="112" y="252" fill="#79C2FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Enterprise surfaces</text>
   <text fill="#D7E7FB" font-size="14" font-family="Segoe UI, Arial, sans-serif">
     <tspan x="112" y="282">identity, infrastructure, repositories, applications,</tspan>
     <tspan x="112" y="302">CMDB, observed data, policies, access evidence,</tspan>
-    <tspan x="112" y="322">external ecosystem</tspan>
+    <tspan x="112" y="320">external ecosystem</tspan>
   </text>
-  <rect x="82" y="352" width="180" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
-  <text x="119" y="392" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Exports</text>
+  <rect x="82" y="368" width="180" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="119" y="408" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Exports</text>
   <text fill="#A8BED8" font-size="15" font-family="Segoe UI, Arial, sans-serif">
-    <tspan x="119" y="414">normalized</tspan>
-    <tspan x="119" y="434">JSON / CSV</tspan>
+    <tspan x="119" y="430">normalized</tspan>
+    <tspan x="119" y="450">JSON / CSV</tspan>
   </text>
-  <rect x="292" y="352" width="180" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
-  <text x="333" y="392" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Labs</text>
+  <rect x="292" y="368" width="180" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="333" y="408" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Labs</text>
   <text fill="#A8BED8" font-size="15" font-family="Segoe UI, Arial, sans-serif">
-    <tspan x="333" y="414">population and</tspan>
-    <tspan x="333" y="434">validation</tspan>
+    <tspan x="333" y="430">population and</tspan>
+    <tspan x="333" y="450">validation</tspan>
   </text>
-  <rect x="502" y="352" width="136" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
-  <text x="532" y="392" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">SDK</text>
+  <rect x="502" y="368" width="136" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="532" y="408" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">SDK</text>
   <text fill="#A8BED8" font-size="15" font-family="Segoe UI, Arial, sans-serif">
-    <tspan x="520" y="414">plugin</tspan>
-    <tspan x="520" y="434">extensions</tspan>
+    <tspan x="520" y="430">plugin</tspan>
+    <tspan x="520" y="450">extensions</tspan>
   </text>
   <path d="M236 108H270" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
   <path d="M450 108H484" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
   <path d="M574 154V188" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M172 316V340" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M382 316V340" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M570 316V340" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M172 338V356" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M382 338V356" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M548 338V356" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
 </svg>
