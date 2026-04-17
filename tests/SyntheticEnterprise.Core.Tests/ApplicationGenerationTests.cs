@@ -125,7 +125,7 @@ public sealed class ApplicationGenerationTests
             .BuildServiceProvider();
 
         var generator = services.GetRequiredService<IWorldGenerator>();
-        var catalogs = new FileSystemCatalogLoader().LoadFromPath("E:\\source\\DataGen\\catalogs");
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
         var result = generator.Generate(
             new GenerationContext
             {

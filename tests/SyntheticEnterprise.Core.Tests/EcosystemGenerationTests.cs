@@ -48,7 +48,7 @@ public sealed class EcosystemGenerationTests
                     }
                 }
             },
-            new FileSystemCatalogLoader().LoadFromPath("E:\\source\\DataGen\\catalogs"));
+            new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot()));
 
         Assert.NotEmpty(result.World.ExternalOrganizations);
         Assert.NotEmpty(result.World.ApplicationCounterpartyLinks);
@@ -201,7 +201,7 @@ public sealed class EcosystemGenerationTests
                     }
                 }
             },
-            new FileSystemCatalogLoader().LoadFromPath("E:\\source\\DataGen\\catalogs"));
+            new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot()));
 
         Assert.Contains(result.World.Applications, application =>
             string.Equals(application.Vendor, "Siemens", StringComparison.OrdinalIgnoreCase)

@@ -119,7 +119,7 @@ public sealed class ObservedDataGenerationTests
                     }
                 }
             },
-            new FileSystemCatalogLoader().LoadFromPath("E:\\source\\DataGen\\catalogs"));
+            new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot()));
 
         Assert.Contains(result.World.ObservedEntitySnapshots, snapshot =>
             snapshot.EntityType == "Application"
