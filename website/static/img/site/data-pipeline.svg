@@ -3,19 +3,34 @@
   <g opacity="0.92">
     <rect x="34" y="78" width="170" height="112" rx="22" fill="#13243B" stroke="#2B476C"/>
     <text x="66" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Author</text>
-    <text x="66" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">template, JSON, or wizard</text>
+    <text fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+      <tspan x="66" y="150">template, JSON,</tspan>
+      <tspan x="66" y="172">or wizard</tspan>
+    </text>
     <rect x="248" y="78" width="170" height="112" rx="22" fill="#152C48" stroke="#33618F"/>
     <text x="278" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Resolve</text>
-    <text x="278" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">defaults and overlays</text>
+    <text fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+      <tspan x="278" y="150">defaults and</tspan>
+      <tspan x="278" y="172">overlays</tspan>
+    </text>
     <rect x="462" y="78" width="170" height="112" rx="22" fill="#163654" stroke="#3E79A8"/>
     <text x="490" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Generate</text>
-    <text x="490" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">core world and layers</text>
+    <text fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+      <tspan x="490" y="150">core world and</tspan>
+      <tspan x="490" y="172">layers</tspan>
+    </text>
     <rect x="676" y="78" width="170" height="112" rx="22" fill="#173D5B" stroke="#4484B6"/>
     <text x="717" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Export</text>
-    <text x="717" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">normalized artifacts</text>
+    <text fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+      <tspan x="717" y="150">normalized</tspan>
+      <tspan x="717" y="172">artifacts</tspan>
+    </text>
     <rect x="890" y="78" width="156" height="112" rx="22" fill="#13243B" stroke="#2B476C"/>
     <text x="926" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Use</text>
-    <text x="926" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">labs, tests, demos</text>
+    <text fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+      <tspan x="926" y="150">labs, tests,</tspan>
+      <tspan x="926" y="172">demos</tspan>
+    </text>
   </g>
   <path d="M204 134H248" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
   <path d="M418 134H462" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
@@ -23,5 +38,8 @@
   <path d="M846 134H890" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
   <rect x="116" y="254" width="848" height="108" rx="24" fill="#101A2C" stroke="#223450"/>
   <text x="150" y="298" fill="#79C2FF" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Documentation coverage</text>
-  <text x="150" y="332" fill="#D7E7FB" font-size="18" font-family="Segoe UI, Arial, sans-serif">walkthroughs • cmdlet help • SDK guidance • contribution notes • integration patterns • troubleshooting</text>
+  <text fill="#D7E7FB" font-size="16" font-family="Segoe UI, Arial, sans-serif">
+    <tspan x="150" y="324">walkthroughs • cmdlet help • SDK guidance • contribution notes</tspan>
+    <tspan x="150" y="346">integration patterns • troubleshooting</tspan>
+  </text>
 </svg>
