@@ -21,6 +21,9 @@ on:
         default: true
         type: boolean
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: write
 
@@ -39,10 +42,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -202,7 +205,7 @@ jobs:
             Set-Content (Join-Path $env:DIAGNOSTICS_DIR 'psgallery-package.txt')
 
       - name: Upload release package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: SyntheticEnterprise.PowerShell-${{ steps.version.outputs.value }}
           path: |
@@ -212,7 +215,7 @@ jobs:
 
       - name: Upload diagnostics artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: release-diagnostics-${{ steps.version.outputs.value }}
           path: artifacts/diagnostics/**
