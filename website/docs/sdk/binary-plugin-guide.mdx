@@ -1,0 +1,29 @@
+---
+title: Binary Plugin Guide
+description: Build compiled plugins when you need stronger structure or richer implementation logic.
+---
+
+# Binary Plugin Guide
+
+Binary plugins are the right choice when your extension needs:
+
+- richer implementation structure
+- shared code across multiple plugin capabilities
+- tighter typing or packaging discipline
+
+## Use binary plugins when
+
+- your plugin has non-trivial generation rules
+- you want stronger testability
+- you need a more maintainable implementation than a script plugin would provide
+
+## Trust and packaging
+
+The runtime includes explicit trust and execution controls for external plugins. Those controls are there to protect the host and keep plugin behavior auditable.
+
+When building binary plugins:
+
+- keep the capability surface explicit
+- document generated records clearly
+- avoid hidden side effects
+- stay inside the same architectural boundary as script plugins

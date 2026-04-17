@@ -1,0 +1,73 @@
+---
+title: Docs Site Implementation Plan
+description: The concrete content, structure, design, and deployment plan used to build this GitHub Pages-ready Docusaurus site.
+---
+
+# Docs Site Implementation Plan
+
+This page records the implementation plan that guided the site build so future contributors can extend it intentionally instead of treating it as a one-off frontend artifact.
+
+## Framework choice
+
+The site uses Docusaurus because it supports:
+
+- a polished docs-first experience
+- structured sidebars and landing pages
+- MDX for richer content
+- static GitHub Pages hosting through GitHub Actions
+
+## Content included
+
+- SDK documentation
+- module cmdlet reference
+- walkthroughs for common lab and validation scenarios
+- polished feature and capability guidance
+- contribution guidance
+- integration and export guidance
+
+## Content intentionally excluded
+
+- `legacy_notes`
+- `tmp`
+- raw internal milestone archaeology that has not been rewritten into user-facing guidance
+
+## Information architecture
+
+The top-level structure is:
+
+- Getting Started
+- Walkthroughs
+- Cmdlet Reference
+- User Guides
+- Capabilities
+- SDK
+- Integrations
+- Troubleshooting
+- About
+
+## Walkthrough strategy
+
+The walkthrough section is meant to be one of the highest-value parts of the site. Each walkthrough should continue to provide:
+
+- requirements
+- detailed steps
+- reference scripts
+- example outputs
+- validation guidance
+- notes on when a scenario is a good fit
+
+## Visual direction
+
+The site uses:
+
+- a dark-first theme
+- restrained frosted surfaces
+- soft shadows and depth
+- SVG-based product visuals rather than decorative clutter
+
+## Future enhancements already anticipated
+
+- richer screenshots where the product surface benefits from them
+- additional walkthroughs as new enterprise slices mature
+- optional search enhancement
+- deeper contribution guidance for docs authors

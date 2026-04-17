@@ -1,0 +1,69 @@
+---
+title: Generate a General Enterprise Lab
+description: End-to-end walkthrough for generating a broad, balanced enterprise lab with DataGen.
+---
+
+# Generate a General Enterprise Lab
+
+![DataGen workflow overview](/img/site/architecture-flow.svg)
+
+Use this walkthrough when you want a strong default enterprise world that is broad enough for general lab population, export testing, and validation work.
+
+## Requirements
+
+- DataGen module imported
+- seeded catalog content available
+- a writable output directory
+
+## Reference assets
+
+- [Scenario JSON](/examples/scenarios/general-enterprise-lab.json)
+- [Reference script](/examples/scripts/generate-general-enterprise.ps1)
+
+## Steps
+
+### 1. Validate the scenario
+
+```powershell
+Test-SEScenario -Path .\general-enterprise-lab.json
+```
+
+### 2. Generate the world
+
+```powershell
+$world = New-SEEnterpriseWorld -ScenarioPath .\general-enterprise-lab.json -Seed 4242
+$world | Get-SEWorldSummary
+```
+
+### 3. Save and export
+
+```powershell
+$world | Save-SEEnterpriseWorld -Path .\out\general-enterprise.seworld -Compress
+$world | Export-SEEnterpriseWorld -OutputPath .\out\general-enterprise -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+```
+
+## What to expect
+
+You should get a balanced world that includes:
+
+- hybrid identity
+- workstations and servers
+- repositories and collaboration surfaces
+- applications and services
+- policies, access evidence, and observed views
+
+## Example output shape
+
+```text
+out/
+  general-enterprise.seworld
+  general-enterprise/
+    entities/
+    relationships/
+    manifest.json
+    summary.json
+```
+
+## When this is the right starting point
+
+Use this walkthrough when you need a broad, believable baseline and do not yet need to optimize for one specific surface such as AD, Entra, or CMDB.

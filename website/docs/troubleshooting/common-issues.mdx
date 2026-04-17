@@ -1,0 +1,53 @@
+---
+title: Common Issues
+description: Troubleshoot common DataGen build, generation, export, plugin, and docs-site issues.
+---
+
+# Common Issues
+
+## Module imports but commands are missing
+
+Make sure you imported the built PowerShell module manifest, not only the project directory.
+
+## Generation fails because catalog content is missing
+
+Verify the default catalog path exists or explicitly pass `-CatalogRootPath`.
+
+## Scenario validation fails unexpectedly
+
+Run:
+
+```powershell
+Test-SEScenario -Path .\scenario.json
+```
+
+Then fix the validation errors before generation.
+
+## Plugin discovery does not find your plugin
+
+Start with:
+
+```powershell
+Get-SEGenerationPlugin -PluginRootPath .\plugins
+```
+
+and verify the manifest, capability declaration, and trust settings.
+
+## Export output is unexpectedly sparse
+
+Check:
+
+- the scenario itself
+- whether optional surfaces such as CMDB were enabled
+- the selected export profile
+
+## Docs site build issues
+
+From `website`:
+
+```powershell
+npm install
+npm run build
+```
+
+If the build breaks on links, Docusaurus is usually telling you exactly which page needs a path fix.

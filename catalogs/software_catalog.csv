@@ -14,3 +14,42 @@ VMware Tools,Virtualization,VMware,12.5
 Adobe Acrobat,Productivity,Adobe,2025.001
 Java Runtime,Utility,Oracle,8u441
 Power BI Desktop,Analytics,Microsoft,2.140
+OneDrive Sync Client,Productivity,Microsoft,24.065
+Zoom Workplace,Collaboration,Zoom,6.0
+Slack,Collaboration,Slack,4.39
+Notepad++,Utility,Notepad++,8.7
+Git,Developer,Git,2.49
+Postman,Developer,Postman,11.0
+Terraform,Developer,HashiCorp,1.11
+Tanium Client,Security,Tanium,7.6
+BeyondTrust Privilege Management,Security,BeyondTrust,25.1
+Splunk Universal Forwarder,Analytics,Splunk,9.3
+Tableau Desktop,Analytics,Salesforce,2025.1
+SharePoint Online Sync,Productivity,Microsoft,24.1
+Datadog Agent,Analytics,Datadog,7.64
+Splunk Enterprise,Analytics,Splunk,9.4
+GitHub Desktop,Developer,GitHub,3.4
+Azure Data Studio,Developer,Microsoft,1.51
+Okta Verify,Security,Okta,4.7
+VMware Horizon Client,Virtualization,VMware,2406
+SCCM Client,Utility,Microsoft,5.00
+Qualys Cloud Agent,Security,Qualys,6.2
+SentinelOne Agent,Security,SentinelOne,24.3
+Elastic Agent,Analytics,Elastic,8.17
+Chrome Enterprise,Browser,Google,135
+Box Drive,Productivity,Box,2.42
+Citrix Workspace,Productivity,Citrix,24.11
+PowerShell 7,Developer,Microsoft,7.5
+Azure CLI,Developer,Microsoft,2.72
+Microsoft Defender for Endpoint,Security,Microsoft,2408
+Splunk SOAR,Security,Splunk,6.3
+Workday Mobile,Productivity,Workday,2026.1
+GitHub CLI,Developer,GitHub,2.72
+Docker Desktop,Developer,Docker,4.40
+Node.js Runtime,Developer,OpenJS,22.14
+Wireshark,Utility,Wireshark,4.4
+ServiceNow Agent,Utility,ServiceNow,1.0
+Okta Browser Plugin,Security,Okta,6.29
+BeyondTrust Remote Support,Security,BeyondTrust,25.2
+Netskope Client,Security,Netskope,120.0
+Zoom VDI Plugin,Collaboration,Zoom,6.1

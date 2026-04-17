@@ -1,0 +1,11 @@
+RepositoryType,MatchApplicationNameContains,MatchVendor,MatchCategory,MatchDepartmentNameContains,MatchSharePurpose,MatchWorkspaceType,IndustryTags,MinimumEmployees,RelationshipType,Criticality
+Database,SAP S/4HANA,SAP,Operations,Operations,,,Manufacturing|Distribution,750,PrimaryDataStore,High
+Database,Workday HCM,Workday,HR,Human Resources,,,All,250,PrimaryDataStore,High
+Database,Databricks Lakehouse Platform,Databricks,Analytics,,,,All,750,AnalyticalStore,High
+Database,Data Governance Workbench,,Analytics,,,,Manufacturing|Technology,500,AnalyticalStore,Medium
+FileShare,Supplier Quality Hub,,Operations,Operations,DepartmentArchive,,Manufacturing|Industrials,500,QualityArchive,High
+FileShare,IT Service Management,,Operations,Information Technology,DepartmentDrop,,All,250,OperationalDropZone,Medium
+FileShare,Knowledge Portal,,Productivity,,Department,,All,250,KnowledgeStore,Medium
+CollaborationSite,Microsoft Teams,Microsoft,Collaboration,,,Team,All,250,CollaborationSpace,Medium
+CollaborationSite,ServiceNow IT Service Management,ServiceNow,Operations,,,Department,All,250,OperationalWorkspace,Medium
+CollaborationSite,Supplier Quality Hub,,Operations,,,Project,Manufacturing|Industrials,500,ProjectWorkspace,High

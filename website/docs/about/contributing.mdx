@@ -1,0 +1,61 @@
+---
+title: Contributing
+description: Contribute to the DataGen product and docs site with a clean understanding of architecture, scope, and documentation goals.
+---
+
+# Contributing
+
+Contributions are welcome in both the product and the documentation site.
+
+## Good contribution targets
+
+- catalog quality improvements
+- new walkthroughs
+- clarified cmdlet help
+- scenario-authoring guidance
+- SDK examples that respect the plugin boundary
+- improved build and deployment experience for the docs site
+
+## Please keep these architectural boundaries in mind
+
+### DataGen core
+
+Focuses on procedurally generating synthetic enterprise data.
+
+### DataGen plugins
+
+May extend the dataset or add realism overlays.
+
+### External adapters and bridges
+
+Should handle consumer-specific translation or import behavior outside the DataGen plugin ecosystem.
+
+## Docs contribution principles
+
+The site should stay:
+
+- user-facing
+- honest about current capability
+- practical and example-driven
+- free of raw internal milestone laundry unless it has been rewritten into something user-meaningful
+
+## Recommended workflow
+
+1. Open an issue or start a design note for substantial changes.
+2. Keep changes scoped to a clear improvement.
+3. Prefer concrete examples over abstract claims.
+4. Verify the docs site still builds locally from `website`.
+
+## Building the docs site locally
+
+```powershell
+Set-Location .\website
+npm install
+npm run start
+```
+
+For production verification:
+
+```powershell
+npm run build
+```

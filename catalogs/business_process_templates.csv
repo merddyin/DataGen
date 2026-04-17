@@ -1,0 +1,10 @@
+IndustryTags,Name,Domain,BusinessCapability,OperatingModel,ProcessScope,Criticality,CustomerFacing,OwnerHints,MinimumEmployees
+All,Hire to Retire,Workforce,Workforce Management,Enterprise,Enterprise,High,false,Human Resources|Information Technology,1
+All,Record to Report,Finance,Finance Operations,Centralized,Enterprise,High,false,Finance,1
+All,Procure to Pay,Supply Chain,Supplier Management,Centralized,Enterprise,High,false,Procurement|Finance,1
+All,Order to Cash,Revenue,Revenue Operations,Regional,Enterprise,High,true,Sales|Finance,1
+All,Identity Access Lifecycle,Security,Identity and Access,Centralized,Enterprise,High,false,Security|Information Technology,1
+All,Incident to Resolution,Operations,Operational Control,Regional,Enterprise,High,false,Information Technology|Operations,1
+All,Demand to Pipeline,Marketing,Demand Generation,Regional,BusinessUnit,Medium,true,Marketing|Sales,1
+All,Govern to Comply,Security,Governance and Compliance,Centralized,Enterprise,High,false,Security|Finance,250
+All,Data to Insight,Analytics,Enterprise Analytics,Centralized,Enterprise,Medium,false,Information Technology|Finance,250

@@ -1,0 +1,52 @@
+---
+title: Generation and Lifecycle Cmdlets
+description: Reference for world generation, summary, anomaly, and selective layer regeneration commands.
+---
+
+# Generation and Lifecycle Cmdlets
+
+## `New-SEEnterpriseWorld`
+
+The main generation entry point.
+
+Parameter sets:
+
+- `-ScenarioPath`
+- `-ScenarioJson`
+- `-Scenario`
+
+Additional controls include:
+
+- `-CatalogRootPath`
+- `-Seed`
+- plugin execution and trust parameters
+
+## `Get-SEWorldSummary`
+
+Returns generation statistics from a generated world.
+
+## `Add-SEIdentityLayer`
+
+Adds or regenerates the identity layer on an existing generated world.
+
+Key parameters:
+
+- `-InputObject`
+- `-RegenerationMode`
+
+## `Add-SEInfrastructureLayer`
+
+Adds or regenerates the infrastructure layer.
+
+## `Add-SERepositoryLayer`
+
+Adds or regenerates the repository layer.
+
+## `Invoke-SEAnomalyProfile`
+
+Applies anomaly profiles to an existing generated world.
+
+Key parameters:
+
+- `-InputObject`
+- `-Force`

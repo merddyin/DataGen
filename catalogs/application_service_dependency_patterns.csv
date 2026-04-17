@@ -1,0 +1,9 @@
+MatchSourceNameContains,MatchTargetNameContains,MatchDependencyType,MatchSourceVendor,MatchTargetVendor,MatchSourceCategory,MatchTargetCategory,IndustryTags,MinimumEmployees,SourceServiceType,TargetServiceType,InterfaceType,DependencyType,Criticality
+Workday Recruiting,Workday HCM,UpstreamMasterData,Workday,Workday,HR,HR,All,500,Integration,API,API,UpstreamMasterData,High
+Microsoft Intune Admin Center,Microsoft Entra Admin Center,Identity,Microsoft,Microsoft,Security,Security,All,250,API,API,GraphApi,Identity,High
+Microsoft Purview Compliance Portal,Microsoft Entra Admin Center,Identity,Microsoft,Microsoft,Security,Security,All,250,API,API,GraphApi,Identity,High
+SAP Extended Warehouse Management,SAP S/4HANA,WarehouseExecution,SAP,SAP,Operations,Operations,Manufacturing|Distribution,500,Integration,API,RFC,WarehouseExecution,High
+SAP Integrated Business Planning,SAP S/4HANA,Planning,SAP,SAP,Analytics,Operations,Manufacturing|Distribution,500,API,API,OData,Planning,Medium
+Supplier Quality Hub,MasterControl Quality Excellence,QualityData,,MasterControl,Operations,Operations,Manufacturing,500,Integration,API,REST,QualityData,High
+Data Governance Workbench,Databricks Unity Catalog,GovernanceWorkflow,,Databricks,Analytics,Analytics,Manufacturing|Technology,500,API,API,REST,GovernanceWorkflow,Medium
+Databricks Unity Catalog,Databricks Lakehouse Platform,MetadataControl,Databricks,Databricks,Analytics,Analytics,All,250,API,Data,REST,MetadataControl,Medium

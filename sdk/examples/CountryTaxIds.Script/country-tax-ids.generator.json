@@ -1,0 +1,13 @@
+{
+  "capability": "CountryTaxIds",
+  "displayName": "Country Tax IDs",
+  "description": "Adds country-aware synthetic personal identifier records from a local rules catalog.",
+  "pluginKind": "SdkExample",
+  "executionMode": "PowerShellScript",
+  "entryPoint": "country-tax-ids.plugin.ps1",
+  "localDataPaths": [ "data/tax-id-rules.csv" ],
+  "security": {
+    "dataOnly": true,
+    "requestedCapabilities": [ "GenerateData", "ReadPluginData" ]
+  }
+}

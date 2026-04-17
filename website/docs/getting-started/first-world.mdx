@@ -1,0 +1,87 @@
+---
+title: First World
+description: Generate a first DataGen world, inspect it, save it, and export normalized artifacts.
+---
+
+# First World
+
+This is the fastest end-to-end workflow for proving the module is healthy.
+
+## 1. Create a starter scenario
+
+```powershell
+$scenario = New-SEScenarioFromTemplate -Template RegionalManufacturer
+$scenario = Resolve-SEScenario -Scenario $scenario
+$validation = Test-SEScenario -Scenario $scenario
+$validation
+```
+
+You should see a valid resolved scenario unless your environment is missing required catalog or plugin content.
+
+## 2. Generate a world
+
+```powershell
+$world = New-SEEnterpriseWorld -Scenario $scenario -Seed 4242
+$summary = $world | Get-SEWorldSummary
+$summary
+```
+
+The summary object is the quickest way to confirm you generated a substantial world instead of an unexpectedly sparse dataset.
+
+## 3. Save the snapshot
+
+```powershell
+$snapshotPath = Join-Path $PWD 'out\first-world.seworld'
+$world | Save-SEEnterpriseWorld -Path $snapshotPath -Compress
+```
+
+This gives you a portable DataGen snapshot for later re-import.
+
+## 4. Export normalized artifacts
+
+```powershell
+$exportPath = Join-Path $PWD 'out\first-world-export'
+$manifest = $world | Export-SEEnterpriseWorld `
+  -OutputPath $exportPath `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
+
+$manifest
+```
+
+Typical normalized export output includes entity and relationship artifacts for areas such as:
+
+- companies and offices
+- people, accounts, groups, and identity stores
+- devices, servers, software, and network assets
+- applications, services, tenants, and repositories
+- policies, access evidence, observed views, and CMDB artifacts
+
+## 5. Re-import the snapshot
+
+```powershell
+$imported = Import-SEEnterpriseWorld -Path $snapshotPath
+$imported | Get-SEWorldSummary
+```
+
+That round-trip verifies the snapshot path and schema compatibility behavior.
+
+## What good looks like
+
+After this flow, you should have:
+
+- a valid scenario
+- a generated world
+- a saved snapshot
+- a normalized export directory
+- a manifest and summary
+
+## Next step
+
+From here, either:
+
+- move into a [Walkthrough](/walkthroughs/general-enterprise-lab) that matches your target use case, or
+- read [Understanding Output](/getting-started/understanding-output) to understand how the generated data is shaped.

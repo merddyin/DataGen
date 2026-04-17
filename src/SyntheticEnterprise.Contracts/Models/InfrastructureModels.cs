@@ -24,6 +24,8 @@ public record ManagedDevice
     public string? AssignedPersonId { get; init; }
     public string? AssignedOfficeId { get; init; }
     public string? DirectoryAccountId { get; init; }
+    public string? OuId { get; init; }
+    public string? DistinguishedName { get; init; }
     public bool DomainJoined { get; init; } = true;
     public string ComplianceState { get; init; } = "Compliant";
     public DateTimeOffset LastSeen { get; init; } = DateTimeOffset.UtcNow;
@@ -39,6 +41,8 @@ public record ServerAsset
     public string OperatingSystem { get; init; } = "";
     public string OperatingSystemVersion { get; init; } = "";
     public string OfficeId { get; init; } = "";
+    public string? OuId { get; init; }
+    public string? DistinguishedName { get; init; }
     public bool DomainJoined { get; init; } = true;
     public string OwnerTeamId { get; init; } = "";
     public string Criticality { get; init; } = "Medium";
@@ -77,6 +81,49 @@ public record ServerSoftwareInstallation
     public string Id { get; init; } = "";
     public string ServerId { get; init; } = "";
     public string SoftwareId { get; init; } = "";
+}
+
+public record EndpointAdministrativeAssignment
+{
+    public string Id { get; init; } = "";
+    public string CompanyId { get; init; } = "";
+    public string EndpointType { get; init; } = "";
+    public string EndpointId { get; init; } = "";
+    public string PrincipalObjectId { get; init; } = "";
+    public string PrincipalType { get; init; } = "Group";
+    public string AccessRole { get; init; } = "LocalAdministrator";
+    public string AdministrativeTier { get; init; } = "";
+    public string AssignmentScope { get; init; } = "Persistent";
+    public string ManagementPlane { get; init; } = "DirectoryPolicy";
+}
+
+public record EndpointPolicyBaseline
+{
+    public string Id { get; init; } = "";
+    public string CompanyId { get; init; } = "";
+    public string EndpointType { get; init; } = "";
+    public string EndpointId { get; init; } = "";
+    public string PolicyName { get; init; } = "";
+    public string PolicyCategory { get; init; } = "";
+    public string AssignedFrom { get; init; } = "";
+    public string EnforcementMode { get; init; } = "Enforced";
+    public string DesiredState { get; init; } = "";
+    public string CurrentState { get; init; } = "";
+    public string AdministrativeTier { get; init; } = "";
+}
+
+public record EndpointLocalGroupMember
+{
+    public string Id { get; init; } = "";
+    public string CompanyId { get; init; } = "";
+    public string EndpointType { get; init; } = "";
+    public string EndpointId { get; init; } = "";
+    public string LocalGroupName { get; init; } = "";
+    public string? PrincipalObjectId { get; init; }
+    public string PrincipalType { get; init; } = "Group";
+    public string PrincipalName { get; init; } = "";
+    public string MembershipSource { get; init; } = "Policy";
+    public string AdministrativeTier { get; init; } = "";
 }
 
 public record InfrastructureAnomaly

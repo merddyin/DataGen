@@ -1,0 +1,29 @@
+---
+title: Integrations and Exports
+description: Export and integration surfaces intended for downstream tooling.
+---
+
+# Integrations and Exports
+
+DataGen’s integration story is built around exporting synthetic enterprise data in a stable, normalized form.
+
+## Normalized export
+
+The normalized export profile is the main integration seam for downstream systems.
+
+Use it when you need:
+
+- files instead of in-memory objects
+- deterministic artifacts for pipelines
+- a clean base for adapters and bridges
+
+## Important architectural boundary
+
+DataGen itself is responsible for generating synthetic enterprise data.
+
+System-specific shaping belongs outside the DataGen plugin ecosystem. That means:
+
+- DataGen plugins can add or enrich synthetic data
+- bridges and consumer-specific adapters should translate the exported data outside the DataGen plugin boundary
+
+This keeps the product focused and prevents the plugin surface from turning into a collection of one-off import adapters.

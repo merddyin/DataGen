@@ -1,0 +1,61 @@
+---
+title: Generate and Populate an AD Lab
+description: Generate a directory-centric world for Active Directory-oriented lab work.
+---
+
+# Generate and Populate an AD Lab
+
+Use this walkthrough when the directory layer is the main attraction: users, groups, OUs, policy structure, delegation, stale identities, and hybrid admin surfaces.
+
+## Requirements
+
+- DataGen module imported
+- catalog content available
+- downstream AD population tooling or scripts, if you are turning the dataset into an actual lab
+
+## Reference assets
+
+- [Scenario JSON](/examples/scenarios/active-directory-lab.json)
+- [Reference script](/examples/scripts/generate-ad-lab.ps1)
+
+## Steps
+
+### 1. Resolve and validate the scenario
+
+```powershell
+$scenario = Resolve-SEScenario -Path .\active-directory-lab.json
+Test-SEScenario -Scenario $scenario
+```
+
+### 2. Generate the world
+
+```powershell
+$world = New-SEEnterpriseWorld -Scenario $scenario -Seed 1401
+$world | Get-SEWorldSummary
+```
+
+### 3. Export normalized data for downstream lab population
+
+```powershell
+$world | Export-SEEnterpriseWorld -OutputPath .\out\ad-lab -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+```
+
+## Why this walkthrough is useful
+
+This scenario biases toward:
+
+- hybrid directory presence
+- file-share-heavy internal operations
+- realistic stale-account rates
+- legacy-infrastructure overlay behavior
+
+That makes it a good match for AD population and AD-oriented validation work.
+
+## Example checks
+
+After export, inspect:
+
+- identity artifacts
+- policy and policy target artifacts
+- access-control evidence artifacts
+- devices and servers for host-side admin surfaces

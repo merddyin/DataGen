@@ -1,0 +1,68 @@
+---
+title: Scenario Wizard
+description: Use the terminal wizard to create or edit scenarios without leaving the command line.
+---
+
+# Scenario Wizard
+
+`New-SEScenarioWizard` provides a terminal-native authoring flow built on top of the same scenario model used by the non-interactive cmdlets.
+
+## What the wizard is for
+
+Use the wizard when you want:
+
+- a guided scenario creation flow
+- to edit an existing scenario file
+- to jump directly to one section such as realism or identity
+- to save a scenario, generate a world immediately, or do both
+
+## Basic usage
+
+Create a new scenario:
+
+```powershell
+New-SEScenarioWizard
+```
+
+Edit an existing scenario:
+
+```powershell
+New-SEScenarioWizard -ScenarioPath .\scenario.json
+```
+
+Start directly in the realism section:
+
+```powershell
+New-SEScenarioWizard -ScenarioPath .\scenario.json -StartSection Realism
+```
+
+Review a scenario without re-running the full prompt flow:
+
+```powershell
+New-SEScenarioWizard -ScenarioPath .\scenario.json -ReviewOnly
+```
+
+## What the wizard can edit
+
+The current section flow covers:
+
+- basic details
+- realism
+- identity
+- infrastructure
+- repositories
+- plugins
+
+## Why this matters
+
+The wizard is a helper, not a second scenario system. It emits the same scenario envelope used by:
+
+- `Resolve-SEScenario`
+- `Test-SEScenario`
+- `New-SEEnterpriseWorld`
+
+That keeps interactive and non-interactive flows aligned.
+
+## Operational tip
+
+For repeatable automation, use the wizard to shape the scenario once, save it, then commit the JSON and run generation non-interactively in scripts and CI.

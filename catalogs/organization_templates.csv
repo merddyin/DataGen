@@ -1,0 +1,65 @@
+Layer,IndustryTags,Name,ParentHints,MinimumEmployees
+BusinessUnit,All,Corporate Services,,50
+BusinessUnit,All,Digital and Technology,,50
+BusinessUnit,All,Revenue Operations,,100
+BusinessUnit,Manufacturing|Industrials,Supply Chain and Manufacturing,,100
+BusinessUnit,Manufacturing|Industrials,Product and Quality Engineering,,100
+BusinessUnit,Manufacturing|Industrials,Commercial Operations,,100
+BusinessUnit,Technology|Information|Software,Product Engineering,,100
+BusinessUnit,Technology|Information|Software,Customer and Growth,,100
+BusinessUnit,Technology|Information|Software,Platform Operations,,100
+BusinessUnit,Finance|Financials|Bank|Insurance,Client Operations,,100
+BusinessUnit,Finance|Financials|Bank|Insurance,Risk and Finance,,100
+BusinessUnit,Finance|Financials|Bank|Insurance,Technology and Controls,,100
+BusinessUnit,Healthcare|Health|Pharma|Medical,Clinical and Care Operations,,100
+BusinessUnit,Healthcare|Health|Pharma|Medical,Revenue and Administration,,100
+Department,All,Finance,Corporate Services|Risk and Finance,50
+Department,All,Human Resources,Corporate Services|Revenue and Administration,50
+Department,All,Information Technology,Digital and Technology|Technology and Controls|Platform Operations,50
+Department,All,Security,Digital and Technology|Technology and Controls|Platform Operations,100
+Department,All,Legal,Corporate Services|Risk and Finance,100
+Department,Manufacturing|Industrials,Procurement,Supply Chain and Manufacturing,50
+Department,Manufacturing|Industrials,Operations,Supply Chain and Manufacturing,50
+Department,Manufacturing|Industrials,Engineering,Product and Quality Engineering|Digital and Technology,50
+Department,Manufacturing|Industrials,Quality,Product and Quality Engineering|Supply Chain and Manufacturing,50
+Department,Manufacturing|Industrials,Sales,Commercial Operations|Revenue Operations,50
+Department,Manufacturing|Industrials,Marketing,Commercial Operations|Revenue Operations,100
+Department,Manufacturing|Industrials,Support,Commercial Operations|Revenue Operations,100
+Department,Technology|Information|Software,Engineering,Product Engineering,50
+Department,Technology|Information|Software,Product Management,Product Engineering,50
+Department,Technology|Information|Software,Customer Success,Customer and Growth,50
+Department,Technology|Information|Software,Sales,Customer and Growth,50
+Department,Technology|Information|Software,Marketing,Customer and Growth,50
+Department,Finance|Financials|Bank|Insurance,Operations,Client Operations,50
+Department,Finance|Financials|Bank|Insurance,Sales,Client Operations,50
+Department,Finance|Financials|Bank|Insurance,Risk,Risk and Finance,50
+Department,Finance|Financials|Bank|Insurance,Compliance,Risk and Finance,50
+Department,Healthcare|Health|Pharma|Medical,Operations,Clinical and Care Operations,50
+Department,Healthcare|Health|Pharma|Medical,Support,Clinical and Care Operations,50
+Department,Healthcare|Health|Pharma|Medical,Finance,Revenue and Administration,50
+Department,Healthcare|Health|Pharma|Medical,Procurement,Revenue and Administration,50
+Team,All,Payroll,Finance,50
+Team,All,Accounts Payable,Finance,50
+Team,All,Talent Operations,Human Resources,50
+Team,All,Identity and Access,Information Technology|Security,50
+Team,All,Endpoint Engineering,Information Technology,50
+Team,All,Infrastructure Services,Information Technology,50
+Team,All,Security Operations,Security,100
+Team,All,Contracts and Governance,Legal|Compliance,100
+Team,Manufacturing|Industrials,Production Scheduling,Operations,50
+Team,Manufacturing|Industrials,Warehouse Operations,Operations,50
+Team,Manufacturing|Industrials,Plant Systems,Engineering|Operations,50
+Team,Manufacturing|Industrials,Industrial Automation,Engineering,50
+Team,Manufacturing|Industrials,Supplier Quality,Quality|Procurement,50
+Team,Manufacturing|Industrials,Commercial Planning,Sales|Marketing,100
+Team,Manufacturing|Industrials,Field Service Coordination,Support|Operations,100
+Team,Technology|Information|Software,Application Platform,Engineering,50
+Team,Technology|Information|Software,Developer Experience,Engineering,50
+Team,Technology|Information|Software,Release Management,Product Management|Engineering,100
+Team,Technology|Information|Software,Customer Onboarding,Customer Success|Support,50
+Team,Finance|Financials|Bank|Insurance,Client Onboarding,Operations|Sales,50
+Team,Finance|Financials|Bank|Insurance,Fraud Operations,Risk|Security,100
+Team,Finance|Financials|Bank|Insurance,Treasury Operations,Finance,100
+Team,Healthcare|Health|Pharma|Medical,Patient Access,Operations|Support,50
+Team,Healthcare|Health|Pharma|Medical,Clinical Scheduling,Operations,50
+Team,Healthcare|Health|Pharma|Medical,Revenue Integrity,Finance,100

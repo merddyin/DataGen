@@ -1,0 +1,10 @@
+MatchNameContains,MatchVendor,MatchCategory,MatchHostingModel,IndustryTags,MinimumEmployees,AddFrontend,AddApi,AddWorker,AddIntegration,AddData,FrontendRuntime,ApiRuntime,WorkerRuntime,IntegrationRuntime,DataRuntime,PreferredFrontendHostRole,PreferredApiHostRole,PreferredWorkerHostRole,PreferredIntegrationHostRole,PreferredDataHostRole,DeploymentModel
+Workday HCM,Workday,HR,SaaS,All,250,true,true,false,true,false,saas,saas,,saas,,SaaSPlatform,SaaSPlatform,,SaaSPlatform,,VendorManaged
+Microsoft Entra Admin Center,Microsoft,Security,SaaS,All,250,true,true,false,true,false,saas,saas,,saas,,SaaSPlatform,SaaSPlatform,,SaaSPlatform,,VendorManaged
+Microsoft Intune Admin Center,Microsoft,Security,SaaS,All,500,true,true,false,true,false,saas,saas,,saas,,SaaSPlatform,SaaSPlatform,,SaaSPlatform,,VendorManaged
+SAP S/4HANA,SAP,Operations,Hybrid,Manufacturing|Industrials|Distribution,1000,true,true,true,true,true,dotnet,java,java,java,sql,Web Server,Application Server,Application Server,Application Server,SQL Server,VirtualMachine
+SAP Extended Warehouse Management,SAP,Operations,Hybrid,Manufacturing|Industrials|Distribution,1000,true,true,true,true,true,dotnet,java,java,java,sql,Web Server,Application Server,Application Server,Application Server,SQL Server,VirtualMachine
+Databricks Lakehouse Platform,Databricks,Analytics,SaaS,All,1000,false,true,true,true,true,,spark,spark,saas,spark,,Managed Platform,Managed Platform,SaaSPlatform,Managed Platform,VendorManaged
+Snowflake Data Cloud,Snowflake,Analytics,SaaS,All,750,false,true,false,true,true,,saas,,saas,sql,,SaaSPlatform,,SaaSPlatform,SaaSPlatform,VendorManaged
+Supplier Quality Hub,,Operations,Hybrid,Manufacturing|Industrials,500,true,true,false,true,true,dotnet,dotnet,,dotnet,sql,Web Server,Application Server,,Application Server,SQL Server,VirtualMachine
+Production Genealogy,,Operations,Hybrid,Manufacturing|Industrials,750,true,true,true,true,true,dotnet,dotnet,dotnet,dotnet,sql,Web Server,Application Server,Application Server,Application Server,SQL Server,VirtualMachine

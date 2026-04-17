@@ -1,0 +1,42 @@
+---
+title: Plugin Cmdlets
+description: Reference for plugin discovery, validation, registration, package install, and lifecycle commands.
+---
+
+# Plugin Cmdlets
+
+## `Get-SEGenerationPlugin`
+
+Inspects plugins from one or more plugin root paths.
+
+Key parameters:
+
+- `-PluginRootPath`
+- `-Capability`
+- `-AllowAssemblyPlugins`
+- `-RequirePluginHashApproval`
+- `-PluginAllowedContentHash`
+
+## `Test-SEGenerationPluginPackage`
+
+Validates plugin packages before use.
+
+## `Install-SEGenerationPluginPackage`
+
+Installs plugin packages from plugin root paths.
+
+## `Register-SEGenerationPlugin`
+
+Registers plugin capabilities for reuse.
+
+## `Get-SEGenerationPluginRegistration`
+
+Lists registered plugin capabilities.
+
+## `Unregister-SEGenerationPlugin`
+
+Removes registered plugin capabilities.
+
+## Plugin design reminder
+
+These commands help you manage DataGen plugins, but the architectural rule still applies: plugins extend the synthetic dataset; they do not serve as downstream import adapters.

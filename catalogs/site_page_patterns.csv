@@ -1,0 +1,8 @@
+Platform,WorkspaceType,PrivacyType,PageTitle,PageType,PromotedState,AssociatedLibraryName,IndustryTags,MinimumEmployees
+SharePoint,Department,,Operations Handbook,Knowledge,None,Policies,All,1
+SharePoint,Department,,Department News,News,News,Documents,All,1
+SharePoint,Project,,Project Charter,Knowledge,None,Projects,All,1
+SharePoint,Project,,Status Dashboard,Landing,None,Projects,All,1
+Teams,Department,,Team Home,Home,None,Documents,All,1
+Teams,Department,,Announcements,News,News,Documents,All,1
+Teams,Project,,Sprint Workspace Guide,Landing,None,Project Files,Technology|Manufacturing,100

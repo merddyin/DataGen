@@ -15,6 +15,8 @@ public record Office
     public string BuildingNumber { get; init; } = "";
     public string StreetName { get; init; } = "";
     public string FloorOrSuite { get; init; } = "";
+    public string BusinessPhone { get; init; } = "";
+    public bool IsHeadquarters { get; init; }
     public string? Latitude { get; init; }
     public string? Longitude { get; init; }
     public bool Geocoded { get; init; }

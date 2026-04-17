@@ -1,0 +1,27 @@
+<svg width="1080" height="420" viewBox="0 0 1080 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1080" height="420" rx="32" fill="#0C1524"/>
+  <g opacity="0.92">
+    <rect x="34" y="78" width="170" height="112" rx="22" fill="#13243B" stroke="#2B476C"/>
+    <text x="66" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Author</text>
+    <text x="66" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">template, JSON, or wizard</text>
+    <rect x="248" y="78" width="170" height="112" rx="22" fill="#152C48" stroke="#33618F"/>
+    <text x="278" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Resolve</text>
+    <text x="278" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">defaults and overlays</text>
+    <rect x="462" y="78" width="170" height="112" rx="22" fill="#163654" stroke="#3E79A8"/>
+    <text x="490" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Generate</text>
+    <text x="490" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">core world and layers</text>
+    <rect x="676" y="78" width="170" height="112" rx="22" fill="#173D5B" stroke="#4484B6"/>
+    <text x="717" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Export</text>
+    <text x="717" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">normalized artifacts</text>
+    <rect x="890" y="78" width="156" height="112" rx="22" fill="#13243B" stroke="#2B476C"/>
+    <text x="926" y="122" fill="#F5F9FF" font-size="26" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Use</text>
+    <text x="926" y="154" fill="#A8BED8" font-size="18" font-family="Segoe UI, Arial, sans-serif">labs, tests, demos</text>
+  </g>
+  <path d="M204 134H248" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M418 134H462" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M632 134H676" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
+  <path d="M846 134H890" stroke="#79C2FF" stroke-width="8" stroke-linecap="round"/>
+  <rect x="116" y="254" width="848" height="108" rx="24" fill="#101A2C" stroke="#223450"/>
+  <text x="150" y="298" fill="#79C2FF" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Documentation coverage</text>
+  <text x="150" y="332" fill="#D7E7FB" font-size="18" font-family="Segoe UI, Arial, sans-serif">walkthroughs • cmdlet help • SDK guidance • contribution notes • integration patterns • troubleshooting</text>
+</svg>

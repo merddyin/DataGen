@@ -1,10 +1,45 @@
 namespace SyntheticEnterprise.Contracts.Configuration;
 
+using SyntheticEnterprise.Contracts.Plugins;
+
 public record ScenarioDefinition
 {
     public string Name { get; init; } = "Default";
+    public string Description { get; init; } = "Synthetic enterprise scenario";
+    public int CompanyCount { get; init; } = 1;
+    public string IndustryProfile { get; init; } = "General";
+    public string GeographyProfile { get; init; } = "Regional";
+    public string DeviationProfile { get; init; } = ScenarioDeviationProfiles.Realistic;
+    public SizeBand EmployeeSize { get; init; } = new();
+    public IdentityProfile Identity { get; init; } = new();
+    public ApplicationProfile Applications { get; init; } = new();
+    public InfrastructureProfile Infrastructure { get; init; } = new();
+    public RepositoryProfile Repositories { get; init; } = new();
+    public CmdbProfile Cmdb { get; init; } = new();
+    public ObservedDataProfile ObservedData { get; init; } = new();
+    public ExternalPluginScenarioProfile ExternalPlugins { get; init; } = new();
     public List<ScenarioCompanyDefinition> Companies { get; init; } = new();
     public List<AnomalyProfile> Anomalies { get; init; } = new();
+}
+
+public static class ScenarioDeviationProfiles
+{
+    public const string Clean = "Clean";
+    public const string Realistic = "Realistic";
+    public const string Aggressive = "Aggressive";
+
+    public static IReadOnlyList<string> All { get; } = new[]
+    {
+        Clean,
+        Realistic,
+        Aggressive
+    };
+}
+
+public record SizeBand
+{
+    public int Minimum { get; init; } = 100;
+    public int Maximum { get; init; } = 500;
 }
 
 public record ScenarioCompanyDefinition
@@ -31,9 +66,63 @@ public record ScenarioCompanyDefinition
     public List<string> Countries { get; init; } = new();
 }
 
+public record IdentityProfile
+{
+    public bool IncludeHybridDirectory { get; init; } = true;
+    public bool IncludeM365StyleGroups { get; init; } = true;
+    public bool IncludeAdministrativeTiers { get; init; } = true;
+    public bool IncludeExternalWorkforce { get; init; } = true;
+    public bool IncludeB2BGuests { get; init; } = true;
+    public double ContractorRatio { get; init; } = 0.06;
+    public double ManagedServiceProviderRatio { get; init; } = 0.01;
+    public double GuestUserRatio { get; init; } = 0.025;
+    public double StaleAccountRate { get; init; } = 0.03;
+}
+
+public record ApplicationProfile
+{
+    public bool IncludeApplications { get; init; } = true;
+    public int BaseApplicationCount { get; init; } = 6;
+    public bool IncludeLineOfBusinessApplications { get; init; } = true;
+    public bool IncludeSaaSApplications { get; init; } = true;
+}
+
+public record InfrastructureProfile
+{
+    public bool IncludeServers { get; init; } = true;
+    public bool IncludeWorkstations { get; init; } = true;
+    public bool IncludeNetworkAssets { get; init; } = true;
+    public bool IncludeTelephony { get; init; } = true;
+}
+
+public record RepositoryProfile
+{
+    public bool IncludeDatabases { get; init; } = true;
+    public bool IncludeFileShares { get; init; } = true;
+    public bool IncludeCollaborationSites { get; init; } = true;
+}
+
+public record CmdbProfile
+{
+    public bool IncludeConfigurationManagement { get; init; } = false;
+    public bool IncludeBusinessServices { get; init; } = true;
+    public bool IncludeCloudServices { get; init; } = true;
+    public bool IncludeAutoDiscoveryRecords { get; init; } = true;
+    public bool IncludeServiceCatalogRecords { get; init; } = true;
+    public bool IncludeSpreadsheetImportRecords { get; init; } = true;
+    public string? DeviationProfile { get; init; }
+}
+
+public record ObservedDataProfile
+{
+    public bool IncludeObservedViews { get; init; } = true;
+    public double CoverageRatio { get; init; } = 0.7;
+}
+
 public record AnomalyProfile
 {
     public string Name { get; init; } = "None";
     public string Category { get; init; } = "General";
     public double Intensity { get; init; } = 1.0;
+    public double Weight { get; init; } = 1.0;
 }

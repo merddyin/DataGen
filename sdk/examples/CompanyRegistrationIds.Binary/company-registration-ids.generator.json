@@ -1,0 +1,12 @@
+{
+  "capability": "CompanyRegistrationIds",
+  "displayName": "Company Registration IDs",
+  "description": "Adds synthetic registration identifiers to companies using a minimal binary plugin.",
+  "pluginKind": "SdkExample",
+  "executionMode": "DotNetAssembly",
+  "entryPoint": "bin/Debug/net8.0/CompanyRegistrationIds.Binary.dll",
+  "security": {
+    "dataOnly": true,
+    "requestedCapabilities": [ "GenerateData" ]
+  }
+}

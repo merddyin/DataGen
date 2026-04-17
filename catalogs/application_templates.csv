@@ -1,0 +1,61 @@
+TemplateType,Name,Category,Vendor,BusinessCapability,HostingModel,IndustryTags,MinimumEmployees,UserScope,Criticality,DataSensitivity
+Enterprise,Workday HCM,HR,Workday,Human Capital Management,SaaS,All,250,Enterprise,High,Confidential
+Enterprise,ServiceNow IT Service Management,Operations,ServiceNow,IT Service Management,SaaS,All,250,Enterprise,High,Internal
+Enterprise,Salesforce Sales Cloud,Sales,Salesforce,Customer Relationship Management,SaaS,All,250,BusinessUnit,High,Internal
+Enterprise,Salesforce Service Cloud,Operations,Salesforce,Customer Service Management,SaaS,All,500,BusinessUnit,High,Internal
+Enterprise,Microsoft Power BI Service,Analytics,Microsoft,Business Intelligence,SaaS,All,250,Enterprise,Medium,Internal
+Enterprise,Atlassian Jira Software,Developer,Atlassian,Engineering Delivery,SaaS,All,250,BusinessUnit,Medium,Internal
+Enterprise,Atlassian Confluence,Productivity,Atlassian,Knowledge Management,SaaS,All,250,Enterprise,Medium,Internal
+Enterprise,Okta Workforce Identity,Security,Okta,Identity and Access,SaaS,All,250,Enterprise,High,Restricted
+Enterprise,DocuSign CLM,Finance,DocuSign,Contract Lifecycle Management,SaaS,All,1000,Department,Medium,Confidential
+Enterprise,SAP Concur,Finance,SAP,Travel and Expense Management,SaaS,All,500,Department,Medium,Confidential
+Enterprise,Adobe Experience Manager,Marketing,Adobe,Digital Experience Management,SaaS,All,750,BusinessUnit,Medium,Internal
+Enterprise,Tableau Cloud,Analytics,Salesforce,Business Intelligence,SaaS,All,500,Enterprise,Medium,Internal
+Enterprise,CrowdStrike Falcon Console,Security,CrowdStrike,Endpoint Security,SaaS,All,500,Enterprise,High,Restricted
+Enterprise,Microsoft Entra Admin Center,Security,Microsoft,Identity Administration,SaaS,All,250,Enterprise,High,Restricted
+Enterprise,Oracle Fusion Cloud ERP,Operations,Oracle,Enterprise Resource Planning,SaaS,All,1500,Enterprise,High,Confidential
+Enterprise,Snowflake Data Cloud,Analytics,Snowflake,Data Platform,SaaS,All,750,Enterprise,High,Internal
+Enterprise,Databricks Lakehouse Platform,Analytics,Databricks,Data Engineering,SaaS,All,1000,Enterprise,High,Internal
+Enterprise,Coupa Spend Management,Procurement,Coupa,Spend Management,SaaS,All,500,Department,Medium,Confidential
+Enterprise,GitHub Enterprise Cloud,Developer,GitHub,Source Code Management,SaaS,All,500,BusinessUnit,Medium,Internal
+Enterprise,PagerDuty Operations Cloud,Operations,PagerDuty,Incident Management,SaaS,All,500,Enterprise,Medium,Internal
+Enterprise,Datadog,Analytics,Datadog,Observability,SaaS,All,500,Enterprise,Medium,Internal
+Enterprise,Splunk Cloud Platform,Security,Splunk,Security Analytics,SaaS,All,750,Enterprise,High,Restricted
+Enterprise,MuleSoft Anypoint Platform,Developer,MuleSoft,Integration Platform,SaaS,All,1000,Enterprise,Medium,Internal
+Enterprise,Smartsheet,Productivity,Smartsheet,Portfolio Management,SaaS,All,250,BusinessUnit,Medium,Internal
+Enterprise,SAP S/4HANA,Operations,SAP,Enterprise Resource Planning,Hybrid,Manufacturing|Industrials|Distribution,1000,Enterprise,High,Confidential
+Enterprise,Zoom Workplace Admin,Collaboration,Zoom,Workplace Collaboration,SaaS,All,250,Enterprise,Medium,Internal
+Enterprise,Box Enterprise,Productivity,Box,Document Collaboration,SaaS,All,250,Enterprise,Medium,Internal
+Enterprise,SailPoint IdentityNow,Security,SailPoint,Identity Governance,SaaS,All,500,Enterprise,High,Restricted
+Enterprise,Archer Integrated Risk Management,Security,Archer,Risk Management,SaaS,All,1000,Enterprise,High,Confidential
+Enterprise,Power Platform Center of Excellence,Developer,Microsoft,Workflow Automation,SaaS,All,500,Enterprise,Medium,Internal
+Enterprise,SAP Ariba,Procurement,SAP,Supplier Management,SaaS,All,750,Department,High,Confidential
+Enterprise,Zendesk Suite,Operations,Zendesk,Customer Support,SaaS,All,500,BusinessUnit,Medium,Internal
+Enterprise,Qualtrics XM,Marketing,Qualtrics,Experience Management,SaaS,All,500,BusinessUnit,Medium,Internal
+Enterprise,Gong Revenue Intelligence,Sales,Gong,Revenue Intelligence,SaaS,All,500,BusinessUnit,Medium,Internal
+Enterprise,Alteryx Designer Cloud,Analytics,Alteryx,Analytics Engineering,SaaS,All,500,Department,Medium,Internal
+Enterprise,Netskope Security Cloud,Security,Netskope,SSE Platform,SaaS,All,750,Enterprise,High,Restricted
+Industry,Siemens Teamcenter,Developer,Siemens,Product Lifecycle Management,Hybrid,Manufacturing|Industrials,750,BusinessUnit,High,Confidential
+Industry,Plex Smart Manufacturing Platform,Operations,Plex,Manufacturing Execution,SaaS,Manufacturing|Industrials,500,Office,High,Internal
+Industry,Rockwell FactoryTalk,Operations,Rockwell Automation,Plant Operations,Hybrid,Manufacturing|Industrials,500,Office,High,Internal
+Industry,SAP Digital Manufacturing,Operations,SAP,Plant Operations,SaaS,Manufacturing|Industrials,1000,Office,High,Internal
+Industry,Blue Yonder Warehouse Management,Operations,Blue Yonder,Warehouse Management,SaaS,Manufacturing|Distribution,750,Office,High,Internal
+Industry,Infor Supply Chain Management,Procurement,Infor,Supplier Management,SaaS,Manufacturing|Distribution,750,Department,Medium,Internal
+Industry,QAD Adaptive ERP,Operations,QAD,Manufacturing Operations,Hybrid,Manufacturing|Industrials,500,Enterprise,High,Confidential
+Industry,MasterControl Quality Excellence,Operations,MasterControl,Quality Management,SaaS,Manufacturing|Healthcare,500,Department,High,Internal
+Industry,PTC Windchill,Developer,PTC,Product Lifecycle Management,Hybrid,Manufacturing|Industrials,750,BusinessUnit,High,Confidential
+Industry,AVEVA PI System,Operations,AVEVA,Operational Historian,Hybrid,Manufacturing|Industrials|Energy,1000,Office,High,Internal
+Industry,Kinaxis RapidResponse,Operations,Kinaxis,Supply Chain Planning,SaaS,Manufacturing|Distribution,1000,Enterprise,High,Internal
+Industry,Oracle Transportation Management,Operations,Oracle,Transportation Management,SaaS,Manufacturing|Distribution|Retail,1000,Department,High,Internal
+Industry,Epic Hyperspace,Operations,Epic,Care Delivery,Hybrid,Healthcare|Health|Medical,1000,Office,High,Restricted
+Industry,Oracle Health Millennium,Operations,Oracle Health,Clinical Operations,Hybrid,Healthcare|Health|Medical,1000,Office,High,Restricted
+Industry,Fiserv Signature,Finance,Fiserv,Core Banking,Hybrid,Finance|Financials|Bank|Insurance,1000,Enterprise,High,Restricted
+Industry,Guidewire PolicyCenter,Operations,Guidewire,Policy Administration,SaaS,Finance|Financials|Insurance,1000,BusinessUnit,High,Restricted
+Industry,Shopify Plus,Sales,Shopify,Digital Commerce,SaaS,Retail|Consumer,500,BusinessUnit,High,Internal
+Industry,Manhattan Active Omni,Operations,Manhattan Associates,Omnichannel Fulfillment,SaaS,Distribution|Retail|Consumer,750,BusinessUnit,High,Internal
+Industry,Infor CloudSuite Industrial,Operations,Infor,Manufacturing Operations,SaaS,Manufacturing|Industrials,750,Enterprise,High,Confidential
+Industry,Siemens Opcenter,Operations,Siemens,Manufacturing Execution,Hybrid,Manufacturing|Industrials,750,Office,High,Internal
+Industry,Honeywell Forge Performance+,Operations,Honeywell,Industrial Performance,Hybrid,Manufacturing|Industrials|Energy,1000,Office,High,Internal
+Industry,Hexagon EAM,Operations,Hexagon,Asset Performance Management,SaaS,Manufacturing|Industrials|Energy,750,Department,Medium,Internal
+Industry,Amdocs CES,Operations,Amdocs,Subscriber Management,SaaS,Communication|Telecom|Media,1000,Enterprise,High,Internal
+Industry,Openlink Endur,Finance,ION,Treasury and Trading,Hybrid,Energy|Utilities|Finance,1000,Enterprise,High,Restricted

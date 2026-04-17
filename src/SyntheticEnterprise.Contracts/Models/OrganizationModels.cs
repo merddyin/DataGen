@@ -5,6 +5,13 @@ public record Company
     public string Id { get; init; } = "";
     public string Name { get; init; } = "";
     public string Industry { get; init; } = "";
+    public string LegalName { get; init; } = "";
+    public string PrimaryCountry { get; init; } = "";
+    public string PrimaryDomain { get; init; } = "";
+    public string Website { get; init; } = "";
+    public string Tagline { get; init; } = "";
+    public string? HeadquartersOfficeId { get; init; }
+    public string? PrimaryPhoneNumber { get; init; }
 }
 
 public record BusinessUnit
@@ -45,36 +52,8 @@ public record Person
     public string Country { get; init; } = "";
     public string? OfficeId { get; init; }
     public string UserPrincipalName { get; init; } = "";
-}
-
-public class SyntheticEnterpriseWorld
-{
-    public List<Company> Companies { get; } = new();
-    public List<BusinessUnit> BusinessUnits { get; } = new();
-    public List<Department> Departments { get; } = new();
-    public List<Team> Teams { get; } = new();
-    public List<Person> People { get; } = new();
-    public List<Office> Offices { get; } = new();
-
-    public List<DirectoryOrganizationalUnit> OrganizationalUnits { get; } = new();
-    public List<DirectoryAccount> Accounts { get; } = new();
-    public List<DirectoryGroup> Groups { get; } = new();
-    public List<DirectoryGroupMembership> GroupMemberships { get; } = new();
-    public List<IdentityAnomaly> IdentityAnomalies { get; } = new();
-
-    public List<object> Applications { get; } = new();
-    public List<ManagedDevice> Devices { get; } = new();
-    public List<ServerAsset> Servers { get; } = new();
-    public List<NetworkAsset> NetworkAssets { get; } = new();
-    public List<TelephonyAsset> TelephonyAssets { get; } = new();
-    public List<SoftwarePackage> SoftwarePackages { get; } = new();
-    public List<DeviceSoftwareInstallation> DeviceSoftwareInstallations { get; } = new();
-    public List<ServerSoftwareInstallation> ServerSoftwareInstallations { get; } = new();
-    public List<InfrastructureAnomaly> InfrastructureAnomalies { get; } = new();
-
-    public List<DatabaseRepository> Databases { get; } = new();
-    public List<FileShareRepository> FileShares { get; } = new();
-    public List<CollaborationSite> CollaborationSites { get; } = new();
-    public List<RepositoryAccessGrant> RepositoryAccessGrants { get; } = new();
-    public List<RepositoryAnomaly> RepositoryAnomalies { get; } = new();
+    public string EmploymentType { get; init; } = "Employee";
+    public string PersonType { get; init; } = "Internal";
+    public string? EmployerOrganizationId { get; init; }
+    public string? SponsorPersonId { get; init; }
 }

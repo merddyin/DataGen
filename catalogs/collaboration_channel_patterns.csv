@@ -1,0 +1,7 @@
+Platform,WorkspaceType,PrivacyType,ChannelName,ChannelType,IndustryTags,MinimumEmployees
+Teams,Department,Private,Leadership,Private,All,1
+Teams,Department,Private,Risk Review,Standard,Manufacturing|Finance,250
+Teams,Department,Public,Announcements,Standard,All,1
+Teams,Project,,Project Delivery,Standard,All,1
+Teams,Project,,External Coordination,Shared,Manufacturing|Technology,250
+Teams,Knowledge,,Knowledge Exchange,Standard,All,1

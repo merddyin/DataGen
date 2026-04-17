@@ -1,0 +1,15 @@
+IndustryTags,MinimumEmployees,Name,Category,HostingModel
+Manufacturing|Industrials,0,{Company} Production Planning,Operations,Hybrid
+Manufacturing|Industrials,0,{Company} Quality Portal,Operations,SaaS
+Manufacturing|Industrials,0,{Company} Supplier Exchange,Procurement,SaaS
+Healthcare|Health|Medical,0,{Company} Care Operations,Operations,Hybrid
+Healthcare|Health|Medical,0,{Company} Compliance Tracker,Security,SaaS
+Finance|Financials|Bank|Insurance,0,{Company} Treasury Workspace,Finance,Hybrid
+Finance|Financials|Bank|Insurance,0,{Company} Client Reporting Hub,Analytics,SaaS
+Technology|Information|Software,0,{Company} Engineering Hub,Engineering,SaaS
+Technology|Information|Software,0,{Company} Release Control,Engineering,Hybrid
+Technology|Information|Software,0,{Company} Customer Admin,Operations,SaaS
+Communication|Telecom|Media,0,{Company} Network Operations Console,Operations,Hybrid
+Communication|Telecom|Media,0,{Company} Subscriber Care,Operations,SaaS
+All,0,{Company} Operations Portal,Operations,Hybrid
+All,0,{Company} Reporting Hub,Analytics,SaaS

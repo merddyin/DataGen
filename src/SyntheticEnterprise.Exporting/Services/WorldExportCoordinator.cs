@@ -37,6 +37,16 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
         ArgumentNullException.ThrowIfNull(generationResult);
         ArgumentNullException.ThrowIfNull(request);
 
+        if (_entityTableProvider is IExportRequestAware entityRequestAware)
+        {
+            entityRequestAware.ApplyRequest(request);
+        }
+
+        if (_linkTableProvider is IExportRequestAware linkRequestAware)
+        {
+            linkRequestAware.ApplyRequest(request);
+        }
+
         var outputRoot = _pathResolver.ResolveRoot(request.OutputPath, request.ArtifactPrefix);
         Directory.CreateDirectory(outputRoot);
 
@@ -44,13 +54,13 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
 
         foreach (dynamic descriptor in _entityTableProvider.GetDescriptors())
         {
-            var rows = MaterializeRows(generationResult, descriptor).ToList();
+            var rows = ((IEnumerable<IReadOnlyDictionary<string, object?>>)MaterializeRows(generationResult, descriptor)).ToList();
             artifacts.Add(_artifactWriter.Write(outputRoot, descriptor.RelativePathStem, descriptor.Columns, rows, ExportArtifactKind.EntityTable));
         }
 
         foreach (dynamic descriptor in _linkTableProvider.GetDescriptors())
         {
-            var rows = MaterializeRows(generationResult, descriptor).ToList();
+            var rows = ((IEnumerable<IReadOnlyDictionary<string, object?>>)MaterializeRows(generationResult, descriptor)).ToList();
             artifacts.Add(_artifactWriter.Write(outputRoot, descriptor.RelativePathStem, descriptor.Columns, rows, ExportArtifactKind.LinkTable));
         }
 
@@ -74,7 +84,18 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
             });
         }
 
-        var manifest = _manifestBuilder.Build(request, artifacts);
+        var manifest = _manifestBuilder.Build(new ExportRequest
+        {
+            Format = request.Format,
+            Profile = request.Profile,
+            OutputPath = outputRoot,
+            ArtifactPrefix = request.ArtifactPrefix,
+            IncludeManifest = request.IncludeManifest,
+            IncludeSummary = request.IncludeSummary,
+            Overwrite = request.Overwrite,
+            CredentialExportMode = request.CredentialExportMode,
+            ExportedAtUtc = request.ExportedAtUtc
+        }, artifacts);
 
         if (request.IncludeManifest)
         {

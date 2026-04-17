@@ -1,0 +1,47 @@
+---
+title: Generate a CMDB-Rich Environment
+description: Work with DataGen CMDB artifacts and understand the current authored-scenario limitation for CMDB toggles.
+---
+
+# Generate a CMDB-Rich Environment
+
+CMDB is a first-class capability in DataGen, but there is one important current limitation to understand:
+
+> The cmdlet-first authored scenario envelope does not yet expose the full CMDB profile surface directly.
+
+That means the walkthrough currently focuses on **inspection and validation of CMDB artifacts** once CMDB generation is enabled in your environment-specific scenario path.
+
+## Reference assets
+
+- [Inspection script](/examples/scripts/inspect-cmdb-rich-export.ps1)
+
+## Current practical workflow
+
+1. Generate or obtain a world where CMDB has been enabled in the underlying scenario definition path used by your environment.
+2. Export normalized artifacts.
+3. Inspect the CMDB artifacts and verify they line up with your downstream validation goals.
+
+## Example inspection flow
+
+```powershell
+$world | Export-SEEnterpriseWorld -OutputPath .\out\cmdb-world -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+.\inspect-cmdb-rich-export.ps1 -InputPath .\out\cmdb-world
+```
+
+## What to look for
+
+- canonical configuration items
+- configuration item relationships
+- source-facing CMDB records
+- source links and source relationships
+- realistic drift between canonical truth and source-system views
+
+## Why this walkthrough still matters
+
+Even with the authored-scenario gap, this is a high-value validation surface for:
+
+- CMDB reconciliation work
+- source-of-truth comparisons
+- consumer adapters that need both canonical and source-facing records
+
+As the authored scenario surface grows, this walkthrough can evolve into a fully cmdlet-first generation path.

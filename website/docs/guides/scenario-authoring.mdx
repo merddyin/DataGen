@@ -1,0 +1,93 @@
+---
+title: Scenario Authoring
+description: Author DataGen scenarios with templates, overlays, JSON, and validation.
+---
+
+# Scenario Authoring
+
+DataGen scenarios can be authored in several ways:
+
+- template-first with `New-SEScenarioFromTemplate`
+- interactive authoring with `New-SEScenarioWizard`
+- JSON files checked into source control
+- pipeline object editing and validation
+
+## Templates
+
+The current built-in template surface includes scenario kinds such as:
+
+- `RegionalManufacturer`
+- `GlobalSaaS`
+- `HealthcareNetwork`
+
+Use templates when you want a strong starting point with reasonable defaults.
+
+```powershell
+Get-SEScenarioTemplate
+New-SEScenarioFromTemplate -Template RegionalManufacturer
+```
+
+## Overlays
+
+Overlays let you bias a scenario without rebuilding it from scratch.
+
+The current overlay set includes options such as:
+
+- `IdentityHeavy`
+- `RemoteWorkforce`
+- `LegacyInfrastructure`
+- `HighAnomalyDensity`
+- `MultiRegionExpansion`
+
+```powershell
+$scenario = New-SEScenarioFromTemplate -Template GlobalSaaS
+$merged = Merge-SEScenarioOverlay -Scenario $scenario -Overlay RemoteWorkforce,MultiRegionExpansion
+```
+
+## JSON authoring
+
+For repeatable workflows, JSON is often the best long-term format.
+
+A compact example:
+
+```json
+{
+  "name": "Validation Tenant",
+  "template": "GlobalSaaS",
+  "deviationProfile": "Realistic",
+  "industryProfile": "Software",
+  "geographyProfile": "Global",
+  "employeeSize": {
+    "minimum": 1200,
+    "maximum": 1800
+  },
+  "identity": {
+    "includeHybridDirectory": false,
+    "includeM365StyleGroups": true,
+    "includeB2BGuests": true,
+    "staleAccountRate": 0.02
+  }
+}
+```
+
+## Resolve before generation
+
+Always resolve and validate before generation in automation:
+
+```powershell
+$resolved = Resolve-SEScenario -Path .\scenario.json
+$validation = Test-SEScenario -Scenario $resolved
+$validation
+```
+
+## Deviation profile
+
+Scenario authoring now separates enterprise richness from realism messiness.
+
+Use:
+
+- `Clean` for baseline or control worlds
+- `Realistic` for balanced realism
+- `Aggressive` for deliberately messier environments
+
+Read more in [Realism and Deviations](/guides/realism-and-deviations).

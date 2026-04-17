@@ -1,0 +1,9 @@
+MatchNameContains,MatchVendor,MatchServiceType,MatchCategory,MatchDeploymentModel,IndustryTags,MinimumEmployees,HostType,PreferredHostRole,HostName,HostingRole
+Databricks,Databricks,API,Analytics,VendorManaged,All,500,ManagedPlatform,,Databricks Control Plane API,ControlPlane
+Databricks,Databricks,Data,Analytics,VendorManaged,All,500,ManagedPlatform,,Databricks SQL Warehouse,DataPlane
+Databricks,Databricks,Worker,Analytics,VendorManaged,All,500,ManagedPlatform,,Databricks Compute Plane,ComputePlane
+Workday,Workday,Integration,HR,VendorManaged,All,250,SaaSPlatform,,Workday Integration Cloud,Integration
+Microsoft Intune Admin Center,Microsoft,API,Security,VendorManaged,All,250,SaaSPlatform,,Microsoft Intune Global Service,API
+Microsoft Entra Admin Center,Microsoft,API,Security,VendorManaged,All,250,SaaSPlatform,,Microsoft Entra Global Control Plane,API
+SAP S/4HANA,,Data,Finance,VirtualMachine,All,250,Server,SQL Server,,SQL Server
+Supplier Quality Hub,,Integration,Operations,VirtualMachine,Manufacturing,500,Server,Application Server,,Application Server

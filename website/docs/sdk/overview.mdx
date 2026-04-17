@@ -1,0 +1,32 @@
+---
+title: SDK Overview
+description: Understand the DataGen plugin SDK, when to use it, and the architectural boundary it enforces.
+---
+
+# SDK Overview
+
+Use the SDK when you want to extend the generated dataset itself.
+
+## Good reasons to use the SDK
+
+- add synthetic records or realism overlays
+- generate additional enterprise attributes tied to real entities
+- enrich the world with new data domains
+- introduce scenario-aware variation without changing core generation code
+
+## Not a good reason to use the SDK
+
+Do not use the DataGen plugin ecosystem to:
+
+- translate DataGen output into another product’s import format
+- call downstream system ingestion APIs
+- tailor output for one consumer’s internal contract
+
+Those are adapter or bridge responsibilities, not DataGen plugin responsibilities.
+
+## Start here
+
+- [Plugin Architecture](/sdk/plugin-architecture)
+- [Script Plugin Guide](/sdk/script-plugin-guide)
+- [Binary Plugin Guide](/sdk/binary-plugin-guide)
+- [Examples](/sdk/examples)

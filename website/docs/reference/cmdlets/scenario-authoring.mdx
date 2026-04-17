@@ -1,0 +1,74 @@
+---
+title: Scenario Authoring Cmdlets
+description: Reference for DataGen scenario authoring, resolution, validation, and terminal-wizard commands.
+---
+
+# Scenario Authoring Cmdlets
+
+## `Get-SEScenarioTemplate`
+
+Use this to list built-in scenario templates. It can also surface plugin-aware contributions when plugin roots and enabled capabilities are supplied.
+
+Key parameters:
+
+- `-PluginRootPath`
+- `-EnablePluginCapability`
+
+## `New-SEScenarioFromTemplate`
+
+Creates a new scenario envelope from a template.
+
+Key parameters:
+
+- `-Template`
+- `-PluginRootPath`
+- `-EnablePluginCapability`
+
+## `Merge-SEScenarioOverlay`
+
+Applies one or more overlays to a scenario.
+
+Key parameters:
+
+- `-Scenario`
+- `-Overlay`
+
+## `Resolve-SEScenario`
+
+Resolves defaults, overlays, and scenario materialization into a complete scenario definition.
+
+Parameter sets:
+
+- `-Scenario`
+- `-Path`
+- `-Json`
+
+## `Test-SEScenario`
+
+Validates a scenario and returns a validation result with messages, plugin contributions, and resolved scenario context.
+
+Parameter sets:
+
+- `-Scenario`
+- `-Path`
+- `-Json`
+
+## `New-SEScenarioWizard`
+
+Interactive terminal wizard for creating or editing a scenario.
+
+Key parameters:
+
+- `-ScenarioPath`
+- `-Scenario`
+- `-OutputPath`
+- `-StartSection`
+- `-SkipSectionReview`
+- `-ReviewOnly`
+
+### Example
+
+```powershell
+$scenario = New-SEScenarioWizard -OutputPath .\scenario.json
+$scenario | Test-SEScenario
+```

@@ -1,0 +1,57 @@
+---
+title: Generate and Populate an Entra Lab
+description: Generate an Entra-first world for tenant, guest, cloud-policy, and collaboration testing.
+---
+
+# Generate and Populate an Entra Lab
+
+Use this walkthrough when you want a cloud-first identity environment centered on Entra, Microsoft 365-style collaboration, and tenant governance.
+
+## Requirements
+
+- DataGen module imported
+- catalog content available
+- export path for normalized artifacts
+
+## Reference assets
+
+- [Scenario JSON](/examples/scenarios/entra-lab.json)
+- [Reference script](/examples/scripts/generate-entra-lab.ps1)
+
+## Steps
+
+### 1. Validate the scenario
+
+```powershell
+Test-SEScenario -Path .\entra-lab.json
+```
+
+### 2. Generate the world
+
+```powershell
+$world = New-SEEnterpriseWorld -ScenarioPath .\entra-lab.json -Seed 2307
+```
+
+### 3. Export for tenant validation
+
+```powershell
+$world | Export-SEEnterpriseWorld -OutputPath .\out\entra-lab -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+```
+
+## What this scenario emphasizes
+
+- Entra-first identity
+- B2B guests
+- collaboration-heavy repositories
+- global geography
+- remote-work overlays
+
+## Example validation targets
+
+This walkthrough is especially useful when you want to validate:
+
+- identity store and container mapping
+- guest and external-user handling
+- tenant associations
+- cloud policy and access evidence
+- collaboration and repository topology

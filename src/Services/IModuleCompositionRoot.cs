@@ -1,5 +1,3 @@
-using SyntheticEnterprise.Module.Cmdlets;
-
 namespace SyntheticEnterprise.Module.Services;
 
 public interface IModuleCompositionRoot

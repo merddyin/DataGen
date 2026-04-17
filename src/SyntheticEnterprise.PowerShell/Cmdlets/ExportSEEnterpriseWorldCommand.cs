@@ -33,6 +33,9 @@ public sealed class ExportSEEnterpriseWorldCommand : PSCmdlet
     public SwitchParameter Overwrite { get; set; }
 
     [Parameter]
+    public CredentialExportMode CredentialExportMode { get; set; } = CredentialExportMode.Masked;
+
+    [Parameter]
     public SwitchParameter PassThru { get; set; }
 
     private IWorldExportCoordinator? _coordinator;
@@ -53,6 +56,10 @@ public sealed class ExportSEEnterpriseWorldCommand : PSCmdlet
 
     protected override void ProcessRecord()
     {
+        var exportInput = InputObject is PSObject psObject
+            ? psObject.BaseObject ?? InputObject
+            : InputObject;
+
         var request = new ExportRequest
         {
             Format = Format,
@@ -61,10 +68,11 @@ public sealed class ExportSEEnterpriseWorldCommand : PSCmdlet
             ArtifactPrefix = ArtifactPrefix,
             IncludeManifest = IncludeManifest.IsPresent,
             IncludeSummary = IncludeSummary.IsPresent,
-            Overwrite = Overwrite.IsPresent
+            Overwrite = Overwrite.IsPresent,
+            CredentialExportMode = CredentialExportMode
         };
 
-        var manifest = _coordinator!.Export(InputObject, request);
+        var manifest = _coordinator!.Export(exportInput, request);
 
         WriteVerbose($"Exported {manifest.Artifacts.Count} artifacts to '{manifest.OutputPath}'.");
 

@@ -1,0 +1,138 @@
+:root {
+  --ifm-color-primary: #5bb8ff;
+  --ifm-color-primary-dark: #45abfd;
+  --ifm-color-primary-darker: #37a4fd;
+  --ifm-color-primary-darkest: #0c88e5;
+  --ifm-color-primary-light: #71c5ff;
+  --ifm-color-primary-lighter: #7fcaff;
+  --ifm-color-primary-lightest: #a5dbff;
+  --ifm-background-color: #f5f7fb;
+  --ifm-navbar-background-color: rgba(255, 255, 255, 0.82);
+  --ifm-footer-background-color: #09111d;
+  --ifm-code-font-size: 94%;
+  --ifm-heading-font-family:
+    'Segoe UI Variable Display', 'Segoe UI', Inter, ui-sans-serif, system-ui,
+    sans-serif;
+  --ifm-font-family-base:
+    'Segoe UI Variable Text', 'Segoe UI', Inter, ui-sans-serif, system-ui,
+    sans-serif;
+  --docusaurus-highlighted-code-line-bg: rgba(37, 133, 255, 0.12);
+  --site-color-surface: rgba(255, 255, 255, 0.72);
+  --site-color-border: rgba(78, 106, 146, 0.16);
+  --site-color-text-soft: #47607e;
+  --site-shadow-soft: 0 24px 60px rgba(14, 22, 39, 0.08);
+}
+
+html[data-theme='dark'] {
+  --ifm-color-primary: #79c2ff;
+  --ifm-color-primary-dark: #5db5ff;
+  --ifm-color-primary-darker: #4fafff;
+  --ifm-color-primary-darkest: #1f95f7;
+  --ifm-color-primary-light: #95cfff;
+  --ifm-color-primary-lighter: #a3d5ff;
+  --ifm-color-primary-lightest: #cce8ff;
+  --ifm-background-color: #09111d;
+  --ifm-navbar-background-color: rgba(9, 17, 29, 0.72);
+  --ifm-background-surface-color: #0d1727;
+  --ifm-footer-background-color: #070d17;
+  --ifm-font-color-base: #dce8fb;
+  --ifm-heading-color: #f5f9ff;
+  --ifm-menu-color: #d5e4fa;
+  --ifm-menu-color-active: #ffffff;
+  --ifm-toc-link-color: #bfd3ef;
+  --ifm-card-background-color: rgba(14, 25, 42, 0.76);
+  --docusaurus-highlighted-code-line-bg: rgba(121, 194, 255, 0.14);
+  --site-color-surface: rgba(13, 23, 39, 0.72);
+  --site-color-border: rgba(133, 169, 214, 0.14);
+  --site-color-text-soft: #a7bdd9;
+  --site-shadow-soft: 0 28px 80px rgba(0, 0, 0, 0.28);
+}
+
+html,
+body {
+  background:
+    radial-gradient(circle at top left, rgba(80, 131, 198, 0.14), transparent 30%),
+    radial-gradient(circle at top right, rgba(78, 189, 177, 0.09), transparent 22%),
+    var(--ifm-background-color);
+}
+
+.navbar {
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--site-color-border);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
+}
+
+.navbar__title {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.theme-doc-sidebar-container,
+.table-of-contents,
+.pagination-nav__link,
+.card,
+.theme-doc-markdown blockquote,
+.theme-code-block,
+.theme-admonition {
+  border: 1px solid var(--site-color-border);
+  border-radius: 1rem;
+  background: var(--site-color-surface);
+  box-shadow: var(--site-shadow-soft);
+  backdrop-filter: blur(18px);
+}
+
+.theme-doc-sidebar-container {
+  border-top: 0;
+}
+
+.theme-doc-markdown blockquote {
+  padding: 1rem 1.25rem;
+}
+
+.menu__link {
+  border-radius: 0.8rem;
+}
+
+.menu__link--active {
+  background: rgba(116, 192, 255, 0.16);
+}
+
+.button {
+  border-radius: 999px;
+  box-shadow: 0 14px 34px rgba(10, 18, 31, 0.18);
+}
+
+.button--primary {
+  background: linear-gradient(135deg, #52b4ff, #2f8bf0);
+  border: 0;
+}
+
+.button--secondary {
+  border: 1px solid rgba(152, 197, 255, 0.25);
+  background: rgba(14, 27, 46, 0.48);
+  color: #ffffff;
+}
+
+.alert {
+  border-radius: 1rem;
+}
+
+.footer {
+  border-top: 1px solid rgba(145, 183, 234, 0.12);
+}
+
+.theme-doc-markdown img {
+  border-radius: 1rem;
+  border: 1px solid var(--site-color-border);
+  box-shadow: var(--site-shadow-soft);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3 {
+  letter-spacing: -0.03em;
+}
+
+.markdown > h1:first-child {
+  margin-top: 0.25rem;
+}

@@ -1,0 +1,18 @@
+MatchVendor,MatchCategory,MatchNameContains,IndustryTags,MinimumEmployees,Name,Category,Vendor,BusinessCapability,HostingModel,UserScope,Criticality,DataSensitivity
+Workday,HR,,All,500,Workday Recruiting,HR,Workday,Talent Acquisition,SaaS,BusinessUnit,Medium,Confidential
+Workday,HR,,All,750,Workday Learning,HR,Workday,Workforce Learning,SaaS,Enterprise,Medium,Internal
+ServiceNow,Operations,,All,500,ServiceNow CMDB,Operations,ServiceNow,Configuration Management,SaaS,Enterprise,High,Internal
+ServiceNow,Operations,,All,1000,ServiceNow Security Operations,Security,ServiceNow,Security Operations,SaaS,Enterprise,High,Restricted
+Microsoft,Security,Entra,All,500,Microsoft Intune Admin Center,Security,Microsoft,Endpoint Administration,SaaS,Enterprise,High,Restricted
+Microsoft,Security,Entra,All,1000,Microsoft Purview Compliance Portal,Security,Microsoft,Compliance Operations,SaaS,Enterprise,High,Restricted
+Salesforce,Sales,,All,500,Salesforce Experience Cloud,Sales,Salesforce,Partner and Customer Experience,SaaS,BusinessUnit,Medium,Internal
+Salesforce,Analytics,Tableau,All,750,Tableau Prep Cloud,Analytics,Salesforce,Analytics Preparation,SaaS,Department,Medium,Internal
+SAP,Operations,S/4HANA,Manufacturing|Industrials|Distribution,1000,SAP Integrated Business Planning,Operations,SAP,Supply Chain Planning,SaaS,Enterprise,High,Internal
+SAP,Operations,S/4HANA,Manufacturing|Industrials|Distribution,1000,SAP Extended Warehouse Management,Operations,SAP,Warehouse Management,Hybrid,Office,High,Internal
+Siemens,Developer,Teamcenter,Manufacturing|Industrials,1000,Siemens Insights Hub,Analytics,Siemens,Industrial Analytics,SaaS,Office,High,Internal
+Rockwell Automation,Operations,FactoryTalk,Manufacturing|Industrials,750,FactoryTalk Historian,Analytics,Rockwell Automation,Operational Historian,Hybrid,Office,High,Internal
+PTC,Developer,Windchill,Manufacturing|Industrials,1000,PTC ThingWorx,Developer,PTC,Connected Product Platform,Hybrid,BusinessUnit,High,Internal
+Databricks,Analytics,Lakehouse,All,1000,Databricks Unity Catalog,Analytics,Databricks,Data Governance,SaaS,Enterprise,High,Internal
+Snowflake,Analytics,Data Cloud,All,1000,Snowflake Cortex Studio,Analytics,Snowflake,AI and Data Applications,SaaS,Enterprise,Medium,Internal
+Atlassian,Developer,Jira,All,500,Jira Service Management,Operations,Atlassian,Engineering Service Management,SaaS,BusinessUnit,Medium,Internal
+CrowdStrike,Security,Falcon,All,750,CrowdStrike Identity Protection,Security,CrowdStrike,Identity Threat Detection,SaaS,Enterprise,High,Restricted

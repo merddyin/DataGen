@@ -1,0 +1,18 @@
+IndustryTags,RelationshipType,Segment,Industry,Criticality,RevenueBand,OwnerHints,MinimumEmployees
+Manufacturing|Industrials,Customer,StrategicAccount,Industrial Equipment,High,Enterprise,Sales|Operations,500
+Manufacturing|Industrials,Customer,RegionalAccount,Automotive Components,Medium,MidMarket,Sales|Operations,250
+Manufacturing|Industrials,Customer,RegionalAccount,Industrial Distribution,Medium,MidMarket,Sales|Operations,100
+Manufacturing|Industrials,Partner,DistributionPartner,Logistics,Medium,MidMarket,Operations|Procurement,100
+Manufacturing|Industrials,Partner,ChannelPartner,Industrial Services,Medium,MidMarket,Operations|Engineering,100
+Distribution|Retail|Consumer,Customer,StrategicAccount,Retail,High,Enterprise,Sales|Marketing,500
+Distribution|Retail|Consumer,Customer,RegionalAccount,Consumer Goods,Medium,MidMarket,Sales|Marketing,150
+Distribution|Retail|Consumer,Partner,DistributionPartner,Logistics,Medium,MidMarket,Operations|Procurement,100
+Technology|Software,Customer,StrategicAccount,Technology Services,High,Enterprise,Sales|Engineering,500
+Technology|Software,Customer,RegionalAccount,Software,Medium,MidMarket,Sales|Engineering,150
+Technology|Software,Partner,ChannelPartner,Systems Integrator,Medium,MidMarket,Information Technology|Sales,150
+Finance|Financials|Bank|Insurance,Customer,StrategicAccount,Financial Services,High,Enterprise,Sales|Finance,500
+Finance|Financials|Bank|Insurance,Partner,ChannelPartner,Insurance,Medium,MidMarket,Finance|Operations,150
+Healthcare|Health|Medical,Customer,StrategicAccount,Healthcare Services,High,Enterprise,Operations|Sales,500
+Healthcare|Health|Medical,Partner,ChannelPartner,Medical Devices,Medium,MidMarket,Operations|Procurement,150
+All,Customer,RegionalAccount,Business Services,Medium,MidMarket,Sales|Marketing,100
+All,Partner,ChannelPartner,Professional Services,Medium,MidMarket,Operations|Sales,100

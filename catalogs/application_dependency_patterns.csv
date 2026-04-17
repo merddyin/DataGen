@@ -1,0 +1,14 @@
+MatchSourceNameContains,MatchSourceVendor,MatchSourceCategory,MatchTargetNameContains,MatchTargetVendor,MatchTargetCategory,IndustryTags,MinimumEmployees,DependencyType,InterfaceType,Criticality
+Workday Recruiting,Workday,HR,Workday HCM,Workday,HR,All,500,UpstreamMasterData,API,Medium
+Workday Learning,Workday,HR,Workday HCM,Workday,HR,All,750,LearningProfile,API,Medium
+ServiceNow CMDB,ServiceNow,Operations,ServiceNow IT Service Management,ServiceNow,Operations,All,500,OperationalWorkflow,API,High
+Microsoft Intune Admin Center,Microsoft,Security,Microsoft Entra Admin Center,Microsoft,Security,All,500,Identity,GraphApi,High
+Microsoft Purview Compliance Portal,Microsoft,Security,Microsoft Entra Admin Center,Microsoft,Security,All,1000,Identity,GraphApi,High
+Databricks Unity Catalog,Databricks,Analytics,Databricks Lakehouse Platform,Databricks,Analytics,All,1000,Governance,API,Medium
+Snowflake Cortex Studio,Snowflake,Analytics,Snowflake Data Cloud,Snowflake,Analytics,All,1000,AnalyticsPlatform,API,Medium
+SAP Integrated Business Planning,SAP,Operations,SAP S/4HANA,SAP,Operations,Manufacturing|Industrials|Distribution,1000,Planning,API,High
+SAP Extended Warehouse Management,SAP,Operations,SAP S/4HANA,SAP,Operations,Manufacturing|Industrials|Distribution,1000,WarehouseExecution,API,High
+SAP Global Trade Services,SAP,Operations,SAP S/4HANA,SAP,Operations,Manufacturing|Industrials|Distribution,1000,TradeCompliance,API,High
+Blue Yonder Demand Planning,Blue Yonder,Operations,Blue Yonder Warehouse Management,Blue Yonder,Operations,Manufacturing|Distribution,1000,DemandPlanning,API,Medium
+Supplier Quality Hub,,Operations,MasterControl Quality Excellence,MasterControl,Operations,Manufacturing|Industrials,500,QualityData,API,High
+Production Genealogy,,Operations,Plex Smart Manufacturing Platform,Plex,Operations,Manufacturing|Industrials,750,Traceability,API,High

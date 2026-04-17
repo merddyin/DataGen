@@ -1,0 +1,16 @@
+MatchProcessName,MatchApplicationNameContains,MatchVendor,MatchCategory,IndustryTags,MinimumEmployees,RelationshipType,IsPrimary
+Hire to Retire,Workday HCM,Workday,HR,All,250,PrimarySystem,true
+Hire to Retire,Workday Recruiting,Workday,HR,All,250,SupportingSystem,false
+Incident to Resolution,ServiceNow IT Service Management,ServiceNow,Operations,All,250,PrimarySystem,true
+Identity Access Lifecycle,Microsoft Entra Admin Center,Microsoft,Security,All,250,PrimarySystem,true
+Identity Access Lifecycle,SailPoint IdentityNow,SailPoint,Security,All,500,SupportingSystem,false
+Plan to Produce,SAP S/4HANA,SAP,Operations,Manufacturing|Industrials,750,PrimarySystem,true
+Plan to Produce,Production Genealogy,,Operations,Manufacturing|Industrials,500,SupportingSystem,false
+Source to Deliver,SAP Extended Warehouse Management,SAP,Operations,Manufacturing|Distribution,500,PrimarySystem,true
+Source to Deliver,Oracle Transportation Management,Oracle,Operations,Manufacturing|Distribution,750,SupportingSystem,false
+Quality to Release,Supplier Quality Hub,,Operations,Manufacturing|Industrials,500,PrimarySystem,true
+Quality to Release,MasterControl Quality Excellence,MasterControl,Operations,Manufacturing|Healthcare,500,SupportingSystem,false
+Maintain to Operate,Infor EAM,Infor,Operations,Manufacturing|Industrials,500,PrimarySystem,true
+Procure to Pay,SAP Ariba,SAP,Procurement,All,500,PrimarySystem,true
+Record to Report,SAP S/4HANA,SAP,Operations,Manufacturing|Distribution,750,SupportingSystem,false
+Demand to Pipeline,Zoom Workplace Admin,Zoom,Collaboration,All,250,SupportingSystem,false

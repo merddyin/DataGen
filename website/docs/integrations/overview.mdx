@@ -1,0 +1,28 @@
+---
+title: Integration Overview
+description: Use DataGen exports and adapters without collapsing the product boundary.
+---
+
+# Integration Overview
+
+DataGen is designed to be a synthetic data producer, not a universal importer.
+
+## Recommended integration model
+
+The cleanest pattern is:
+
+1. author and generate a DataGen world
+2. export normalized artifacts
+3. translate those artifacts in a bridge or companion adapter
+4. feed the translated data into the downstream consumer
+
+## Why this works well
+
+- it preserves DataGen’s role as a data generator
+- it keeps downstream translation logic close to the downstream system
+- it reduces pressure to turn DataGen plugins into consumer-specific adapters
+
+## Where to start
+
+- [Normalized Export](/integrations/normalized-export)
+- [Consumer Adapters](/integrations/consumer-adapters)

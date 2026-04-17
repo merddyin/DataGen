@@ -1,0 +1,58 @@
+---
+title: Export and Persistence Cmdlets
+description: Reference for snapshot save/import, normalized export, and catalog packaging commands.
+---
+
+# Export and Persistence Cmdlets
+
+## `Save-SEEnterpriseWorld`
+
+Writes a portable snapshot.
+
+Key parameters:
+
+- `-InputObject`
+- `-Path`
+- `-CatalogRootPath`
+- `-SourceScenarioPath`
+- `-SourceScenarioName`
+- `-Compress`
+
+## `Import-SEEnterpriseWorld`
+
+Loads a saved snapshot.
+
+Key parameters:
+
+- `-Path`
+- `-SkipCompatibilityCheck`
+- `-PassThruEnvelope`
+
+## `Export-SEEnterpriseWorld`
+
+Exports a generated world into normalized artifacts.
+
+Key parameters:
+
+- `-InputObject`
+- `-OutputPath`
+- `-Format`
+- `-Profile`
+- `-IncludeManifest`
+- `-IncludeSummary`
+- `-CredentialExportMode`
+- `-Overwrite`
+- `-PassThru`
+
+## `New-SECatalogDatabase`
+
+Builds a packaged catalog SQLite database from curated source material.
+
+Key parameters:
+
+- `-CatalogRootPath`
+- `-OutputPath`
+- `-OriginRoot`
+- `-RawNamesRoot`
+- `-IncludeRawNamesCache`
+- `-IncludeUncuratedSources`

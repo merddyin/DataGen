@@ -1,0 +1,27 @@
+---
+title: Script Plugin Guide
+description: Build script-based DataGen plugins and stay inside the supported architectural boundary.
+---
+
+# Script Plugin Guide
+
+Script plugins are a good fit when you want a fast extension loop and your plugin logic is easier to express in script than in compiled code.
+
+## Use script plugins when
+
+- you are prototyping a new synthetic data domain
+- you want lightweight enrichment logic
+- your plugin does not need a compiled binary dependency surface
+
+## Design guidance
+
+- treat the generated world as input
+- emit new synthetic records or enrichments
+- keep behavior deterministic when a seed is supplied
+- keep plugin outputs explainable and bounded
+
+## Architectural reminder
+
+A script plugin should still behave like a data generator or enricher, not a system integration shim.
+
+If you find yourself shaping output for a single downstream product, you are probably building an adapter, not a DataGen plugin.

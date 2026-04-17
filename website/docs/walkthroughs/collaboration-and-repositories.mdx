@@ -1,0 +1,36 @@
+---
+title: Generate a Collaboration and Repository-Rich Tenant
+description: Generate a world that emphasizes databases, shares, collaboration, and access evidence.
+---
+
+# Generate a Collaboration and Repository-Rich Tenant
+
+This walkthrough is a good fit for repository, SharePoint, Teams, file-share, and database-oriented validation.
+
+## Reference assets
+
+- [Scenario JSON](/examples/scenarios/collaboration-and-repositories.json)
+- [Reference script](/examples/scripts/generate-collaboration-lab.ps1)
+
+## Steps
+
+```powershell
+$world = New-SEEnterpriseWorld -ScenarioPath .\collaboration-and-repositories.json -Seed 6422
+$world | Export-SEEnterpriseWorld -OutputPath .\out\collaboration-lab -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+```
+
+## What to expect
+
+This scenario tends to produce:
+
+- multiple database and repository surfaces
+- collaboration sites and related structures
+- richer repository-link topology
+- access evidence with inherited and direct exceptions
+
+## Downstream uses
+
+- repository discovery validation
+- collaboration permission demonstrations
+- app-to-repo association testing
+- access-evidence-driven relationship inference

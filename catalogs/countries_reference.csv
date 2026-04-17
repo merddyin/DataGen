@@ -1,0 +1,251 @@
+Name,Code,Phone,Capital,Continent,PostalCodeSupported
+Angola,AO,244,Luanda,Africa,false
+Burkina Faso,BF,226,Ouagadougou,Africa,false
+Burundi,BI,257,Bujumbura,Africa,false
+Benin,BJ,229,Porto-Novo,Africa,false
+Botswana,BW,267,Gaborone,Africa,false
+Democratic Republic of the Congo,CD,243,Kinshasa,Africa,false
+Central African Republic,CF,236,Bangui,Africa,false
+Republic of the Congo,CG,242,Brazzaville,Africa,false
+Ivory Coast,CI,225,Yamoussoukro,Africa,false
+Cameroon,CM,237,Yaounde,Africa,false
+Cape Verde,CV,238,Praia,Africa,false
+Djibouti,DJ,253,Djibouti,Africa,false
+Algeria,DZ,213,Algiers,Africa,true
+Egypt,EG,20,Cairo,Africa,false
+Western Sahara,EH,212,Laayoune,Africa,false
+Eritrea,ER,291,Asmara,Africa,false
+Ethiopia,ET,251,Addis Ababa,Africa,false
+Gabon,GA,241,Libreville,Africa,false
+Ghana,GH,233,Accra,Africa,false
+Gambia,GM,220,Banjul,Africa,false
+Guinea,GN,224,Conakry,Africa,false
+Equatorial Guinea,GQ,240,Malabo,Africa,false
+Guinea-Bissau,GW,245,Bissau,Africa,false
+Kenya,KE,254,Nairobi,Africa,false
+Comoros,KM,269,Moroni,Africa,false
+Liberia,LR,231,Monrovia,Africa,false
+Lesotho,LS,266,Maseru,Africa,false
+Libya,LY,218,Tripoli,Africa,false
+Morocco,MA,212,Rabat,Africa,true
+Madagascar,MG,261,Antananarivo,Africa,false
+Mali,ML,223,Bamako,Africa,false
+Mauritania,MR,222,Nouakchott,Africa,false
+Mauritius,MU,230,Port Louis,Africa,false
+Malawi,MW,265,Lilongwe,Africa,true
+Mozambique,MZ,258,Maputo,Africa,false
+Namibia,NA,264,Windhoek,Africa,false
+Niger,NE,227,Niamey,Africa,false
+Nigeria,NG,234,Abuja,Africa,false
+Reunion,RE,262,Saint-Denis,Africa,true
+Rwanda,RW,250,Kigali,Africa,false
+Seychelles,SC,248,Victoria,Africa,false
+Sudan,SD,249,Khartoum,Africa,false
+Saint Helena,SH,290,Jamestown,Africa,false
+Sierra Leone,SL,232,Freetown,Africa,false
+Senegal,SN,221,Dakar,Africa,false
+Somalia,SO,252,Mogadishu,Africa,false
+South Sudan,SS,211,Juba,Africa,false
+Sao Tome and Principe,ST,239,Sao Tome,Africa,false
+Swaziland,SZ,268,Lobamba,Africa,false
+Chad,TD,235,N'Djamena,Africa,false
+Togo,TG,228,Lome,Africa,false
+Tunisia,TN,216,Tunis,Africa,false
+Tanzania,TZ,255,Dodoma,Africa,false
+Uganda,UG,256,Kampala,Africa,false
+Mayotte,YT,262,Mamoudzou,Africa,true
+South Africa,ZA,27,Pretoria,Africa,true
+Zambia,ZM,260,Lusaka,Africa,false
+Zimbabwe,ZW,263,Harare,Africa,false
+Antarctica,AQ,672,,Antarctica,false
+Bouvet Island,BV,47,,Antarctica,false
+South Georgia and the South Sandwich Islands,GS,500,King Edward Point,Antarctica,false
+Heard Island and McDonald Islands,HM,61,,Antarctica,false
+French Southern Territories,TF,262,Port-aux-Francais,Antarctica,false
+United Arab Emirates,AE,971,Abu Dhabi,Asia,false
+Afghanistan,AF,93,Kabul,Asia,false
+Armenia,AM,374,Yerevan,Asia,false
+Azerbaijan,AZ,994,Baku,Asia,true
+Bangladesh,BD,880,Dhaka,Asia,true
+Bahrain,BH,973,Manama,Asia,false
+Brunei,BN,673,Bandar Seri Begawan,Asia,false
+Bhutan,BT,975,Thimphu,Asia,false
+Cocos [Keeling] Islands,CC,61,West Island,Asia,false
+China,CN,86,Beijing,Asia,false
+Christmas Island,CX,61,Flying Fish Cove,Asia,false
+Georgia,GE,995,Tbilisi,Asia,false
+Hong Kong,HK,852,City of Victoria,Asia,false
+Indonesia,ID,62,Jakarta,Asia,false
+Israel,IL,972,Jerusalem,Asia,false
+India,IN,91,New Delhi,Asia,true
+British Indian Ocean Territory,IO,246,Diego Garcia,Asia,false
+Iraq,IQ,964,Baghdad,Asia,false
+Iran,IR,98,Tehran,Asia,false
+Jordan,JO,962,Amman,Asia,false
+Japan,JP,81,Tokyo,Asia,true
+Kyrgyzstan,KG,996,Bishkek,Asia,false
+Cambodia,KH,855,Phnom Penh,Asia,false
+North Korea,KP,850,Pyongyang,Asia,false
+South Korea,KR,82,Seoul,Asia,true
+Kuwait,KW,965,Kuwait City,Asia,false
+Kazakhstan,KZ,"76,77",Astana,Asia,false
+Laos,LA,856,Vientiane,Asia,false
+Lebanon,LB,961,Beirut,Asia,false
+Sri Lanka,LK,94,Colombo,Asia,true
+Myanmar [Burma],MM,95,Naypyidaw,Asia,false
+Mongolia,MN,976,Ulan Bator,Asia,false
+Macao,MO,853,,Asia,false
+Maldives,MV,960,Male,Asia,false
+Malaysia,MY,60,Kuala Lumpur,Asia,true
+Nepal,NP,977,Kathmandu,Asia,false
+Oman,OM,968,Muscat,Asia,false
+Philippines,PH,63,Manila,Asia,true
+Pakistan,PK,92,Islamabad,Asia,true
+Palestine,PS,970,Ramallah,Asia,false
+Qatar,QA,974,Doha,Asia,false
+Saudi Arabia,SA,966,Riyadh,Asia,false
+Singapore,SG,65,Singapore,Asia,true
+Syria,SY,963,Damascus,Asia,false
+Thailand,TH,66,Bangkok,Asia,true
+Tajikistan,TJ,992,Dushanbe,Asia,false
+Turkmenistan,TM,993,Ashgabat,Asia,false
+Turkey,TR,90,Ankara,Asia,true
+Taiwan,TW,886,Taipei,Asia,false
+Uzbekistan,UZ,998,Tashkent,Asia,false
+Vietnam,VN,84,Hanoi,Asia,false
+Yemen,YE,967,Sana'a,Asia,false
+Andorra,AD,376,Andorra la Vella,Europe,true
+Albania,AL,355,Tirana,Europe,false
+Austria,AT,43,Vienna,Europe,true
+Aland Islands,AX,358,Mariehamn,Europe,true
+Bosnia and Herzegovina,BA,387,Sarajevo,Europe,false
+Belgium,BE,32,Brussels,Europe,true
+Bulgaria,BG,359,Sofia,Europe,true
+Belarus,BY,375,Minsk,Europe,true
+Switzerland,CH,41,Bern,Europe,true
+Cyprus,CY,357,Nicosia,Europe,true
+Czech Republic,CZ,420,Prague,Europe,true
+Germany,DE,49,Berlin,Europe,true
+Denmark,DK,45,Copenhagen,Europe,true
+Estonia,EE,372,Tallinn,Europe,true
+Spain,ES,34,Madrid,Europe,true
+Finland,FI,358,Helsinki,Europe,true
+Faroe Islands,FO,298,Torshavn,Europe,true
+France,FR,33,Paris,Europe,true
+United Kingdom,GB,44,London,Europe,true
+Guernsey,GG,44,St. Peter Port,Europe,true
+Gibraltar,GI,350,Gibraltar,Europe,false
+Greece,GR,30,Athens,Europe,false
+Croatia,HR,385,Zagreb,Europe,true
+Hungary,HU,36,Budapest,Europe,true
+Ireland,IE,353,Dublin,Europe,true
+Isle of Man,IM,44,Douglas,Europe,true
+Iceland,IS,354,Reykjavik,Europe,true
+Italy,IT,39,Rome,Europe,true
+Jersey,JE,44,Saint Helier,Europe,true
+Liechtenstein,LI,423,Vaduz,Europe,true
+Lithuania,LT,370,Vilnius,Europe,true
+Luxembourg,LU,352,Luxembourg,Europe,true
+Latvia,LV,371,Riga,Europe,true
+Monaco,MC,377,Monaco,Europe,true
+Moldova,MD,373,Chisinau,Europe,true
+Montenegro,ME,382,Podgorica,Europe,false
+North Macedonia,MK,389,Skopje,Europe,true
+Malta,MT,356,Valletta,Europe,true
+Netherlands,NL,31,Amsterdam,Europe,true
+Norway,NO,47,Oslo,Europe,true
+Poland,PL,48,Warsaw,Europe,true
+Portugal,PT,351,Lisbon,Europe,true
+Romania,RO,40,Bucharest,Europe,true
+Serbia,RS,381,Belgrade,Europe,true
+Russia,RU,7,Moscow,Europe,true
+Sweden,SE,46,Stockholm,Europe,true
+Slovenia,SI,386,Ljubljana,Europe,true
+Svalbard and Jan Mayen,SJ,4779,Longyearbyen,Europe,true
+Slovakia,SK,421,Bratislava,Europe,true
+San Marino,SM,378,City of San Marino,Europe,true
+Ukraine,UA,380,Kyiv,Europe,true
+Vatican City,VA,"39,066,379",Vatican City,Europe,true
+Kosovo,XK,"377,381,383,386",Pristina,Europe,false
+Antigua and Barbuda,AG,1268,Saint John's,North America,false
+Anguilla,AI,1264,The Valley,North America,false
+Aruba,AW,297,Oranjestad,North America,false
+Barbados,BB,1246,Bridgetown,North America,false
+Saint Barthelemy,BL,590,Gustavia,North America,false
+Bermuda,BM,1441,Hamilton,North America,true
+Bonaire,BQ,5997,Kralendijk,North America,false
+Bahamas,BS,1242,Nassau,North America,false
+Belize,BZ,501,Belmopan,North America,false
+Canada,CA,1,Ottawa,North America,true
+Costa Rica,CR,506,San Jose,North America,true
+Cuba,CU,53,Havana,North America,false
+Curacao,CW,5999,Willemstad,North America,false
+Dominica,DM,1767,Roseau,North America,false
+Dominican Republic,DO,"180,918,291,849",Santo Domingo,North America,true
+Grenada,GD,1473,St. George's,North America,false
+Greenland,GL,299,Nuuk,North America,true
+Guadeloupe,GP,590,Basse-Terre,North America,true
+Guatemala,GT,502,Guatemala City,North America,true
+Honduras,HN,504,Tegucigalpa,North America,false
+Haiti,HT,509,Port-au-Prince,North America,true
+Jamaica,JM,1876,Kingston,North America,false
+Saint Kitts and Nevis,KN,1869,Basseterre,North America,false
+Cayman Islands,KY,1345,George Town,North America,false
+Saint Lucia,LC,1758,Castries,North America,false
+Saint Martin,MF,590,Marigot,North America,false
+Martinique,MQ,596,Fort-de-France,North America,true
+Montserrat,MS,1664,Plymouth,North America,false
+Mexico,MX,52,Mexico City,North America,true
+Nicaragua,NI,505,Managua,North America,false
+Panama,PA,507,Panama City,North America,false
+Saint Pierre and Miquelon,PM,508,Saint-Pierre,North America,true
+Puerto Rico,PR,"17,871,939",San Juan,North America,true
+El Salvador,SV,503,San Salvador,North America,false
+Sint Maarten,SX,1721,Philipsburg,North America,false
+Turks and Caicos Islands,TC,1649,Cockburn Town,North America,false
+Trinidad and Tobago,TT,1868,Port of Spain,North America,false
+United States,US,1,Washington D.C.,North America,true
+Saint Vincent and the Grenadines,VC,1784,Kingstown,North America,false
+British Virgin Islands,VG,1284,Road Town,North America,false
+U.S. Virgin Islands,VI,1340,Charlotte Amalie,North America,true
+American Samoa,AS,1684,Pago Pago,Oceania,true
+Australia,AU,61,Canberra,Oceania,true
+Cook Islands,CK,682,Avarua,Oceania,false
+Fiji,FJ,679,Suva,Oceania,false
+Micronesia,FM,691,Palikir,Oceania,true
+Guam,GU,1671,Hagatna,Oceania,true
+Kiribati,KI,686,South Tarawa,Oceania,false
+Marshall Islands,MH,692,Majuro,Oceania,true
+Northern Mariana Islands,MP,1670,Saipan,Oceania,true
+New Caledonia,NC,687,Noumea,Oceania,true
+Norfolk Island,NF,672,Kingston,Oceania,false
+Nauru,NR,674,Yaren,Oceania,false
+Niue,NU,683,Alofi,Oceania,false
+New Zealand,NZ,64,Wellington,Oceania,true
+French Polynesia,PF,689,Papeete,Oceania,false
+Papua New Guinea,PG,675,Port Moresby,Oceania,false
+Pitcairn Islands,PN,64,Adamstown,Oceania,false
+Palau,PW,680,Ngerulmud,Oceania,true
+Solomon Islands,SB,677,Honiara,Oceania,false
+Tokelau,TK,690,Fakaofo,Oceania,false
+East Timor,TL,670,Dili,Oceania,false
+Tonga,TO,676,Nuku'alofa,Oceania,false
+Tuvalu,TV,688,Funafuti,Oceania,false
+U.S. Minor Outlying Islands,UM,1,,Oceania,false
+Vanuatu,VU,678,Port Vila,Oceania,false
+Wallis and Futuna,WF,681,Mata-Utu,Oceania,true
+Samoa,WS,685,Apia,Oceania,false
+Argentina,AR,54,Buenos Aires,South America,true
+Bolivia,BO,591,Sucre,South America,false
+Brazil,BR,55,Brasilia,South America,true
+Chile,CL,56,Santiago,South America,true
+Colombia,CO,57,Bogota,South America,true
+Ecuador,EC,593,Quito,South America,false
+Falkland Islands,FK,500,Stanley,South America,false
+French Guiana,GF,594,Cayenne,South America,true
+Guyana,GY,592,Georgetown,South America,false
+Peru,PE,51,Lima,South America,true
+Paraguay,PY,595,Asuncion,South America,false
+Suriname,SR,597,Paramaribo,South America,false
+Uruguay,UY,598,Montevideo,South America,true
+Venezuela,VE,58,Caracas,South America,false

@@ -12,13 +12,8 @@ public sealed class CatalogFingerprintServiceTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"se-catalogs-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, "users.csv"), "Id,Name
-1,Alice
-2,Bob
-");
-        File.WriteAllText(Path.Combine(root, "devices.csv"), "Id,Hostname
-1,WS-001
-");
+        File.WriteAllText(Path.Combine(root, "users.csv"), "Id,Name\n1,Alice\n2,Bob\n");
+        File.WriteAllText(Path.Combine(root, "devices.csv"), "Id,Hostname\n1,WS-001\n");
 
         try
         {

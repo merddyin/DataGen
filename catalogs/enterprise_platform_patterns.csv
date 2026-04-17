@@ -1,0 +1,23 @@
+IndustryTags,MinimumEmployees,MinimumOfficeCount,Name,Category,HostingModel
+All,0,0,{Company} ERP Core,Operations,Hybrid
+All,0,0,{Company} HRIS,HR,SaaS
+All,0,0,{Company} Identity Portal,Security,Hybrid
+All,0,0,{Company} IT Service Management,Operations,SaaS
+All,0,0,{Company} Data Warehouse,Analytics,Hybrid
+All,0,0,{Company} Document Control,Productivity,SaaS
+All,250,0,{Company} CRM Hub,Sales,SaaS
+All,250,0,{Company} Procurement Portal,Procurement,SaaS
+All,250,0,{Company} Expense and Travel,Finance,SaaS
+All,250,0,{Company} Learning and Compliance,HR,SaaS
+All,750,0,{Company} Contract Lifecycle,Finance,SaaS
+All,750,0,{Company} Asset Lifecycle,Operations,Hybrid
+All,750,0,{Company} Executive Reporting,Analytics,SaaS
+All,750,0,{Company} Knowledge Portal,Productivity,SaaS
+All,1500,3,{Company} Vendor Risk Exchange,Security,SaaS
+All,1500,3,{Company} Integration Hub,Developer,Hybrid
+All,1500,3,{Company} Master Data Governance,Analytics,Hybrid
+All,1500,3,{Company} Business Continuity Console,Security,Hybrid
+Manufacturing|Industrials,500,0,{Company} Warehouse Management,Operations,Hybrid
+Manufacturing|Industrials,500,0,{Company} Maintenance Management,Operations,Hybrid
+Manufacturing|Industrials,500,0,{Company} Product Lifecycle Management,Developer,Hybrid
+Manufacturing|Industrials,500,0,{Company} Safety and Compliance,Security,SaaS

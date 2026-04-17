@@ -1,0 +1,43 @@
+---
+title: Identity and Access
+description: Identity, policy, container, and access-evidence capabilities in current DataGen builds.
+---
+
+# Identity and Access
+
+Identity realism is one of the strongest parts of the current product.
+
+## Current identity surfaces
+
+DataGen can generate:
+
+- people and organizational structure
+- user and service accounts
+- groups and directory hierarchy
+- hybrid and cloud identity stores
+- generic containers such as domain, OU, tenant, and administrative-unit surfaces
+- guest and external workforce populations
+
+## Policy and targeting
+
+The current policy model supports first-class policy objects, policy settings, and policy target links. This gives the world a believable configured-policy layer rather than only inferred outcomes.
+
+Examples include:
+
+- AD and GPO-style configured policies
+- Entra and Intune-style policy records
+- Azure-policy-style governance records
+
+## Access evidence
+
+DataGen intentionally separates access evidence from inferred effective access.
+
+That means the generated world can include:
+
+- delegation records
+- policy apply evidence
+- local admin or support-group evidence
+- repository and collaboration permission evidence
+- cloud RBAC-style scope evidence
+
+This makes the data more reusable for labs and downstream tools because consumers can infer their own edges instead of inheriting pre-baked conclusions.

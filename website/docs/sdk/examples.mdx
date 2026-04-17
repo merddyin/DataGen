@@ -1,0 +1,27 @@
+---
+title: SDK Examples
+description: Understand the included examples and how to use them as starting points rather than copy-and-paste cargo cults.
+---
+
+# SDK Examples
+
+The repository includes example plugins that demonstrate the intended extension model.
+
+## How to use the examples
+
+Use them to learn:
+
+- how plugin packaging works
+- how capabilities are declared
+- how plugin outputs are shaped
+
+Do not treat the examples as proof that every integration idea belongs in the plugin surface.
+
+## Best practice
+
+When creating a new plugin:
+
+1. Start from the smallest example that matches your extension style.
+2. Keep the plugin focused on synthetic data generation.
+3. Document the new data surface it produces.
+4. Add scenario-aware defaults only when they improve reuse instead of hiding complexity.

@@ -1,0 +1,9 @@
+IndustryTags,MinimumEmployees,Priority,Name
+All,0,10,Microsoft 365 Apps
+All,0,20,Microsoft Teams
+All,0,30,CrowdStrike Falcon
+All,0,40,OneDrive Sync Client
+All,250,50,Chrome Enterprise
+All,500,60,Cisco AnyConnect
+Manufacturing|Industrials,500,70,Power BI Desktop
+Manufacturing|Industrials,750,80,Microsoft Defender for Endpoint

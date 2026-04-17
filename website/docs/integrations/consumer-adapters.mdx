@@ -1,0 +1,27 @@
+---
+title: Consumer Adapters
+description: Design bridges and adapters around normalized export rather than putting consumer-specific logic into DataGen plugins.
+---
+
+# Consumer Adapters
+
+Consumer adapters should live outside the DataGen plugin boundary.
+
+## Good adapter responsibilities
+
+- map normalized export entities into a consumer’s node types
+- translate relationships into the consumer’s supported edge model
+- apply consumer-specific import rules
+- call the consumer’s APIs or cmdlets
+
+## Why keep adapters separate
+
+That separation:
+
+- preserves plugin reuse
+- keeps DataGen product scope clean
+- reduces long-term coupling between DataGen and one downstream system
+
+## A practical test
+
+If the logic only makes sense because one specific consumer exists, it probably belongs in an adapter instead of a DataGen plugin.

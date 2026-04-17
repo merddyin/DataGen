@@ -1,0 +1,7 @@
+PatternType,IndustryTags,MinimumEmployees,Name,Category,HostingModel
+Base,All,0,{SitePrefix} Workplace Coordination,Operations,SaaS
+Base,All,0,{SitePrefix} Visitor Control,Security,SaaS
+Industry,Manufacturing|Industrials,250,{SitePrefix} Plant Operations Console,Operations,Hybrid
+Industry,Manufacturing|Industrials,250,{SitePrefix} Yard Movement Board,Operations,Hybrid
+Industry,Manufacturing|Industrials,250,{SitePrefix} Safety Observation Center,Security,SaaS
+General,All,0,{SitePrefix} Branch Operations Portal,Operations,Hybrid

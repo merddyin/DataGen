@@ -1,0 +1,9 @@
+IndustryTags,MatchProcessName,MatchDomain,TargetRelationshipType,TargetSegment,LinkRelationshipType,IsPrimary,MaximumLinks,MinimumEmployees
+Manufacturing|Industrials,Order to Cash,Revenue,Customer,StrategicAccount,Customer,true,8,100
+Manufacturing|Industrials,Plan to Produce,Manufacturing,Vendor,StrategicSupplier,Supplier,true,8,250
+Manufacturing|Industrials,Procure to Pay,Supply Chain,Vendor,StrategicSupplier,Supplier,true,8,100
+Manufacturing|Industrials,,Operations,Partner,DistributionPartner,Partner,true,3,100
+Manufacturing|Industrials,,Engineering,Partner,ChannelPartner,Partner,false,3,100
+All,Order to Cash,Revenue,Customer,RegionalAccount,Customer,true,8,100
+All,Procure to Pay,Supply Chain,Vendor,OperationalSupplier,Supplier,false,6,100
+All,,Operations,Partner,ChannelPartner,Partner,false,3,100

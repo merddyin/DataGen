@@ -1,0 +1,31 @@
+<svg width="720" height="520" viewBox="0 0 720 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="720" height="520" rx="28" fill="#0C1524"/>
+  <rect x="28" y="28" width="664" height="464" rx="24" fill="#101D31" stroke="#223450"/>
+  <rect x="56" y="62" width="180" height="92" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="78" y="98" fill="#F5F9FF" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Scenario</text>
+  <text x="78" y="128" fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">templates, overlays, wizard, plugins</text>
+  <rect x="270" y="62" width="180" height="92" rx="18" fill="#162D49" stroke="#32608F"/>
+  <text x="302" y="98" fill="#F5F9FF" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Generation</text>
+  <text x="302" y="128" fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">core layers and catalogs</text>
+  <rect x="484" y="62" width="180" height="92" rx="18" fill="#173754" stroke="#3D78A7"/>
+  <text x="528" y="98" fill="#F5F9FF" font-size="24" font-family="Segoe UI, Arial, sans-serif" font-weight="700">World</text>
+  <text x="516" y="128" fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">canonical enterprise dataset</text>
+  <rect x="82" y="214" width="556" height="102" rx="22" fill="#101A2C" stroke="#223450"/>
+  <text x="112" y="252" fill="#79C2FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Enterprise surfaces</text>
+  <text x="112" y="286" fill="#D7E7FB" font-size="16" font-family="Segoe UI, Arial, sans-serif">identity, infrastructure, repositories, applications, CMDB, observed data, policies, access evidence, external ecosystem</text>
+  <rect x="82" y="352" width="180" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="119" y="392" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Exports</text>
+  <text x="119" y="420" fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">normalized JSON / CSV</text>
+  <rect x="292" y="352" width="180" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="333" y="392" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">Labs</text>
+  <text x="333" y="420" fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">population and validation</text>
+  <rect x="502" y="352" width="136" height="96" rx="18" fill="#14263F" stroke="#2A456B"/>
+  <text x="532" y="392" fill="#F5F9FF" font-size="22" font-family="Segoe UI, Arial, sans-serif" font-weight="700">SDK</text>
+  <text x="520" y="420" fill="#A8BED8" font-size="16" font-family="Segoe UI, Arial, sans-serif">plugin extensions</text>
+  <path d="M236 108H270" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M450 108H484" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M574 154V188" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M172 316V340" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M382 316V340" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M570 316V340" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+</svg>

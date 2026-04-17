@@ -1,19 +1,33 @@
-# Package Contents
+# Repository-Level Docs
 
-## docs/
-Integrated milestone documents and guidance.
+This folder is no longer the primary public documentation surface for DataGen.
 
-## src/
-Merged scaffold source from recoverable milestones.
+## Primary documentation
 
-## tests/
-Merged test scaffolds.
+User-facing documentation now lives in the Docusaurus site under:
 
-## examples/
-Workflow examples for snapshotting, exporting, regeneration, anomaly processing, and module-surface inspection.
+- `website/`
 
-## schemas/
-JSON schemas for snapshot envelope, export manifest, anomaly record, and module command descriptor.
+That site contains:
 
-## legacy_notes/
-Recovered notes from the earlier slices and roadmap progression.
+- getting started guides
+- walkthroughs
+- cmdlet reference
+- SDK documentation
+- integration guidance
+- contribution guidance
+
+## Remaining repo-level documents
+
+The files that remain in this folder are intentionally limited to focused project artifacts that are still useful at the repository level, such as:
+
+- acceptance coverage and user validation material
+- integration and mapping analysis that supports current product direction
+
+## Historical design and milestone notes
+
+Older milestone-era notes and internal reconstruction documents were moved out of this folder into:
+
+- `legacy_notes/recovered_docs/`
+
+They are retained for historical reference, but they are not intended to represent the current public documentation experience.

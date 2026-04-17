@@ -1,0 +1,62 @@
+---
+title: Realism and Deviations
+description: Control DataGen realism with deviation profiles without sacrificing enterprise richness.
+---
+
+# Realism and Deviations
+
+One of DataGen’s important current design choices is the separation between:
+
+- enterprise richness
+- realism deviations
+
+That means you can still generate a rich world without necessarily injecting the same level of flaws, omissions, and inconsistencies every time.
+
+## Deviation profiles
+
+The current top-level scenario control is `DeviationProfile`.
+
+Available values:
+
+- `Clean`
+- `Realistic`
+- `Aggressive`
+
+## How to think about them
+
+### Clean
+
+Use `Clean` when you want:
+
+- a baseline environment
+- deterministic demos with fewer distractions
+- a control world for comparison
+
+### Realistic
+
+Use `Realistic` when you want:
+
+- believable enterprise messiness
+- moderate drift and omissions
+- the best general-purpose default
+
+### Aggressive
+
+Use `Aggressive` when you want:
+
+- intentionally flawed service-management or identity views
+- harder security or discovery labs
+- more drift-heavy validation datasets
+
+## Why this matters
+
+Before this separation, teams often had to choose between:
+
+- a rich but messy environment
+- a sparse but easy-to-control one
+
+Now the goal is to keep richness high while giving you a cleaner lever over realism intensity.
+
+## CMDB-specific override
+
+The CMDB profile can still carry its own override when you need the broader world at one realism level and the CMDB layer at another.

@@ -1,0 +1,41 @@
+---
+title: Normalized Export
+description: Use the normalized export profile as the primary downstream integration seam.
+---
+
+# Normalized Export
+
+`Export-SEEnterpriseWorld` with the `Normalized` profile is the main downstream integration seam.
+
+## Why normalized export is the right seam
+
+It gives you:
+
+- consistent file-oriented artifacts
+- explicit entity and relationship shapes
+- a cleaner contract for bridges and import adapters
+
+## Typical export invocation
+
+```powershell
+$world | Export-SEEnterpriseWorld `
+  -OutputPath .\out\normalized `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
+```
+
+## What to expect
+
+The export set can include artifacts for:
+
+- organizations, geography, and identity
+- infrastructure and software
+- applications and services
+- repositories and collaboration
+- policies and access evidence
+- CMDB and observed views
+
+Treat these artifacts as the source for your downstream bridge, not as something to re-synthesize later.

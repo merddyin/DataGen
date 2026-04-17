@@ -1,0 +1,79 @@
+---
+title: Installation
+description: Install prerequisites, build or import the module, and verify the DataGen command surface.
+---
+
+# Installation
+
+## Requirements
+
+For the current build-oriented workflow, plan on:
+
+- Windows with PowerShell 7+
+- .NET SDK
+- access to the DataGen source tree or a packaged module build
+- the seeded catalog database and related catalog content
+
+## Build the module from source
+
+From the repository root:
+
+```powershell
+.\scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot
+```
+
+That generates the seeded catalog to `artifacts\catalog\catalogs.sqlite` and installs a local working copy to `catalogs\catalogs.sqlite` for source builds.
+
+Then build the solution:
+
+```powershell
+dotnet build .\DataGen.slnx -v minimal
+```
+
+If you want to run tests before using the module:
+
+```powershell
+dotnet test .\DataGen.slnx -v minimal
+```
+
+## Import the PowerShell module
+
+The module project lives under `src/SyntheticEnterprise.PowerShell`.
+
+```powershell
+$modulePath = Join-Path $PWD 'src\SyntheticEnterprise.PowerShell\bin\Debug\net8.0\SyntheticEnterprise.PowerShell.dll'
+Import-Module $modulePath -Force
+Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
+```
+
+If you want a packaged module with a manifest, build one from the repo root:
+
+```powershell
+.\scripts\package-module.ps1 -Version 0.1.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.1.0\SyntheticEnterprise.PowerShell.psd1 -Force
+```
+
+## Verify the core command surface
+
+At minimum, confirm these commands are available:
+
+- `Get-SEScenarioTemplate`
+- `New-SEScenarioFromTemplate`
+- `New-SEScenarioWizard`
+- `Resolve-SEScenario`
+- `Test-SEScenario`
+- `New-SEEnterpriseWorld`
+- `Get-SEWorldSummary`
+- `Export-SEEnterpriseWorld`
+- `Save-SEEnterpriseWorld`
+- `Import-SEEnterpriseWorld`
+
+## Catalog expectations
+
+Most real workflows assume the catalog bundle is available. If you do not pass `-CatalogRootPath`, DataGen will attempt to load the default catalog set.
+
+Use `New-SECatalogDatabase` when you need to rebuild the packaged SQLite catalog or produce a refreshed catalog database from the curated sources.
+
+## Next step
+
+Continue to [First World](/getting-started/first-world) to validate that generation and export work correctly in your environment.

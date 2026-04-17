@@ -1,0 +1,35 @@
+{
+  "name": "Active Directory Lab",
+  "description": "Directory-centric world for hybrid identity and AD policy exploration.",
+  "template": "RegionalManufacturer",
+  "overlays": [
+    "LegacyInfrastructure"
+  ],
+  "companyCount": 1,
+  "industryProfile": "Manufacturing",
+  "geographyProfile": "Regional-US",
+  "deviationProfile": "Realistic",
+  "employeeSize": {
+    "minimum": 1400,
+    "maximum": 2200
+  },
+  "identity": {
+    "includeHybridDirectory": true,
+    "includeM365StyleGroups": true,
+    "includeExternalWorkforce": true,
+    "includeB2BGuests": false,
+    "staleAccountRate": 0.06
+  },
+  "infrastructure": {
+    "includeServers": true,
+    "includeWorkstations": true,
+    "includeNetworkAssets": true,
+    "includeTelephony": true
+  },
+  "repositories": {
+    "includeDatabases": true,
+    "includeFileShares": true,
+    "includeCollaborationSites": false
+  },
+  "officeCount": 3
+}

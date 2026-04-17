@@ -1,0 +1,27 @@
+EntityType,MatchNameContains,MatchVendor,MatchProvider,MatchCategory,MatchServiceType,MatchDeploymentModel,IndustryTags,MinimumEmployees,SourceSystem,DriftType
+Account,,,Guest,,EntraB2B,,All,1,Entra B2B Collaboration,GuestInvitationLag
+Account,,,,Privileged,HybridDirectory,,All,1,Privileged Access Audit,IdentityStateLag
+Device,,,,,,,All,1,Intune Device Inventory,ComplianceLag
+Server,,,,,,,All,1,Service Configuration Inventory,OwnershipDrift
+EndpointPolicy,,,Device,SecurityBaseline,,,All,1,Intune Policy Compliance,PolicyApplicationLag
+EndpointPolicy,,,Server,SecurityBaseline,,,All,1,Group Policy Results,PolicyApplicationLag
+EndpointLocalGroup,,,Device,Administrators,,,All,1,Defender for Endpoint Local Admin Inventory,LocalAdminDrift
+EndpointLocalGroup,,,Server,Administrators,,,All,1,Server Local Admin Inventory,LocalAdminDrift
+CrossTenantPolicy,,,,,,,All,1,Entra Cross-Tenant Policy Inventory,CrossTenantPolicyLag
+CrossTenantGuestAccess,,,EntraB2B,,,,All,1,Entra Entitlement Management Reports,EntitlementLag
+Application,Workday,Workday,,HR,,,All,250,Workday Application Inventory,ApplicationMetadataLag
+Application,ServiceNow,ServiceNow,,Operations,,,All,250,ServiceNow Application Portfolio,ApplicationMetadataLag
+Application,Databricks,Databricks,,Analytics,,,All,500,Databricks Account Console,ApplicationMetadataLag
+Application,Microsoft Intune Admin Center,Microsoft,,Security,,,All,250,Microsoft Intune Admin Center,ApplicationMetadataLag
+ApplicationService,Workday,Workday,,HR,Integration,VendorManaged,All,250,Workday Integration Monitor,ServiceMetadataLag
+ApplicationService,Databricks,Databricks,,Analytics,Data,VendorManaged,All,500,Databricks Jobs and Clusters,ServiceMetadataLag
+ApplicationService,Microsoft Intune Admin Center,Microsoft,,Security,API,VendorManaged,All,250,Microsoft Graph Service Health,ServiceMetadataLag
+FileShare,archive,,,DepartmentArchive,,,All,1,File Server Inventory,ClassificationLag
+FileShare,,,,Department,,,All,1,File Server Resource Manager,ClassificationLag
+CollaborationSite,,,Teams,,,,All,1,Teams Admin Center,WorkspaceClassificationLag
+CollaborationSite,,,SharePoint,,,,All,1,SharePoint Admin Center,WorkspaceClassificationLag
+CloudTenant,,,Microsoft,,,,All,1,Microsoft Entra Admin Center,TenantConfigurationLag
+CloudTenant,,,Salesforce,,,,All,1,Salesforce Setup,TenantConfigurationLag
+CloudTenant,,,Workday,,,,All,1,Workday Tenant Admin,TenantConfigurationLag
+CloudTenant,,,Databricks,,,,All,500,Databricks Account Console,TenantConfigurationLag
+CloudTenant,,,Snowflake,,,,All,500,Snowflake Organization Usage,TenantConfigurationLag

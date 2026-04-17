@@ -1,0 +1,251 @@
+Country,CountryCode,DialCode,PostalCodeSupported,PrimaryDomainSuffix,AlternateDomainSuffix,PhonePattern
+Angola,AO,244,false,ao,com,+244 XX XXXX XXXX
+Burkina Faso,BF,226,false,bf,com,+226 XX XXXX XXXX
+Burundi,BI,257,false,bi,com,+257 XX XXXX XXXX
+Benin,BJ,229,false,bj,com,+229 XX XXXX XXXX
+Botswana,BW,267,false,bw,com,+267 XX XXXX XXXX
+Democratic Republic of the Congo,CD,243,false,cd,com,+243 XX XXXX XXXX
+Central African Republic,CF,236,false,cf,com,+236 XX XXXX XXXX
+Republic of the Congo,CG,242,false,cg,com,+242 XX XXXX XXXX
+Ivory Coast,CI,225,false,ci,com,+225 XX XXXX XXXX
+Cameroon,CM,237,false,cm,com,+237 XX XXXX XXXX
+Cape Verde,CV,238,false,cv,com,+238 XX XXXX XXXX
+Djibouti,DJ,253,false,dj,com,+253 XX XXXX XXXX
+Algeria,DZ,213,true,dz,com,+213 XX XXXX XXXX
+Egypt,EG,20,false,eg,com,+20 XX XXXX XXXX
+Western Sahara,EH,212,false,eh,com,+212 XX XXXX XXXX
+Eritrea,ER,291,false,er,com,+291 XX XXXX XXXX
+Ethiopia,ET,251,false,et,com,+251 XX XXXX XXXX
+Gabon,GA,241,false,ga,com,+241 XX XXXX XXXX
+Ghana,GH,233,false,gh,com,+233 XX XXXX XXXX
+Gambia,GM,220,false,gm,com,+220 XX XXXX XXXX
+Guinea,GN,224,false,gn,com,+224 XX XXXX XXXX
+Equatorial Guinea,GQ,240,false,gq,com,+240 XX XXXX XXXX
+Guinea-Bissau,GW,245,false,gw,com,+245 XX XXXX XXXX
+Kenya,KE,254,false,ke,com,+254 XX XXXX XXXX
+Comoros,KM,269,false,km,com,+269 XX XXXX XXXX
+Liberia,LR,231,false,lr,com,+231 XX XXXX XXXX
+Lesotho,LS,266,false,ls,com,+266 XX XXXX XXXX
+Libya,LY,218,false,ly,com,+218 XX XXXX XXXX
+Morocco,MA,212,true,ma,com,+212 XX XXXX XXXX
+Madagascar,MG,261,false,mg,com,+261 XX XXXX XXXX
+Mali,ML,223,false,ml,com,+223 XX XXXX XXXX
+Mauritania,MR,222,false,mr,com,+222 XX XXXX XXXX
+Mauritius,MU,230,false,mu,com,+230 XX XXXX XXXX
+Malawi,MW,265,true,mw,com,+265 XX XXXX XXXX
+Mozambique,MZ,258,false,mz,com,+258 XX XXXX XXXX
+Namibia,NA,264,false,na,com,+264 XX XXXX XXXX
+Niger,NE,227,false,ne,com,+227 XX XXXX XXXX
+Nigeria,NG,234,false,ng,com,+234 XX XXXX XXXX
+Reunion,RE,262,true,re,com,+262 XX XXXX XXXX
+Rwanda,RW,250,false,rw,com,+250 XX XXXX XXXX
+Seychelles,SC,248,false,sc,com,+248 XX XXXX XXXX
+Sudan,SD,249,false,sd,com,+249 XX XXXX XXXX
+Saint Helena,SH,290,false,sh,com,+290 XX XXXX XXXX
+Sierra Leone,SL,232,false,sl,com,+232 XX XXXX XXXX
+Senegal,SN,221,false,sn,com,+221 XX XXXX XXXX
+Somalia,SO,252,false,so,com,+252 XX XXXX XXXX
+South Sudan,SS,211,false,ss,com,+211 XX XXXX XXXX
+Sao Tome and Principe,ST,239,false,st,com,+239 XX XXXX XXXX
+Swaziland,SZ,268,false,sz,com,+268 XX XXXX XXXX
+Chad,TD,235,false,td,com,+235 XX XXXX XXXX
+Togo,TG,228,false,tg,com,+228 XX XXXX XXXX
+Tunisia,TN,216,false,tn,com,+216 XX XXXX XXXX
+Tanzania,TZ,255,false,tz,com,+255 XX XXXX XXXX
+Uganda,UG,256,false,ug,com,+256 XX XXXX XXXX
+Mayotte,YT,262,true,yt,com,+262 XX XXXX XXXX
+South Africa,ZA,27,true,za,com,+27 XX XXXX XXXX
+Zambia,ZM,260,false,zm,com,+260 XX XXXX XXXX
+Zimbabwe,ZW,263,false,zw,com,+263 XX XXXX XXXX
+Antarctica,AQ,672,false,aq,com,+672 XX XXXX XXXX
+Bouvet Island,BV,47,false,bv,com,+47 XX XXXX XXXX
+South Georgia and the South Sandwich Islands,GS,500,false,gs,com,+500 XX XXXX XXXX
+Heard Island and McDonald Islands,HM,61,false,hm,com,+61 XX XXXX XXXX
+French Southern Territories,TF,262,false,tf,com,+262 XX XXXX XXXX
+United Arab Emirates,AE,971,false,ae,com,+971 XX XXXX XXXX
+Afghanistan,AF,93,false,af,com,+93 XX XXXX XXXX
+Armenia,AM,374,false,am,com,+374 XX XXXX XXXX
+Azerbaijan,AZ,994,true,az,com,+994 XX XXXX XXXX
+Bangladesh,BD,880,true,bd,com,+880 XX XXXX XXXX
+Bahrain,BH,973,false,bh,com,+973 XX XXXX XXXX
+Brunei,BN,673,false,bn,com,+673 XX XXXX XXXX
+Bhutan,BT,975,false,bt,com,+975 XX XXXX XXXX
+Cocos [Keeling] Islands,CC,61,false,cc,com,+61 XX XXXX XXXX
+China,CN,86,false,cn,com,+86 XX XXXX XXXX
+Christmas Island,CX,61,false,cx,com,+61 XX XXXX XXXX
+Georgia,GE,995,false,ge,com,+995 XX XXXX XXXX
+Hong Kong,HK,852,false,hk,com,+852 XX XXXX XXXX
+Indonesia,ID,62,false,id,com,+62 XX XXXX XXXX
+Israel,IL,972,false,il,com,+972 XX XXXX XXXX
+India,IN,91,true,in,com,+91 XXXXX XXXXX
+British Indian Ocean Territory,IO,246,false,io,com,+246 XX XXXX XXXX
+Iraq,IQ,964,false,iq,com,+964 XX XXXX XXXX
+Iran,IR,98,false,ir,com,+98 XX XXXX XXXX
+Jordan,JO,962,false,jo,com,+962 XX XXXX XXXX
+Japan,JP,81,true,co.jp,jp,+81 XX XXXX XXXX
+Kyrgyzstan,KG,996,false,kg,com,+996 XX XXXX XXXX
+Cambodia,KH,855,false,kh,com,+855 XX XXXX XXXX
+North Korea,KP,850,false,kp,com,+850 XX XXXX XXXX
+South Korea,KR,82,true,kr,com,+82 XX XXXX XXXX
+Kuwait,KW,965,false,kw,com,+965 XX XXXX XXXX
+Kazakhstan,KZ,7677,false,kz,com,+7677 XX XXXX XXXX
+Laos,LA,856,false,la,com,+856 XX XXXX XXXX
+Lebanon,LB,961,false,lb,com,+961 XX XXXX XXXX
+Sri Lanka,LK,94,true,lk,com,+94 XX XXXX XXXX
+Myanmar [Burma],MM,95,false,mm,com,+95 XX XXXX XXXX
+Mongolia,MN,976,false,mn,com,+976 XX XXXX XXXX
+Macao,MO,853,false,mo,com,+853 XX XXXX XXXX
+Maldives,MV,960,false,mv,com,+960 XX XXXX XXXX
+Malaysia,MY,60,true,my,com,+60 XX XXXX XXXX
+Nepal,NP,977,false,np,com,+977 XX XXXX XXXX
+Oman,OM,968,false,om,com,+968 XX XXXX XXXX
+Philippines,PH,63,true,ph,com,+63 XX XXXX XXXX
+Pakistan,PK,92,true,pk,com,+92 XX XXXX XXXX
+Palestine,PS,970,false,ps,com,+970 XX XXXX XXXX
+Qatar,QA,974,false,qa,com,+974 XX XXXX XXXX
+Saudi Arabia,SA,966,false,sa,com,+966 XX XXXX XXXX
+Singapore,SG,65,true,sg,com,+65 XX XXXX XXXX
+Syria,SY,963,false,sy,com,+963 XX XXXX XXXX
+Thailand,TH,66,true,th,com,+66 XX XXXX XXXX
+Tajikistan,TJ,992,false,tj,com,+992 XX XXXX XXXX
+Turkmenistan,TM,993,false,tm,com,+993 XX XXXX XXXX
+Turkey,TR,90,true,tr,com,+90 XX XXXX XXXX
+Taiwan,TW,886,false,tw,com,+886 XX XXXX XXXX
+Uzbekistan,UZ,998,false,uz,com,+998 XX XXXX XXXX
+Vietnam,VN,84,false,vn,com,+84 XX XXXX XXXX
+Yemen,YE,967,false,ye,com,+967 XX XXXX XXXX
+Andorra,AD,376,true,ad,com,+376 XX XXXX XXXX
+Albania,AL,355,false,al,com,+355 XX XXXX XXXX
+Austria,AT,43,true,at,com,+43 XX XXXX XXXX
+Aland Islands,AX,358,true,ax,com,+358 XX XXXX XXXX
+Bosnia and Herzegovina,BA,387,false,ba,com,+387 XX XXXX XXXX
+Belgium,BE,32,true,be,com,+32 XX XXXX XXXX
+Bulgaria,BG,359,true,bg,com,+359 XX XXXX XXXX
+Belarus,BY,375,true,by,com,+375 XX XXXX XXXX
+Switzerland,CH,41,true,ch,com,+41 XX XXXX XXXX
+Cyprus,CY,357,true,cy,com,+357 XX XXXX XXXX
+Czech Republic,CZ,420,true,cz,com,+420 XX XXXX XXXX
+Germany,DE,49,true,de,com,+49 XXX XXXXXXX
+Denmark,DK,45,true,dk,com,+45 XX XXXX XXXX
+Estonia,EE,372,true,ee,com,+372 XX XXXX XXXX
+Spain,ES,34,true,es,com,+34 XX XXXX XXXX
+Finland,FI,358,true,fi,com,+358 XX XXXX XXXX
+Faroe Islands,FO,298,true,fo,com,+298 XX XXXX XXXX
+France,FR,33,true,fr,com,+33 X XX XX XX XX
+United Kingdom,GB,44,true,co.uk,gb,+44 XXXX XXXXXX
+Guernsey,GG,44,true,gg,com,+44 XX XXXX XXXX
+Gibraltar,GI,350,false,gi,com,+350 XX XXXX XXXX
+Greece,GR,30,false,gr,com,+30 XX XXXX XXXX
+Croatia,HR,385,true,hr,com,+385 XX XXXX XXXX
+Hungary,HU,36,true,hu,com,+36 XX XXXX XXXX
+Ireland,IE,353,true,ie,com,+353 XX XXXX XXXX
+Isle of Man,IM,44,true,im,com,+44 XX XXXX XXXX
+Iceland,IS,354,true,is,com,+354 XX XXXX XXXX
+Italy,IT,39,true,it,com,+39 XX XXXX XXXX
+Jersey,JE,44,true,je,com,+44 XX XXXX XXXX
+Liechtenstein,LI,423,true,li,com,+423 XX XXXX XXXX
+Lithuania,LT,370,true,lt,com,+370 XX XXXX XXXX
+Luxembourg,LU,352,true,lu,com,+352 XX XXXX XXXX
+Latvia,LV,371,true,lv,com,+371 XX XXXX XXXX
+Monaco,MC,377,true,mc,com,+377 XX XXXX XXXX
+Moldova,MD,373,true,md,com,+373 XX XXXX XXXX
+Montenegro,ME,382,false,me,com,+382 XX XXXX XXXX
+North Macedonia,MK,389,true,mk,com,+389 XX XXXX XXXX
+Malta,MT,356,true,mt,com,+356 XX XXXX XXXX
+Netherlands,NL,31,true,nl,com,+31 XX XXXX XXXX
+Norway,NO,47,true,no,com,+47 XX XXXX XXXX
+Poland,PL,48,true,pl,com,+48 XX XXXX XXXX
+Portugal,PT,351,true,pt,com,+351 XX XXXX XXXX
+Romania,RO,40,true,ro,com,+40 XX XXXX XXXX
+Serbia,RS,381,true,rs,com,+381 XX XXXX XXXX
+Russia,RU,7,true,ru,com,+7 XX XXXX XXXX
+Sweden,SE,46,true,se,com,+46 XX XXXX XXXX
+Slovenia,SI,386,true,si,com,+386 XX XXXX XXXX
+Svalbard and Jan Mayen,SJ,4779,true,sj,com,+4779 XX XXXX XXXX
+Slovakia,SK,421,true,sk,com,+421 XX XXXX XXXX
+San Marino,SM,378,true,sm,com,+378 XX XXXX XXXX
+Ukraine,UA,380,true,ua,com,+380 XX XXXX XXXX
+Vatican City,VA,39066379,true,va,com,+39066379 XX XXXX XXXX
+Kosovo,XK,377381383386,false,xk,com,+377381383386 XX XXXX XXXX
+Antigua and Barbuda,AG,1268,false,ag,com,+1268 XX XXXX XXXX
+Anguilla,AI,1264,false,ai,com,+1264 XX XXXX XXXX
+Aruba,AW,297,false,aw,com,+297 XX XXXX XXXX
+Barbados,BB,1246,false,bb,com,+1246 XX XXXX XXXX
+Saint Barthelemy,BL,590,false,bl,com,+590 XX XXXX XXXX
+Bermuda,BM,1441,true,bm,com,+1441 XX XXXX XXXX
+Bonaire,BQ,5997,false,bq,com,+5997 XX XXXX XXXX
+Bahamas,BS,1242,false,bs,com,+1242 XX XXXX XXXX
+Belize,BZ,501,false,bz,com,+501 XX XXXX XXXX
+Canada,CA,1,true,ca,com,+1 NPA-NXX-XXXX
+Costa Rica,CR,506,true,cr,com,+506 XX XXXX XXXX
+Cuba,CU,53,false,cu,com,+53 XX XXXX XXXX
+Curacao,CW,5999,false,cw,com,+5999 XX XXXX XXXX
+Dominica,DM,1767,false,dm,com,+1767 XX XXXX XXXX
+Dominican Republic,DO,180918291849,true,do,com,+180918291849 XX XXXX XXXX
+Grenada,GD,1473,false,gd,com,+1473 XX XXXX XXXX
+Greenland,GL,299,true,gl,com,+299 XX XXXX XXXX
+Guadeloupe,GP,590,true,gp,com,+590 XX XXXX XXXX
+Guatemala,GT,502,true,gt,com,+502 XX XXXX XXXX
+Honduras,HN,504,false,hn,com,+504 XX XXXX XXXX
+Haiti,HT,509,true,ht,com,+509 XX XXXX XXXX
+Jamaica,JM,1876,false,jm,com,+1876 XX XXXX XXXX
+Saint Kitts and Nevis,KN,1869,false,kn,com,+1869 XX XXXX XXXX
+Cayman Islands,KY,1345,false,ky,com,+1345 XX XXXX XXXX
+Saint Lucia,LC,1758,false,lc,com,+1758 XX XXXX XXXX
+Saint Martin,MF,590,false,mf,com,+590 XX XXXX XXXX
+Martinique,MQ,596,true,mq,com,+596 XX XXXX XXXX
+Montserrat,MS,1664,false,ms,com,+1664 XX XXXX XXXX
+Mexico,MX,52,true,mx,com,+52 XX XXXX XXXX
+Nicaragua,NI,505,false,ni,com,+505 XX XXXX XXXX
+Panama,PA,507,false,pa,com,+507 XX XXXX XXXX
+Saint Pierre and Miquelon,PM,508,true,pm,com,+508 XX XXXX XXXX
+Puerto Rico,PR,17871939,true,pr,com,+17871939 XX XXXX XXXX
+El Salvador,SV,503,false,sv,com,+503 XX XXXX XXXX
+Sint Maarten,SX,1721,false,sx,com,+1721 XX XXXX XXXX
+Turks and Caicos Islands,TC,1649,false,tc,com,+1649 XX XXXX XXXX
+Trinidad and Tobago,TT,1868,false,tt,com,+1868 XX XXXX XXXX
+United States,US,1,true,com,us,+1 NPA-NXX-XXXX
+Saint Vincent and the Grenadines,VC,1784,false,vc,com,+1784 XX XXXX XXXX
+British Virgin Islands,VG,1284,false,vg,com,+1284 XX XXXX XXXX
+U.S. Virgin Islands,VI,1340,true,vi,com,+1340 XX XXXX XXXX
+American Samoa,AS,1684,true,as,com,+1684 XX XXXX XXXX
+Australia,AU,61,true,com.au,au,+61 X XXXX XXXX
+Cook Islands,CK,682,false,ck,com,+682 XX XXXX XXXX
+Fiji,FJ,679,false,fj,com,+679 XX XXXX XXXX
+Micronesia,FM,691,true,fm,com,+691 XX XXXX XXXX
+Guam,GU,1671,true,gu,com,+1671 XX XXXX XXXX
+Kiribati,KI,686,false,ki,com,+686 XX XXXX XXXX
+Marshall Islands,MH,692,true,mh,com,+692 XX XXXX XXXX
+Northern Mariana Islands,MP,1670,true,mp,com,+1670 XX XXXX XXXX
+New Caledonia,NC,687,true,nc,com,+687 XX XXXX XXXX
+Norfolk Island,NF,672,false,nf,com,+672 XX XXXX XXXX
+Nauru,NR,674,false,nr,com,+674 XX XXXX XXXX
+Niue,NU,683,false,nu,com,+683 XX XXXX XXXX
+New Zealand,NZ,64,true,co.nz,nz,+64 XX XXXX XXXX
+French Polynesia,PF,689,false,pf,com,+689 XX XXXX XXXX
+Papua New Guinea,PG,675,false,pg,com,+675 XX XXXX XXXX
+Pitcairn Islands,PN,64,false,pn,com,+64 XX XXXX XXXX
+Palau,PW,680,true,pw,com,+680 XX XXXX XXXX
+Solomon Islands,SB,677,false,sb,com,+677 XX XXXX XXXX
+Tokelau,TK,690,false,tk,com,+690 XX XXXX XXXX
+East Timor,TL,670,false,tl,com,+670 XX XXXX XXXX
+Tonga,TO,676,false,to,com,+676 XX XXXX XXXX
+Tuvalu,TV,688,false,tv,com,+688 XX XXXX XXXX
+U.S. Minor Outlying Islands,UM,1,false,um,com,+1 XX XXXX XXXX
+Vanuatu,VU,678,false,vu,com,+678 XX XXXX XXXX
+Wallis and Futuna,WF,681,true,wf,com,+681 XX XXXX XXXX
+Samoa,WS,685,false,ws,com,+685 XX XXXX XXXX
+Argentina,AR,54,true,ar,com,+54 XX XXXX XXXX
+Bolivia,BO,591,false,bo,com,+591 XX XXXX XXXX
+Brazil,BR,55,true,com.br,br,+55 XX XXXX XXXX
+Chile,CL,56,true,cl,com,+56 XX XXXX XXXX
+Colombia,CO,57,true,co,com,+57 XX XXXX XXXX
+Ecuador,EC,593,false,ec,com,+593 XX XXXX XXXX
+Falkland Islands,FK,500,false,fk,com,+500 XX XXXX XXXX
+French Guiana,GF,594,true,gf,com,+594 XX XXXX XXXX
+Guyana,GY,592,false,gy,com,+592 XX XXXX XXXX
+Peru,PE,51,true,pe,com,+51 XX XXXX XXXX
+Paraguay,PY,595,false,py,com,+595 XX XXXX XXXX
+Suriname,SR,597,false,sr,com,+597 XX XXXX XXXX
+Uruguay,UY,598,true,uy,com,+598 XX XXXX XXXX
+Venezuela,VE,58,false,ve,com,+58 XX XXXX XXXX

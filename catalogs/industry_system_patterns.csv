@@ -1,0 +1,14 @@
+IndustryTags,MinimumEmployees,Name,Category,Vendor,BusinessCapability,HostingModel,UserScope,Criticality,DataSensitivity,OwnerHints
+Manufacturing|Industrials,750,SAP Global Trade Services,Operations,SAP,Trade Compliance,SaaS,Enterprise,High,Confidential,Operations|Procurement|Finance
+Manufacturing|Industrials|Distribution,1000,Blue Yonder Demand Planning,Operations,Blue Yonder,Demand Planning,SaaS,Enterprise,High,Internal,Operations|Procurement
+Manufacturing|Industrials,750,Infor EAM,Operations,Infor,Enterprise Asset Management,SaaS,Department,Medium,Internal,Operations|Engineering
+Manufacturing|Industrials,750,PTC Creo View,Developer,PTC,Engineering Visualization,Hybrid,BusinessUnit,Medium,Internal,Engineering
+Manufacturing|Industrials|Distribution,1000,Oracle Global Trade Management,Operations,Oracle,Global Logistics Governance,SaaS,Enterprise,High,Confidential,Operations|Procurement
+Finance|Financials|Bank|Insurance,1000,Broadridge Client Communications,Operations,Broadridge,Client Communications,SaaS,BusinessUnit,High,Confidential,Operations|Sales
+Finance|Financials|Bank|Insurance,1000,Fiserv Fraud Risk Manager,Security,Fiserv,Fraud Operations,SaaS,Enterprise,High,Restricted,Security|Operations
+Healthcare|Health|Medical|Pharma,1000,Microsoft Dragon Copilot,Operations,Microsoft,Clinical Documentation,SaaS,BusinessUnit,High,Restricted,Operations|Information Technology
+Healthcare|Health|Medical|Pharma,1000,Oracle Health Patient Accounting,Finance,Oracle Health,Patient Revenue Management,Hybrid,Enterprise,High,Restricted,Finance|Operations
+Technology|Information|Software,500,Databricks Model Serving,Analytics,Databricks,Machine Learning Operations,SaaS,BusinessUnit,Medium,Internal,Engineering|Analytics
+Technology|Information|Software,500,Atlassian Compass,Developer,Atlassian,Service Ownership,SaaS,BusinessUnit,Medium,Internal,Engineering|Information Technology
+Communication|Telecom|Media,1000,Twilio Flex,Operations,Twilio,Contact Center Operations,SaaS,BusinessUnit,Medium,Internal,Operations|Support
+Energy|Utilities,1000,Oracle Utilities Customer Care and Billing,Finance,Oracle,Utility Billing,SaaS,Enterprise,High,Confidential,Finance|Operations

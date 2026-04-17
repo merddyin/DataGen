@@ -1,0 +1,5 @@
+Country,IdType,Prefix,Digits
+United States,SSN,US,9
+Canada,SIN,CA,9
+United Kingdom,NINO,GB,8
+Germany,SteuerId,DE,11

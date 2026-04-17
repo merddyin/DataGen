@@ -1,0 +1,21 @@
+IndustryTags,RequiredDepartmentHints,MinimumEmployees,MinimumOfficeCount,Name,Domain,BusinessCapability,OperatingModel,ProcessScope,Criticality,CustomerFacing,OwnerHints
+Manufacturing|Industrials,,250,2,Plan to Produce,Manufacturing,Manufacturing Planning,SiteBased,Enterprise,High,false,Operations|Engineering
+Manufacturing|Industrials,,250,2,Source to Deliver,Supply Chain,Logistics Coordination,SiteBased,Enterprise,High,true,Operations|Procurement
+Manufacturing|Industrials,,100,2,Quality to Release,Manufacturing,Quality Management,SiteBased,Enterprise,High,false,Operations|Engineering
+Manufacturing|Industrials,,100,1,Maintain to Operate,Manufacturing,Asset Lifecycle,Regional,Office,Medium,false,Operations|Information Technology
+Distribution|Retail|Consumer,,150,1,Forecast to Fulfillment,Supply Chain,Demand Fulfillment,Regional,Enterprise,High,true,Operations|Procurement
+Distribution|Retail|Consumer,,250,1,Merchandise to Margin,Revenue,Merchandising Operations,Regional,BusinessUnit,High,true,Sales|Marketing|Operations
+Technology|Information|Software,,100,1,Idea to Release,Engineering,Product Delivery,BusinessUnit,BusinessUnit,High,true,Engineering|Information Technology
+Technology|Information|Software,,100,1,Lead to Subscription,Revenue,Recurring Revenue,Regional,BusinessUnit,High,true,Sales|Marketing
+Technology|Information|Software,,100,1,Incident to Recovery,Operations,Service Reliability,Centralized,Enterprise,High,false,Information Technology|Operations
+Finance|Financials|Bank|Insurance,,250,1,KYC to Account,Revenue,Client Onboarding,Centralized,Enterprise,High,true,Operations|Security|Sales
+Finance|Financials|Bank|Insurance,,250,1,Trade to Settle,Finance,Treasury Operations,Centralized,Enterprise,High,false,Finance|Operations
+Finance|Financials|Bank|Insurance,,250,1,Fraud to Resolution,Security,Fraud Operations,Centralized,Enterprise,High,true,Security|Operations
+Healthcare|Health|Pharma|Medical,,150,1,Referral to Care,Operations,Patient Access,Regional,BusinessUnit,High,true,Operations|Support
+Healthcare|Health|Pharma|Medical,,250,2,Case to Treatment,Operations,Care Delivery,SiteBased,BusinessUnit,High,true,Operations|Support
+Healthcare|Health|Pharma|Medical,,250,1,Claim to Payment,Finance,Revenue Integrity,Centralized,Enterprise,High,false,Finance|Operations
+Communication|Telecom|Media,,250,1,Subscriber to Cash,Revenue,Subscriber Revenue,Regional,Enterprise,High,true,Sales|Operations
+Communication|Telecom|Media,,250,1,Ticket to Restore,Operations,Network Reliability,Regional,Enterprise,High,true,Operations|Information Technology
+Energy|Utilities,,250,1,Outage to Restore,Operations,Field Service Restoration,Regional,Office,High,true,Operations|Engineering
+Energy|Utilities,,250,1,Meter to Cash,Revenue,Utility Billing,Centralized,Enterprise,High,true,Finance|Operations
+All,Support,50,1,Case to Resolution,Customer Service,Customer Support,Regional,BusinessUnit,Medium,true,Support|Operations

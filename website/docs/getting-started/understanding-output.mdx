@@ -1,0 +1,65 @@
+---
+title: Understanding Output
+description: Understand DataGen snapshots, normalized exports, entity surfaces, and what to expect from realism-driven output.
+---
+
+# Understanding Output
+
+DataGen produces three important categories of output:
+
+## Generated world object
+
+The in-memory generation result is the richest form of output. It contains:
+
+- the generated world graph
+- generation statistics
+- warnings and diagnostics
+- plugin output, when plugins are enabled
+
+This is the best form to use inside PowerShell pipelines.
+
+## Snapshot
+
+`Save-SEEnterpriseWorld` writes a portable snapshot that can later be loaded with `Import-SEEnterpriseWorld`.
+
+Use snapshots when you want:
+
+- repeatable inspection later
+- transport between environments
+- a stable checkpoint before downstream processing
+
+## Normalized export
+
+`Export-SEEnterpriseWorld` writes flattened artifacts intended for analysis, integration, seeding, and downstream mapping.
+
+Normalized export is the best choice when:
+
+- another tool needs files rather than a .NET object graph
+- you want deterministic tables or JSON artifacts
+- you are building a bridge or adapter for a consumer system
+
+## What realism means in practice
+
+Generated output is not meant to be perfectly neat unless you ask for it. Depending on the scenario and deviation profile, you may see:
+
+- stale identities
+- inconsistent CMDB ownership
+- partial classifications
+- missing or conflicting policy data
+- realistic access evidence and exceptions
+
+This is intentional. The goal is a believable environment, not an already-clean one.
+
+## Canonical vs observed vs exported
+
+For newer surfaces such as CMDB and observed data, it helps to think in layers:
+
+- canonical world truth
+- observed or source-system views
+- normalized export artifacts built from those layers
+
+That separation lets DataGen produce both the “actual world” and the imperfect records a real organization might maintain about it.
+
+## Next step
+
+If you want more control over what gets generated, continue to [Scenario Authoring](/guides/scenario-authoring).

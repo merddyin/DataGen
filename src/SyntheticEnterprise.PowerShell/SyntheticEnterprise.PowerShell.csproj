@@ -3,11 +3,36 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" />
+    <ProjectReference Include="..\SyntheticEnterprise.Core\SyntheticEnterprise.Core.csproj" />
+    <ProjectReference Include="..\SyntheticEnterprise.Exporting\SyntheticEnterprise.Exporting.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\catalogs\catalogs.sqlite" Link="catalogs\catalogs.sqlite" Condition="Exists('..\..\catalogs\catalogs.sqlite')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>catalogs\catalogs.sqlite</TargetPath>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Cmdlets\Get-SEModuleCommandSurface.cs" Link="Recovered\Cmdlets\Get-SEModuleCommandSurface.cs" />
+  </ItemGroup>
+
+  <Target Name="EnsureSeededCatalogDatabase" BeforeTargets="Build">
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\catalogs\catalogs.sqlite')" Text="Seeded catalog database missing. Generate it with scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot before building the module." />
+  </Target>
+
+  <Target Name="CopySqliteNativeBinary" AfterTargets="Build">
+    <ItemGroup>
+      <SqliteNative Include="$(OutDir)runtimes\win-x64\native\e_sqlite3.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SqliteNative)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(SqliteNative.FullPath)')" />
+  </Target>
 </Project>

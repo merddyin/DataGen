@@ -1,0 +1,810 @@
+Title,Type,Department,Level,Source
+Junior Copywriter,,Marketing,Entry,deptjobtitles.csv
+Social Media Assistant,,Marketing,Entry,deptjobtitles.csv
+SEO Intern,,Marketing,Entry,deptjobtitles.csv
+Entry Level Copywriter,,Marketing,Entry,deptjobtitles.csv
+Conversion Optimization Wrangler,,Marketing,Entry,deptjobtitles.csv
+Brand Ambassador,,Marketing,Experienced,deptjobtitles.csv
+Copywriter,,Marketing,Experienced,deptjobtitles.csv
+Content Writer,,Marketing,Experienced,deptjobtitles.csv
+Blog Writer,,Marketing,Experienced,deptjobtitles.csv
+Graphic Designer,,Marketing,Experienced,deptjobtitles.csv
+Social Media Manager,,Marketing,Manager,deptjobtitles.csv
+Brand Manager,,Marketing,Manager,deptjobtitles.csv
+Product Marketing Manager,,Marketing,Manager,deptjobtitles.csv
+Digital Marketing Manager,,Marketing,Manager,deptjobtitles.csv
+Advertising Manager,,Marketing,Manager,deptjobtitles.csv
+Oneline Marketing Manager,,Marketing,Manager,deptjobtitles.csv
+Rockstar Copywriter,,Marketing,Manager,deptjobtitles.csv
+Direct Mail Demi-God,,Marketing,Manager,deptjobtitles.csv
+Director of Advertising,,Marketing,Director,deptjobtitles.csv
+Director of Digital Marketing,,Marketing,Director,deptjobtitles.csv
+Brand Director,,Marketing,Director,deptjobtitles.csv
+Social Media Director,,Marketing,Director,deptjobtitles.csv
+Director of Product Marketing,,Marketing,Director,deptjobtitles.csv
+Director of Storytelling,,Marketing,Director,deptjobtitles.csv
+Wizard of Light Bulb Moments,,Marketing,Director,deptjobtitles.csv
+Vice President of Online Marketing,,Marketing,Executive,deptjobtitles.csv
+Vice President of Branding,,Marketing,Executive,deptjobtitles.csv
+Vice President of Product Marketing,,Marketing,Executive,deptjobtitles.csv
+Digital Dynamo,,Marketing,Executive,deptjobtitles.csv
+Chief Marketing Officer,,Marketing,Chief,deptjobtitles.csv
+Assistant,,Communications,Entry,deptjobtitles.csv
+Intern,,Communications,Entry,deptjobtitles.csv
+Trainee,,Communications,Entry,deptjobtitles.csv
+Public Relations Assistant,,Communications,Entry,deptjobtitles.csv
+Public Relations Intern,,Communications,Entry,deptjobtitles.csv
+Public Relations Trainee,,Communications,Entry,deptjobtitles.csv
+Public Information Assistant,,Communications,Entry,deptjobtitles.csv
+Public Relations Administrative Assistant,,Communications,Entry,deptjobtitles.csv
+Marketing Communications Associate,,Communications,Experienced,deptjobtitles.csv
+Public Relations Specialist,,Communications,Experienced,deptjobtitles.csv
+Publicist,,Communications,Experienced,deptjobtitles.csv
+Spokesperson,,Communications,Experienced,deptjobtitles.csv
+Corporate Communications Specialist,,Communications,Experienced,deptjobtitles.csv
+Public Relations Coordinator,,Communications,Experienced,deptjobtitles.csv
+Public Affairs Specialist,,Communications,Experienced,deptjobtitles.csv
+Public Affairs Officer,,Communications,Experienced,deptjobtitles.csv
+Communications Officer,,Communications,Experienced,deptjobtitles.csv
+Public Information Officer,,Communications,Experienced,deptjobtitles.csv
+PR Account Coordinator,,Communications,Experienced,deptjobtitles.csv
+Public Information Specialist,,Communications,Experienced,deptjobtitles.csv
+Media Relations Coordinator,,Communications,Experienced,deptjobtitles.csv
+Public Relations Manager,,Communications,Manager,deptjobtitles.csv
+Media Relations Manager,,Communications,Manager,deptjobtitles.csv
+Internal Communications Manager,,Communications,Manager,deptjobtitles.csv
+Public Relations and Events Manager,,Communications,Manager,deptjobtitles.csv
+Online Communications Manager,,Communications,Manager,deptjobtitles.csv
+External Affairs Manager,,Communications,Manager,deptjobtitles.csv
+Corporate Affairs Manager,,Communications,Manager,deptjobtitles.csv
+Manager of Public Relations,,Communications,Manager,deptjobtitles.csv
+Technology Communications Manager,,Communications,Manager,deptjobtitles.csv
+Media Director,,Communications,Director,deptjobtitles.csv
+Public Relations Director,,Communications,Director,deptjobtitles.csv
+Director of Internal Communications,,Communications,Director,deptjobtitles.csv
+Director of Public Affairs,,Communications,Director,deptjobtitles.csv
+Corporate Affairs Director,,Communications,Director,deptjobtitles.csv
+Director of External Affairs,,Communications,Director,deptjobtitles.csv
+Vice President of Corporate Communications,,Communications,Executive,deptjobtitles.csv
+Vice President of External Affairs,,Communications,Executive,deptjobtitles.csv
+Vice President of Corporate Affairs,,Communications,Executive,deptjobtitles.csv
+Vice President of Public Relations,,Communications,Executive,deptjobtitles.csv
+Vice President of Media Relations,,Communications,Executive,deptjobtitles.csv
+Communications Officer,,Communications,Chief,deptjobtitles.csv
+Public Information Officer,,Communications,Chief,deptjobtitles.csv
+Chief Communications Officver,,Communications,Chief,deptjobtitles.csv
+Intern,,Design,Entry,deptjobtitles.csv
+Assistant,,Design,Entry,deptjobtitles.csv
+Trainee,,Design,Entry,deptjobtitles.csv
+Junior Graphic Designer,,Design,Entry,deptjobtitles.csv
+Entry Level UX Designer,,Design,Entry,deptjobtitles.csv
+Junior UX Designer,,Design,Entry,deptjobtitles.csv
+Graphic Design Intern,,Design,Entry,deptjobtitles.csv
+Creative Intern,,Design,Entry,deptjobtitles.csv
+Graphic Designer,,Design,Experienced,deptjobtitles.csv
+UX Designer,,Design,Experienced,deptjobtitles.csv
+Interior Designer,,Design,Experienced,deptjobtitles.csv
+Fashion Designer,,Design,Experienced,deptjobtitles.csv
+Illustrator,,Design,Experienced,deptjobtitles.csv
+Instructional Designer,,Design,Experienced,deptjobtitles.csv
+Web Designer,,Design,Experienced,deptjobtitles.csv
+Game Designer,,Design,Experienced,deptjobtitles.csv
+Video Game Designer,,Design,Experienced,deptjobtitles.csv
+UI Designer,,Design,Experienced,deptjobtitles.csv
+Senior Graphic Designer,,Design,Experienced,deptjobtitles.csv
+Visual Designer,,Design,Experienced,deptjobtitles.csv
+Production Artist,,Design,Experienced,deptjobtitles.csv
+Textile Designer,,Design,Experienced,deptjobtitles.csv
+Technical Designer,,Design,Experienced,deptjobtitles.csv
+Motion Designer,,Design,Experienced,deptjobtitles.csv
+Motion Graphics Designer,,Design,Experienced,deptjobtitles.csv
+Layout Artist,,Design,Experienced,deptjobtitles.csv
+Brand Designer,,Design,Experienced,deptjobtitles.csv
+Logo Designer,,Design,Experienced,deptjobtitles.csv
+Packing Designer,,Design,Experienced,deptjobtitles.csv
+Senior Designer,,Design,Experienced,deptjobtitles.csv
+Art Production Manager,,Design,Manager,deptjobtitles.csv
+Creative Lead,,Design,Manager,deptjobtitles.csv
+Senior Design Manager,,Design,Manager,deptjobtitles.csv
+Visual Identity Manager,,Design,Manager,deptjobtitles.csv
+Design Operations Manager,,Design,Manager,deptjobtitles.csv
+Experience Design Lead,,Design,Manager,deptjobtitles.csv
+Experience Design Manager,,Design,Manager,deptjobtitles.csv
+Senior Design Manager,,Design,Manager,deptjobtitles.csv
+Art Director,,Design,Director,deptjobtitles.csv
+Creative Director,,Design,Director,deptjobtitles.csv
+Associate Creative Director,,Design,Director,deptjobtitles.csv
+Executive Creative Director,,Design,Director,deptjobtitles.csv
+Director of Product Design,,Design,Director,deptjobtitles.csv
+Group Creative Director,,Design,Director,deptjobtitles.csv
+Global Creative Director,,Design,Director,deptjobtitles.csv
+Director of Creative Operations,,Design,Director,deptjobtitles.csv
+Director,,Design,Director,deptjobtitles.csv
+Senior Director,,Design,Director,deptjobtitles.csv
+Creative Executive,,Design,Executive,deptjobtitles.csv
+Vice President of Creative,,Design,Executive,deptjobtitles.csv
+Design Executive,,Design,Executive,deptjobtitles.csv
+Senior VP of Creative,,Design,Executive,deptjobtitles.csv
+Senior VP Design Innovation,,Design,Executive,deptjobtitles.csv
+President,,Design,Executive,deptjobtitles.csv
+Vice President,,Design,Executive,deptjobtitles.csv
+Senior Vice President,,Design,Executive,deptjobtitles.csv
+Chief Creative Officer,,Design,Chief,deptjobtitles.csv
+Chief Design Officer,,Design,Chief,deptjobtitles.csv
+Head of Creative,,Design,Chief,deptjobtitles.csv
+Head of Design,,Design,Chief,deptjobtitles.csv
+Creative Group Head,,Design,Chief,deptjobtitles.csv
+Head of UX Design,,Design,Chief,deptjobtitles.csv
+Head of Design and User Experience,,Design,Chief,deptjobtitles.csv
+Head of Design Research,,Design,Chief,deptjobtitles.csv
+Assistant,,Human Resources,Entry,deptjobtitles.csv
+Intern,,Human Resources,Entry,deptjobtitles.csv
+Trainee,,Human Resources,Entry,deptjobtitles.csv
+Administrative Assistant,,Human Resources,Entry,deptjobtitles.csv
+Recruiter,,Human Resources,Experienced,deptjobtitles.csv
+HR Generalist,,Human Resources,Experienced,deptjobtitles.csv
+HR Specialist,,Human Resources,Experienced,deptjobtitles.csv
+Benefits Analyst,,Human Resources,Experienced,deptjobtitles.csv
+HRIS Analyst,,Human Resources,Experienced,deptjobtitles.csv
+HR Business Partner,,Human Resources,Experienced,deptjobtitles.csv
+Consultant,,Human Resources,Experienced,deptjobtitles.csv
+Coordinator,,Human Resources,Experienced,deptjobtitles.csv
+Senior Manpower and Compliance Specialist,,Human Resources,Experienced,deptjobtitles.csv
+Payroll Manager,,Human Resources,Manager,deptjobtitles.csv
+Benefits Manager,,Human Resources,Manager,deptjobtitles.csv
+HRIS Manager,,Human Resources,Manager,deptjobtitles.csv
+Workers Comp Manager,,Human Resources,Manager,deptjobtitles.csv
+HR Manager,,Human Resources,Manager,deptjobtitles.csv
+Employment Manager,,Human Resources,Manager,deptjobtitles.csv
+Employee Relations Manager,,Human Resources,Manager,deptjobtitles.csv
+DEI Manager,,Human Resources,Manager,deptjobtitles.csv
+Director of HR,,Human Resources,Director,deptjobtitles.csv
+Compensation Director,,Human Resources,Director,deptjobtitles.csv
+Payroll Director,,Human Resources,Director,deptjobtitles.csv
+Director of People Analytics,,Human Resources,Director,deptjobtitles.csv
+Employer Brand Director,,Human Resources,Director,deptjobtitles.csv
+Director of Workforce Analytics,,Human Resources,Director,deptjobtitles.csv
+Director of Talent Management,,Human Resources,Director,deptjobtitles.csv
+DEI Director,,Human Resources,Director,deptjobtitles.csv
+Director,,Human Resources,Director,deptjobtitles.csv
+Senior Director,,Human Resources,Director,deptjobtitles.csv
+Vice President,,Human Resources,Executive,deptjobtitles.csv
+Senior Vice President,,Human Resources,Executive,deptjobtitles.csv
+President,,Human Resources,Executive,deptjobtitles.csv
+VP of Talent Acquisition,,Human Resources,Executive,deptjobtitles.csv
+SVP of Talent Acquisition,,Human Resources,Executive,deptjobtitles.csv
+VP of Talent Management,,Human Resources,Executive,deptjobtitles.csv
+SVP of Talent Management,,Human Resources,Executive,deptjobtitles.csv
+President,,Human Resources,Executive,deptjobtitles.csv
+Chief Human Resource Officer,,Human Resources,Chief,deptjobtitles.csv
+Chief People Officer,,Human Resources,Chief,deptjobtitles.csv
+Chief Human Capital Officer,,Human Resources,Chief,deptjobtitles.csv
+Chief People and Change Management Officer,,Human Resources,Chief,deptjobtitles.csv
+Head of HR Compliance,,Human Resources,Chief,deptjobtitles.csv
+Chief DEI Officer,,Human Resources,Chief,deptjobtitles.csv
+Assistant,,Customer Service,Entry,deptjobtitles.csv
+Intern,,Customer Service,Entry,deptjobtitles.csv
+Trainee,,Customer Service,Entry,deptjobtitles.csv
+Administrative Assistant,,Customer Service,Entry,deptjobtitles.csv
+Jr Call Center Analyst,,Customer Service,Entry,deptjobtitles.csv
+Jr Call Center Operator,,Customer Service,Entry,deptjobtitles.csv
+Representative,,Customer Service,Experienced,deptjobtitles.csv
+Call Center Reprasentative,,Customer Service,Experienced,deptjobtitles.csv
+Implementation Specialist,,Customer Service,Experienced,deptjobtitles.csv
+Agent,,Customer Service,Experienced,deptjobtitles.csv
+Consultant,,Customer Service,Experienced,deptjobtitles.csv
+Customer Care Representative,,Customer Service,Experienced,deptjobtitles.csv
+Support Specialist,,Customer Service,Experienced,deptjobtitles.csv
+Customer Advocate,,Customer Service,Experienced,deptjobtitles.csv
+Account Representative,,Customer Service,Experienced,deptjobtitles.csv
+Client Service Specialist,,Customer Service,Experienced,deptjobtitles.csv
+Associate,,Customer Service,Experienced,deptjobtitles.csv
+Customer Happiness Agent,,Customer Service,Experienced,deptjobtitles.csv
+Customer Success Architect,,Customer Service,Experienced,deptjobtitles.csv
+Customer Experience Agent,,Customer Service,Experienced,deptjobtitles.csv
+Customer Success Specialist,,Customer Service,Experienced,deptjobtitles.csv
+Guest Services Coordinator,,Customer Service,Experienced,deptjobtitles.csv
+Remote Chat Agent,,Customer Service,Experienced,deptjobtitles.csv
+Customer Care Advocate,,Customer Service,Experienced,deptjobtitles.csv
+Live Chat Agent,,Customer Service,Experienced,deptjobtitles.csv
+Online Chat Agent,,Customer Service,Experienced,deptjobtitles.csv
+Call Center CSR,,Customer Service,Experienced,deptjobtitles.csv
+Manager,,Customer Service,Manager,deptjobtitles.csv
+Call Center Supervisor,,Customer Service,Manager,deptjobtitles.csv
+Implementation Manager,,Customer Service,Manager,deptjobtitles.csv
+Relationship Manager,,Customer Service,Manager,deptjobtitles.csv
+Client Service Manager,,Customer Service,Manager,deptjobtitles.csv
+Customer Experience Manager,,Customer Service,Manager,deptjobtitles.csv
+Manager of Customer Success,,Customer Service,Manager,deptjobtitles.csv
+Customer Service Supervisor,,Customer Service,Manager,deptjobtitles.csv
+Guest Services Manager,,Customer Service,Manager,deptjobtitles.csv
+Client Care Manager,,Customer Service,Manager,deptjobtitles.csv
+Partner Support Manager,,Customer Service,Manager,deptjobtitles.csv
+Services Account Manager,,Customer Service,Manager,deptjobtitles.csv
+Customer Delight Manager,,Customer Service,Manager,deptjobtitles.csv
+Director,,Customer Service,Director,deptjobtitles.csv
+Senior Director,,Customer Service,Director,deptjobtitles.csv
+Director of Client Services,,Customer Service,Director,deptjobtitles.csv
+Director of Implementation,,Customer Service,Director,deptjobtitles.csv
+Voice of the Customer,,Customer Service,Director,deptjobtitles.csv
+Customer Experience Director,,Customer Service,Director,deptjobtitles.csv
+Member Services Director,,Customer Service,Director,deptjobtitles.csv
+Director of Guest Services,,Customer Service,Director,deptjobtitles.csv
+Senior Director Customer First,,Customer Service,Director,deptjobtitles.csv
+Executive,,Customer Service,Executive,deptjobtitles.csv
+VP of Customer Experience,,Customer Service,Executive,deptjobtitles.csv
+VP of Client Services,,Customer Service,Executive,deptjobtitles.csv
+SVP Global Customer Service,,Customer Service,Executive,deptjobtitles.csv
+Customer Operations Executive,,Customer Service,Executive,deptjobtitles.csv
+SVP Client Management,,Customer Service,Executive,deptjobtitles.csv
+Customer Solutions Executive,,Customer Service,Executive,deptjobtitles.csv
+Chief Experience Officer,,Customer Service,Chief,deptjobtitles.csv
+Chief Client Officer,,Customer Service,Chief,deptjobtitles.csv
+Chief Customer Service Officer,,Customer Service,Chief,deptjobtitles.csv
+Chief Customer Officer,,Customer Service,Chief,deptjobtitles.csv
+Head of Customer First,,Customer Service,Chief,deptjobtitles.csv
+Head of Global Customer Service,,Customer Service,Chief,deptjobtitles.csv
+Head of Customer Success,,Customer Service,Chief,deptjobtitles.csv
+Assistant,,Product Management,Entry,deptjobtitles.csv
+Jr Product Manager,,Product Management,Entry,deptjobtitles.csv
+Intern,,Product Management,Entry,deptjobtitles.csv
+Jr Product Designer,,Product Management,Entry,deptjobtitles.csv
+Product Design Intern,,Product Management,Entry,deptjobtitles.csv
+Product Assistant,,Product Management,Entry,deptjobtitles.csv
+Product Trainee,,Product Management,Entry,deptjobtitles.csv
+Product Design Apprentice,,Product Management,Entry,deptjobtitles.csv
+Product Owner,,Product Management,Experienced,deptjobtitles.csv
+Product Designer,,Product Management,Experienced,deptjobtitles.csv
+Product Engineer,,Product Management,Experienced,deptjobtitles.csv
+Specialist,,Product Management,Experienced,deptjobtitles.csv
+Analyst,,Product Management,Experienced,deptjobtitles.csv
+Product Design Engineer,,Product Management,Experienced,deptjobtitles.csv
+Coordinator,,Product Management,Experienced,deptjobtitles.csv
+Consultant,,Product Management,Experienced,deptjobtitles.csv
+Representative,,Product Management,Experienced,deptjobtitles.csv
+Senior Product Designer,,Product Management,Experienced,deptjobtitles.csv
+Product Development Coordinator,,Product Management,Experienced,deptjobtitles.csv
+Product Development Technician,,Product Management,Experienced,deptjobtitles.csv
+Product Strategist,,Product Management,Experienced,deptjobtitles.csv
+Product Technician,,Product Management,Experienced,deptjobtitles.csv
+Product Generalist,,Product Management,Experienced,deptjobtitles.csv
+Product Design Lead,,Product Management,Manager,deptjobtitles.csv
+Product Lead,,Product Management,Manager,deptjobtitles.csv
+Product Management Lead,,Product Management,Manager,deptjobtitles.csv
+Product Manager,,Product Management,Manager,deptjobtitles.csv
+Associate Product Manager,,Product Management,Manager,deptjobtitles.csv
+Senior Product Manager,,Product Management,Manager,deptjobtitles.csv
+Product Development Manager,,Product Management,Manager,deptjobtitles.csv
+Group Product Manager,,Product Management,Manager,deptjobtitles.csv
+Product Design Manager,,Product Management,Manager,deptjobtitles.csv
+Lead Product Manager,,Product Management,Manager,deptjobtitles.csv
+Senior Product Development Manager,,Product Management,Manager,deptjobtitles.csv
+Product Operations Manager,,Product Management,Manager,deptjobtitles.csv
+Manager,,Product Management,Manager,deptjobtitles.csv
+Director,,Product Management,Director,deptjobtitles.csv
+Product Director,,Product Management,Director,deptjobtitles.csv
+Senior Director,,Product Management,Director,deptjobtitles.csv
+Product Design Director,,Product Management,Director,deptjobtitles.csv
+Product Management Director,,Product Management,Director,deptjobtitles.csv
+Director of Product Development,,Product Management,Director,deptjobtitles.csv
+Senior Director of Product Design,,Product Management,Director,deptjobtitles.csv
+Product Design and Development Director,,Product Management,Director,deptjobtitles.csv
+Vice President,,Product Management,Executive,deptjobtitles.csv
+Senior Vice President,,Product Management,Executive,deptjobtitles.csv
+President,,Product Management,Executive,deptjobtitles.csv
+Vice President of Product Development,,Product Management,Executive,deptjobtitles.csv
+Vice President of Product Design,,Product Management,Executive,deptjobtitles.csv
+Chief Product Officer,,Product Management,Chief,deptjobtitles.csv
+Head of Product,,Product Management,Chief,deptjobtitles.csv
+Head of Product Management,,Product Management,Chief,deptjobtitles.csv
+Head of Product Design,,Product Management,Chief,deptjobtitles.csv
+Head of Product Development,,Product Management,Chief,deptjobtitles.csv
+Order Selector,,Warehouse,Entry,deptjobtitles.csv
+Assistant,,Warehouse,Entry,deptjobtitles.csv
+Worker,,Warehouse,Entry,deptjobtitles.csv
+Picker,,Warehouse,Entry,deptjobtitles.csv
+Inventory Counter,,Warehouse,Entry,deptjobtitles.csv
+Trainee,,Warehouse,Entry,deptjobtitles.csv
+Machine Operator,,Warehouse,Experienced,deptjobtitles.csv
+Forklift Operator,,Warehouse,Experienced,deptjobtitles.csv
+Associate,,Warehouse,Experienced,deptjobtitles.csv
+Material Handler,,Warehouse,Experienced,deptjobtitles.csv
+Logistics Coordinator,,Warehouse,Experienced,deptjobtitles.csv
+Production Worker,,Warehouse,Experienced,deptjobtitles.csv
+Logistician,,Warehouse,Experienced,deptjobtitles.csv
+Truck Loader,,Warehouse,Experienced,deptjobtitles.csv
+Selector,,Warehouse,Experienced,deptjobtitles.csv
+Driver,,Warehouse,Experienced,deptjobtitles.csv
+Supervisor,,Warehouse,Manager,deptjobtitles.csv
+Manager,,Warehouse,Manager,deptjobtitles.csv
+Production Manager,,Warehouse,Manager,deptjobtitles.csv
+Distribution Manager,,Warehouse,Manager,deptjobtitles.csv
+Quality Assurance Manager,,Warehouse,Manager,deptjobtitles.csv
+Production Lead,,Warehouse,Manager,deptjobtitles.csv
+Logistics Director,,Warehouse,Director,deptjobtitles.csv
+Director,,Warehouse,Director,deptjobtitles.csv
+Senior Director,,Warehouse,Director,deptjobtitles.csv
+Director of Warehouse Operations,,Warehouse,Director,deptjobtitles.csv
+Vice President,,Warehouse,Executive,deptjobtitles.csv
+Senior Vice President,,Warehouse,Executive,deptjobtitles.csv
+President,,Warehouse,Executive,deptjobtitles.csv
+Warehouse Operations Executive,,Warehouse,Executive,deptjobtitles.csv
+Chief Logistics Officer,,Warehouse,Chief,deptjobtitles.csv
+Head of Warehouse Operations,,Warehouse,Chief,deptjobtitles.csv
+Chief Operations Officer,,Warehouse,Chief,deptjobtitles.csv
+Assistant,,Diversity,Entry,deptjobtitles.csv
+Intern,,Diversity,Entry,deptjobtitles.csv
+Coordinator,,Diversity,Experienced,deptjobtitles.csv
+Consultant,,Diversity,Experienced,deptjobtitles.csv
+Trainer,,Diversity,Experienced,deptjobtitles.csv
+Business Partner,,Diversity,Experienced,deptjobtitles.csv
+Inclusion Specialist,,Diversity,Experienced,deptjobtitles.csv
+Equality and Diversity Advisor,,Diversity,Experienced,deptjobtitles.csv
+Analyst,,Diversity,Experienced,deptjobtitles.csv
+Diversity Event Producer,,Diversity,Experienced,deptjobtitles.csv
+Talent Advisor,,Diversity,Experienced,deptjobtitles.csv
+Specialist,,Diversity,Experienced,deptjobtitles.csv
+Senior Technical Recruiter,,Diversity,Experienced,deptjobtitles.csv
+Associate,,Diversity,Experienced,deptjobtitles.csv
+"Equity, Division and Inclusion Steward",,Diversity,Experienced,deptjobtitles.csv
+Diversity and Inclusion Advocate,,Diversity,Experienced,deptjobtitles.csv
+National Inclusion and Diversity Coordinator,,Diversity,Manager,deptjobtitles.csv
+Manager,,Diversity,Manager,deptjobtitles.csv
+Culture Manager,,Diversity,Manager,deptjobtitles.csv
+Employment Equity Manager,,Diversity,Manager,deptjobtitles.csv
+Program Manager,,Diversity,Manager,deptjobtitles.csv
+Supplier Diversity Manager,,Diversity,Manager,deptjobtitles.csv
+Diversity Recruiting Partnerships Manager,,Diversity,Manager,deptjobtitles.csv
+Equality Manager,,Diversity,Manager,deptjobtitles.csv
+Director,,Diversity,Director,deptjobtitles.csv
+Senior Director,,Diversity,Director,deptjobtitles.csv
+Director of Culture,,Diversity,Director,deptjobtitles.csv
+Director of Supplier Diversity,,Diversity,Director,deptjobtitles.csv
+Diversity and Inclusion Leader,,Diversity,Director,deptjobtitles.csv
+Vice President,,Diversity,Executive,deptjobtitles.csv
+Senior Vice President,,Diversity,Executive,deptjobtitles.csv
+President,,Diversity,Executive,deptjobtitles.csv
+Vice President of Culture,,Diversity,Executive,deptjobtitles.csv
+Chief Diversity Officer,,Diversity,Chief,deptjobtitles.csv
+Chief Diversity and Inclusion Officer,,Diversity,Chief,deptjobtitles.csv
+Chief Equality Officer,,Diversity,Chief,deptjobtitles.csv
+Head of Global Diversity and Belonging,,Diversity,Chief,deptjobtitles.csv
+Chief Diversity and Social Responsibility Officer,,Diversity,Chief,deptjobtitles.csv
+Chief Culture Officer,,Diversity,Chief,deptjobtitles.csv
+Trainee,,Operations,Entry,deptjobtitles.csv
+Intern,,Operations,Entry,deptjobtitles.csv
+Administrative Assistant,,Operations,Entry,deptjobtitles.csv
+Entry Level Operations Project Manager,,Operations,Entry,deptjobtitles.csv
+Business Operations Intern,,Operations,Entry,deptjobtitles.csv
+Strategy and Operations Intern,,Operations,Entry,deptjobtitles.csv
+Entry Level Operations Analyst,,Operations,Entry,deptjobtitles.csv
+Assistant,,Operations,Entry,deptjobtitles.csv
+Coordinator,,Operations,Experienced,deptjobtitles.csv
+Consultant,,Operations,Experienced,deptjobtitles.csv
+Analyst,,Operations,Experienced,deptjobtitles.csv
+Specialist,,Operations,Experienced,deptjobtitles.csv
+Associate,,Operations,Experienced,deptjobtitles.csv
+Engineer,,Operations,Experienced,deptjobtitles.csv
+Continuous Improvement Consultant,,Operations,Experienced,deptjobtitles.csv
+Senior Process Engineer,,Operations,Experienced,deptjobtitles.csv
+Ligistician,,Operations,Experienced,deptjobtitles.csv
+Operations Geologist,,Operations,Experienced,deptjobtitles.csv
+Operations Tech,,Operations,Experienced,deptjobtitles.csv
+Manager,,Operations,Manager,deptjobtitles.csv
+Senior Manager,,Operations,Manager,deptjobtitles.csv
+Manager of Operations,,Operations,Manager,deptjobtitles.csv
+Supervisor,,Operations,Manager,deptjobtitles.csv
+Office Operations Manager,,Operations,Manager,deptjobtitles.csv
+General Manager of Operations,,Operations,Manager,deptjobtitles.csv
+Account Operations Manager,,Operations,Manager,deptjobtitles.csv
+Senior Manager Business Operations,,Operations,Manager,deptjobtitles.csv
+Director,,Operations,Director,deptjobtitles.csv
+Senior Director,,Operations,Director,deptjobtitles.csv
+Operations Management Lead,,Operations,Director,deptjobtitles.csv
+Director of International Operations,,Operations,Director,deptjobtitles.csv
+Assistant Director,,Operations,Director,deptjobtitles.csv
+Strategy and Operations Leader,,Operations,Director,deptjobtitles.csv
+Vice President,,Operations,Executive,deptjobtitles.csv
+Senior Vice President,,Operations,Executive,deptjobtitles.csv
+President,,Operations,Executive,deptjobtitles.csv
+VP Commerce Business and Operations,,Operations,Executive,deptjobtitles.csv
+Operations Management Executive,,Operations,Executive,deptjobtitles.csv
+EVP Strategic Business Operations,,Operations,Executive,deptjobtitles.csv
+SVP Growth and Operations,,Operations,Executive,deptjobtitles.csv
+Head of Operations,,Operations,Executive,deptjobtitles.csv
+Head of People and Operations,,Operations,Executive,deptjobtitles.csv
+Head of Business Operations,,Operations,Executive,deptjobtitles.csv
+Chief Operating Officer,,Operations,Chief,deptjobtitles.csv
+Chief Technology and Operations Officer,,Operations,Chief,deptjobtitles.csv
+Co-Founder,,Operations,Chief,deptjobtitles.csv
+Founder,,Operations,Chief,deptjobtitles.csv
+Owner,,Operations,Chief,deptjobtitles.csv
+Junior Administrative Assistant,,Administrative,Entry,deptjobtitles.csv
+Intern,,Administrative,Entry,deptjobtitles.csv
+Aide,,Administrative,Entry,deptjobtitles.csv
+File Clerk,,Administrative,Entry,deptjobtitles.csv
+Trainee,,Administrative,Entry,deptjobtitles.csv
+Entry-Level Administrative Assistant,,Administrative,Entry,deptjobtitles.csv
+Data Entry Clerk,,Administrative,Entry,deptjobtitles.csv
+Coordinator,,Administrative,Experienced,deptjobtitles.csv
+Front Desk Agent,,Administrative,Experienced,deptjobtitles.csv
+Specialist,,Administrative,Experienced,deptjobtitles.csv
+Secretary,,Administrative,Experienced,deptjobtitles.csv
+Analyst,,Administrative,Experienced,deptjobtitles.csv
+Assistant,,Administrative,Experienced,deptjobtitles.csv
+Admin Specialist,,Administrative,Experienced,deptjobtitles.csv
+Business Partner,,Administrative,Experienced,deptjobtitles.csv
+Master Scheduler,,Administrative,Experienced,deptjobtitles.csv
+Executive Business Partner,,Administrative,Experienced,deptjobtitles.csv
+Office Manager,,Administrative,Experienced,deptjobtitles.csv
+Front Desk Administrative Assistant,,Administrative,Experienced,deptjobtitles.csv
+Solution Coordinator,,Administrative,Experienced,deptjobtitles.csv
+Professional Typist,,Administrative,Experienced,deptjobtitles.csv
+Documentation Specialist,,Administrative,Experienced,deptjobtitles.csv
+Virtual Assistant,,Administrative,Experienced,deptjobtitles.csv
+Executive Assistant,,Administrative,Experienced,deptjobtitles.csv
+Receptionist,,Administrative,Experienced,deptjobtitles.csv
+Personal Assistant,,Administrative,Experienced,deptjobtitles.csv
+Manager,,Administrative,Manager,deptjobtitles.csv
+Senior Manager,,Administrative,Manager,deptjobtitles.csv
+Administrative Services Manager,,Administrative,Manager,deptjobtitles.csv
+Business Support Manager,,Administrative,Manager,deptjobtitles.csv
+Administrative Support Manager,,Administrative,Manager,deptjobtitles.csv
+Front Desk Supervisor,,Administrative,Manager,deptjobtitles.csv
+Administrative Support Supervisor,,Administrative,Manager,deptjobtitles.csv
+Director,,Administrative,Director,deptjobtitles.csv
+Senior Director,,Administrative,Director,deptjobtitles.csv
+Lead Administrative Coordinator,,Administrative,Director,deptjobtitles.csv
+Administrative Services Lead,,Administrative,Director,deptjobtitles.csv
+Vice President,,Administrative,Executive,deptjobtitles.csv
+Senior Vice President,,Administrative,Executive,deptjobtitles.csv
+Chief Administrative Officer,,Administrative,Chief,deptjobtitles.csv
+Head of Administration,,Administrative,Chief,deptjobtitles.csv
+Chief of Staff,,Administrative,Chief,deptjobtitles.csv
+Chief Legal and Administrative Officer,,Administrative,Chief,deptjobtitles.csv
+Chief Business Officer,,Administrative,Chief,deptjobtitles.csv
+Assistant,,Facilities,Entry,deptjobtitles.csv
+Intern,,Facilities,Entry,deptjobtitles.csv
+Trainee,,Facilities,Entry,deptjobtitles.csv
+Workplace Ergonomics Intern,,Facilities,Entry,deptjobtitles.csv
+Junior Facilities Planner,,Facilities,Entry,deptjobtitles.csv
+Entry Level Facilities Engineer,,Facilities,Entry,deptjobtitles.csv
+Consultant,,Facilities,Experienced,deptjobtitles.csv
+Coordinator,,Facilities,Experienced,deptjobtitles.csv
+Engineer,,Facilities,Experienced,deptjobtitles.csv
+Space Planner,,Facilities,Experienced,deptjobtitles.csv
+Move Coordinator,,Facilities,Experienced,deptjobtitles.csv
+Safety and Occupational Health Specialist,,Facilities,Experienced,deptjobtitles.csv
+Specialist,,Facilities,Experienced,deptjobtitles.csv
+Business Continuity Planner,,Facilities,Experienced,deptjobtitles.csv
+Facilities Maintenance Technician,,Facilities,Experienced,deptjobtitles.csv
+Facilities Management Administrator,,Facilities,Experienced,deptjobtitles.csv
+Safety and Security Officer,,Facilities,Experienced,deptjobtitles.csv
+Workplace Wellness Coordinator,,Facilities,Experienced,deptjobtitles.csv
+Senior Space Planner,,Facilities,Experienced,deptjobtitles.csv
+Business Continuity Analyst,,Facilities,Experienced,deptjobtitles.csv
+Workplace Safety Officer,,Facilities,Experienced,deptjobtitles.csv
+Global Corporate Properties Coordinator,,Facilities,Experienced,deptjobtitles.csv
+Health and Safety Specialist,,Facilities,Experienced,deptjobtitles.csv
+Occupancy and Space Planner,,Facilities,Experienced,deptjobtitles.csv
+Senior Workplace Coordinator,,Facilities,Experienced,deptjobtitles.csv
+Strategic Site Planner,,Facilities,Experienced,deptjobtitles.csv
+Workplace Coordinator,,Facilities,Experienced,deptjobtitles.csv
+Workplace Planning Associate,,Facilities,Experienced,deptjobtitles.csv
+Workplace Specialist,,Facilities,Experienced,deptjobtitles.csv
+Manager,,Facilities,Manager,deptjobtitles.csv
+Senior Manager,,Facilities,Manager,deptjobtitles.csv
+Building Manager,,Facilities,Manager,deptjobtitles.csv
+Facilities Maintenance Manager,,Facilities,Manager,deptjobtitles.csv
+Office Services Manager,,Facilities,Manager,deptjobtitles.csv
+Corporate Facilities Manager,,Facilities,Manager,deptjobtitles.csv
+Supervisor,,Facilities,Manager,deptjobtitles.csv
+Health and Safety Manager,,Facilities,Manager,deptjobtitles.csv
+Workplace Manager,,Facilities,Manager,deptjobtitles.csv
+Business Continuity Manager,,Facilities,Manager,deptjobtitles.csv
+Global Workplace Manager,,Facilities,Manager,deptjobtitles.csv
+Regional Facilities Manager,,Facilities,Manager,deptjobtitles.csv
+Security and Safety Manager,,Facilities,Manager,deptjobtitles.csv
+Senior Facilities Manager,,Facilities,Manager,deptjobtitles.csv
+Site Services Manager,,Facilities,Manager,deptjobtitles.csv
+Space Planning Manager,,Facilities,Manager,deptjobtitles.csv
+Director,,Facilities,Director,deptjobtitles.csv
+Senior Director,,Facilities,Director,deptjobtitles.csv
+Director of Maintenance,,Facilities,Director,deptjobtitles.csv
+Director Safety and Security,,Facilities,Director,deptjobtitles.csv
+Facilities Director,,Facilities,Director,deptjobtitles.csv
+Safety and Security Director,,Facilities,Director,deptjobtitles.csv
+Space Planning and Logistics Leader,,Facilities,Director,deptjobtitles.csv
+Director Global Facilities Operations,,Facilities,Director,deptjobtitles.csv
+Workplace Director,,Facilities,Director,deptjobtitles.csv
+Vice President,,Facilities,Executive,deptjobtitles.csv
+Senior Vice President,,Facilities,Executive,deptjobtitles.csv
+Facilities Management Executive,,Facilities,Executive,deptjobtitles.csv
+Facility Executive,,Facilities,Executive,deptjobtitles.csv
+Vice President Global Facilities,,Facilities,Executive,deptjobtitles.csv
+Vice President of Global Workplace and Real Estate,,Facilities,Executive,deptjobtitles.csv
+VP of Global Workplace,,Facilities,Executive,deptjobtitles.csv
+Chief Facilities Officer,,Facilities,Chief,deptjobtitles.csv
+Chief Safety Officer,,Facilities,Chief,deptjobtitles.csv
+Chief Facilities Management Officer,,Facilities,Chief,deptjobtitles.csv
+Global Head of Workplace Design,,Facilities,Chief,deptjobtitles.csv
+Head of Business Continuity,,Facilities,Chief,deptjobtitles.csv
+Head of Facilities,,Facilities,Chief,deptjobtitles.csv
+Head of Global Workplace and Real Estate,,Facilities,Chief,deptjobtitles.csv
+Head of Workplace,,Facilities,Chief,deptjobtitles.csv
+Chief of Facilities,,Facilities,Chief,deptjobtitles.csv
+Chief of Facilities Operations,,Facilities,Chief,deptjobtitles.csv
+Head of Facilities Services,,Facilities,Chief,deptjobtitles.csv
+Head of Real Estate and Facilities,,Facilities,Chief,deptjobtitles.csv
+Secretary,,Legal,Entry,deptjobtitles.csv
+Entry Level Legal Assistant,,Legal,Entry,deptjobtitles.csv
+Clerk,,Legal,Entry,deptjobtitles.csv
+Receptionist,,Legal,Entry,deptjobtitles.csv
+Entry Level Patent Agent,,Legal,Entry,deptjobtitles.csv
+Intern,,Legal,Entry,deptjobtitles.csv
+File Clerk,,Legal,Entry,deptjobtitles.csv
+Litigation Assistnt,,Legal,Entry,deptjobtitles.csv
+Trainee,,Legal,Entry,deptjobtitles.csv
+Legal Document Coder,,Legal,Entry,deptjobtitles.csv
+Entry Level Legal Associate,,Legal,Entry,deptjobtitles.csv
+Junior Legal Council,,Legal,Entry,deptjobtitles.csv
+Assistant,,Legal,Experienced,deptjobtitles.csv
+Compliance Officer,,Legal,Experienced,deptjobtitles.csv
+Patent Agent,,Legal,Experienced,deptjobtitles.csv
+Contract Administrator,,Legal,Experienced,deptjobtitles.csv
+Aide,,Legal,Experienced,deptjobtitles.csv
+Compliance Specialist,,Legal,Experienced,deptjobtitles.csv
+Analyst,,Legal,Experienced,deptjobtitles.csv
+Consultant,,Legal,Experienced,deptjobtitles.csv
+Contract Analyst,,Legal,Experienced,deptjobtitles.csv
+Legal Writer,,Legal,Experienced,deptjobtitles.csv
+IP Attorney,,Legal,Experienced,deptjobtitles.csv
+Conflicts Analyst,,Legal,Experienced,deptjobtitles.csv
+Recruiter,,Legal,Experienced,deptjobtitles.csv
+Associate,,Legal,Experienced,deptjobtitles.csv
+Case Manager,,Legal,Experienced,deptjobtitles.csv
+Data Protection Officer,,Legal,Experienced,deptjobtitles.csv
+Compliance Analyst,,Legal,Experienced,deptjobtitles.csv
+Strategist,,Legal,Experienced,deptjobtitles.csv
+Manager,,Legal,Manager,deptjobtitles.csv
+Senior Manager,,Legal,Manager,deptjobtitles.csv
+Compliance Manager,,Legal,Manager,deptjobtitles.csv
+Regulatory Compliance Manager,,Legal,Manager,deptjobtitles.csv
+Contract Compliance Manager,,Legal,Manager,deptjobtitles.csv
+Associate General Council,,Legal,Director,deptjobtitles.csv
+Assistant General Council,,Legal,Director,deptjobtitles.csv
+Regulatory Affairs Director,,Legal,Director,deptjobtitles.csv
+Director,,Legal,Director,deptjobtitles.csv
+Senior Director,,Legal,Director,deptjobtitles.csv
+Legal Services Director,,Legal,Director,deptjobtitles.csv
+Vice President,,Legal,Executive,deptjobtitles.csv
+Senior Vice President,,Legal,Executive,deptjobtitles.csv
+General Counsel,,Legal,Executive,deptjobtitles.csv
+Counsel,,Legal,Executive,deptjobtitles.csv
+Corporate Counsel,,Legal,Executive,deptjobtitles.csv
+Inhouse Counsel,,Legal,Executive,deptjobtitles.csv
+Compliance Counsel,,Legal,Executive,deptjobtitles.csv
+Patent Counsel,,Legal,Executive,deptjobtitles.csv
+Intellectual Property Counsel,,Legal,Executive,deptjobtitles.csv
+IP Counsel,,Legal,Executive,deptjobtitles.csv
+Deputy General Counsel,,Legal,Executive,deptjobtitles.csv
+Legal Executive,,Legal,Executive,deptjobtitles.csv
+VP of Legal Affairs,,Legal,Executive,deptjobtitles.csv
+Senior Legal Counsel,,Legal,Executive,deptjobtitles.csv
+Technology Counsel,,Legal,Executive,deptjobtitles.csv
+Partner,,Legal,Executive,deptjobtitles.csv
+Vice President of Compliance,,Legal,Executive,deptjobtitles.csv
+SVP General Counsel,,Legal,Executive,deptjobtitles.csv
+Vice President Head of Privacy,,Legal,Executive,deptjobtitles.csv
+VP and Deputy General Counsel,,Legal,Executive,deptjobtitles.csv
+Chief Compliance Officer,,Legal,Chief,deptjobtitles.csv
+Chief Legal Officer,,Legal,Chief,deptjobtitles.csv
+Chief IP Counsel,,Legal,Chief,deptjobtitles.csv
+Head of Compliance,,Legal,Chief,deptjobtitles.csv
+Head of Legal,,Legal,Chief,deptjobtitles.csv
+Head of Legal and Compliance,,Legal,Chief,deptjobtitles.csv
+Head of Global Litigation,,Legal,Chief,deptjobtitles.csv
+Chief of Legal Affairs,,Legal,Chief,deptjobtitles.csv
+Chief Legal and Trust Officer,,Legal,Chief,deptjobtitles.csv
+Assistant,,Accounting,Entry,deptjobtitles.csv
+Junior Accountant,,Accounting,Entry,deptjobtitles.csv
+File Clerk,,Accounting,Entry,deptjobtitles.csv
+Intern,,Accounting,Entry,deptjobtitles.csv
+Trainee,,Accounting,Entry,deptjobtitles.csv
+Financial Analyst,,Accounting,Experienced,deptjobtitles.csv
+Financial Accountant,,Accounting,Experienced,deptjobtitles.csv
+Tax Accountant,,Accounting,Experienced,deptjobtitles.csv
+Specialist,,Accounting,Experienced,deptjobtitles.csv
+Analyst,,Accounting,Experienced,deptjobtitles.csv
+Staff Accountant,,Accounting,Experienced,deptjobtitles.csv
+Bookkeeper,,Accounting,Experienced,deptjobtitles.csv
+Consultant,,Accounting,Experienced,deptjobtitles.csv
+Supervisor,,Accounting,Manager,deptjobtitles.csv
+Maanger,,Accounting,Manager,deptjobtitles.csv
+Senior Manager,,Accounting,Manager,deptjobtitles.csv
+Audit Manager,,Accounting,Manager,deptjobtitles.csv
+AP Manager,,Accounting,Manager,deptjobtitles.csv
+AR Manager,,Accounting,Manager,deptjobtitles.csv
+Controller,,Accounting,Director,deptjobtitles.csv
+Comptroller,,Accounting,Director,deptjobtitles.csv
+Financial Controller,,Accounting,Director,deptjobtitles.csv
+Director,,Accounting,Director,deptjobtitles.csv
+Senior Director,,Accounting,Director,deptjobtitles.csv
+Vice President,,Accounting,Executive,deptjobtitles.csv
+Senior Vice President,,Accounting,Executive,deptjobtitles.csv
+Vice President of Finance,,Accounting,Executive,deptjobtitles.csv
+Chief Accounting Officer,,Accounting,Chief,deptjobtitles.csv
+Chief Financial Officer,,Accounting,Chief,deptjobtitles.csv
+Assistant,,Finance,Entry,deptjobtitles.csv
+Junior Financial Analyst,,Finance,Entry,deptjobtitles.csv
+Clerk,,Finance,Entry,deptjobtitles.csv
+Finance Clerk,,Finance,Entry,deptjobtitles.csv
+Intern,,Finance,Entry,deptjobtitles.csv
+Analyst,,Finance,Experienced,deptjobtitles.csv
+Credit Analyst,,Finance,Experienced,deptjobtitles.csv
+Economist,,Finance,Experienced,deptjobtitles.csv
+Budget Analyst,,Finance,Experienced,deptjobtitles.csv
+Purchasing Agent,,Finance,Experienced,deptjobtitles.csv
+Risk Analyst,,Finance,Experienced,deptjobtitles.csv
+Consultant,,Finance,Experienced,deptjobtitles.csv
+Manager,,Finance,Manager,deptjobtitles.csv
+Senior Manager,,Finance,Manager,deptjobtitles.csv
+Purchasing Manager,,Finance,Manager,deptjobtitles.csv
+Risk Manager,,Finance,Manager,deptjobtitles.csv
+Payroll Manager,,Finance,Manager,deptjobtitles.csv
+Director,,Finance,Director,deptjobtitles.csv
+Senior Director,,Finance,Director,deptjobtitles.csv
+Procurement Director,,Finance,Director,deptjobtitles.csv
+Director of Risk Management,,Finance,Director,deptjobtitles.csv
+Payroll Director,,Finance,Director,deptjobtitles.csv
+Vice President,,Finance,Executive,deptjobtitles.csv
+Senior Vice President,,Finance,Executive,deptjobtitles.csv
+VP of Procurement,,Finance,Executive,deptjobtitles.csv
+VP of Corporate Development,,Finance,Executive,deptjobtitles.csv
+VP of Payroll,,Finance,Executive,deptjobtitles.csv
+Chief Financial Officer,,Finance,Chief,deptjobtitles.csv
+Assistant,,Payroll,Entry,deptjobtitles.csv
+Junior Accountant,,Payroll,Entry,deptjobtitles.csv
+File Clerk,,Payroll,Entry,deptjobtitles.csv
+Intern,,Payroll,Entry,deptjobtitles.csv
+Trainee,,Payroll,Entry,deptjobtitles.csv
+Analyst,,Payroll,Experienced,deptjobtitles.csv
+Accountant,,Payroll,Experienced,deptjobtitles.csv
+Tax Accountant,,Payroll,Experienced,deptjobtitles.csv
+Specialist,,Payroll,Experienced,deptjobtitles.csv
+Staff Accountant,,Payroll,Experienced,deptjobtitles.csv
+Bookkeeper,,Payroll,Experienced,deptjobtitles.csv
+Consultant,,Payroll,Experienced,deptjobtitles.csv
+Supervisor,,Payroll,Manager,deptjobtitles.csv
+Manager,,Payroll,Manager,deptjobtitles.csv
+Senior Manager,,Payroll,Manager,deptjobtitles.csv
+Audit Manager,,Payroll,Manager,deptjobtitles.csv
+Controller,,Payroll,Director,deptjobtitles.csv
+Comptroller,,Payroll,Director,deptjobtitles.csv
+Accounting Controller,,Payroll,Director,deptjobtitles.csv
+Director,,Payroll,Director,deptjobtitles.csv
+Senior Director,,Payroll,Director,deptjobtitles.csv
+Vice President,,Payroll,Executive,deptjobtitles.csv
+Senior Vice President,,Payroll,Executive,deptjobtitles.csv
+Chief Accounting Officer,,Payroll,Chief,deptjobtitles.csv
+Chief Financial Officer,,Payroll,Chief,deptjobtitles.csv
+Intern,,Sales,Entry,deptjobtitles.csv
+Analyst,,Sales,Entry,deptjobtitles.csv
+Trainee,,Sales,Entry,deptjobtitles.csv
+Assistant,,Sales,Entry,deptjobtitles.csv
+Representative,,Sales,Experienced,deptjobtitles.csv
+Specialist,,Sales,Experienced,deptjobtitles.csv
+Account Representative,,Sales,Experienced,deptjobtitles.csv
+Associate,,Sales,Experienced,deptjobtitles.csv
+Consultant,,Sales,Experienced,deptjobtitles.csv
+Manager,,Sales,Manager,deptjobtitles.csv
+Senior Manager,,Sales,Manager,deptjobtitles.csv
+Account Manager,,Sales,Manager,deptjobtitles.csv
+Area Sales Manager,,Sales,Manager,deptjobtitles.csv
+Director,,Sales,Director,deptjobtitles.csv
+Senior Director,,Sales,Director,deptjobtitles.csv
+Director of Inside Sales,,Sales,Director,deptjobtitles.csv
+Director of National Sales,,Sales,Director,deptjobtitles.csv
+Account Executive,,Sales,Executive,deptjobtitles.csv
+Vice President,,Sales,Executive,deptjobtitles.csv
+Senior Vice President,,Sales,Executive,deptjobtitles.csv
+Vice President of International Sales,,Sales,Executive,deptjobtitles.csv
+Vice President of Sales Operations,,Sales,Executive,deptjobtitles.csv
+Chief Revenue Officer,,Sales,Chief,deptjobtitles.csv
+Intern,,Information Technology,Entry,deptjobtitles.csv
+Trainee,,Information Technology,Entry,deptjobtitles.csv
+Assistant,,Information Technology,Entry,deptjobtitles.csv
+Analyst,,Information Technology,Entry,deptjobtitles.csv
+Help Desk Analyst,,Information Technology,Entry,deptjobtitles.csv
+SOC Analyst,,Information Technology,Entry,deptjobtitles.csv
+Data Analyst,,Information Technology,Experienced,deptjobtitles.csv
+Data Scientist,,Information Technology,Experienced,deptjobtitles.csv
+Systems Administrator,,Information Technology,Experienced,deptjobtitles.csv
+Computer Technician,,Information Technology,Experienced,deptjobtitles.csv
+WA Tester,,Information Technology,Experienced,deptjobtitles.csv
+Network Administrator,,Information Technology,Experienced,deptjobtitles.csv
+Database Administrator,,Information Technology,Experienced,deptjobtitles.csv
+Desktop Support,,Information Technology,Experienced,deptjobtitles.csv
+Solution Architect,,Information Technology,Experienced,deptjobtitles.csv
+Network Architect,,Information Technology,Experienced,deptjobtitles.csv
+Network Engineer,,Information Technology,Experienced,deptjobtitles.csv
+Cloud Architect,,Information Technology,Experienced,deptjobtitles.csv
+Specialist,,Information Technology,Experienced,deptjobtitles.csv
+Cloud Engineer,,Information Technology,Experienced,deptjobtitles.csv
+Security Engineer,,Information Technology,Experienced,deptjobtitles.csv
+Lead Security Engineer,,Information Technology,Experienced,deptjobtitles.csv
+Cyber Security Engineer,,Information Technology,Experienced,deptjobtitles.csv
+Penetration Tester,,Information Technology,Experienced,deptjobtitles.csv
+Cyber Security Technician,,Information Technology,Experienced,deptjobtitles.csv
+Data Security Analyst,,Information Technology,Experienced,deptjobtitles.csv
+Cryptographer,,Information Technology,Experienced,deptjobtitles.csv
+Consultant,,Information Technology,Experienced,deptjobtitles.csv
+Manager,,Information Technology,Manager,deptjobtitles.csv
+Senior Manager,,Information Technology,Manager,deptjobtitles.csv
+Helpdesk Manager,,Information Technology,Manager,deptjobtitles.csv
+Helpdesk Supervisor,,Information Technology,Manager,deptjobtitles.csv
+Supervisor,,Information Technology,Manager,deptjobtitles.csv
+Network Manager,,Information Technology,Manager,deptjobtitles.csv
+Manager,,Information Technology,Manager,deptjobtitles.csv
+Senior Manager,,Information Technology,Manager,deptjobtitles.csv
+Director,,Information Technology,Director,deptjobtitles.csv
+Senior Director,,Information Technology,Director,deptjobtitles.csv
+Director of Ethical Hacking,,Information Technology,Director,deptjobtitles.csv
+Vice President,,Information Technology,Executive,deptjobtitles.csv
+Senior Vice President,,Information Technology,Executive,deptjobtitles.csv
+Executive,,Information Technology,Executive,deptjobtitles.csv
+Chief Technology Officer,,Information Technology,Chief,deptjobtitles.csv
+Chief Information Officer,,Information Technology,Chief,deptjobtitles.csv
+Chief Executive Officer,,Information Technology,Chief,deptjobtitles.csv
+Chief Information Security Officer,,Information Technology,Chief,deptjobtitles.csv
+Chief Security Officer,,Information Technology,Chief,deptjobtitles.csv
+Intern,,Software Development,Entry,deptjobtitles.csv
+Entry-Level Coordinator,,Software Development,Entry,deptjobtitles.csv
+Trainee,,Software Development,Entry,deptjobtitles.csv
+Entry-Level Software Developer,,Software Development,Entry,deptjobtitles.csv
+Web Developer,,Software Development,Experienced,deptjobtitles.csv
+Developer,,Software Development,Experienced,deptjobtitles.csv
+Software Engineer,,Software Development,Experienced,deptjobtitles.csv
+Solutions Architect,,Software Development,Experienced,deptjobtitles.csv
+Front End Developer,,Software Development,Experienced,deptjobtitles.csv
+SQL Developer,,Software Development,Experienced,deptjobtitles.csv
+Salesforce Developer,,Software Development,Experienced,deptjobtitles.csv
+Game Developer,,Software Development,Experienced,deptjobtitles.csv
+Programmer,,Software Development,Experienced,deptjobtitles.csv
+Data Engineer,,Software Development,Experienced,deptjobtitles.csv
+Application Security Engineer,,Software Development,Experienced,deptjobtitles.csv
+Consultant,,Software Development,Experienced,deptjobtitles.csv
+Back-End Developer,,Software Development,Experienced,deptjobtitles.csv
+Full-Stack Developer,,Software Development,Experienced,deptjobtitles.csv
+Software Ninjaneer,,Software Development,Experienced,deptjobtitles.csv
+Manager,,Software Development,Manager,deptjobtitles.csv
+Senior Manager,,Software Development,Manager,deptjobtitles.csv
+Engineering Project Management,,Software Development,Manager,deptjobtitles.csv
+Director,,Software Development,Director,deptjobtitles.csv
+Senior Director,,Software Development,Director,deptjobtitles.csv
+Vice President,,Software Development,Executive,deptjobtitles.csv
+Senior Vice President,,Software Development,Executive,deptjobtitles.csv
+Chief Technology Officer,,Software Development,Chief,deptjobtitles.csv
+Chief Information Officer,,Software Development,Chief,deptjobtitles.csv
+Chief Executive Officer,,Software Development,Chief,deptjobtitles.csv
+Intern,Entry,,Entry,generaltitles.csv
+Assistant,Entry,,Entry,generaltitles.csv
+Trainee,Entry,,Entry,generaltitles.csv
+Representative,Experienced,,Experienced,generaltitles.csv
+Analyst,Experienced,,Experienced,generaltitles.csv
+Specialist,Experienced,,Experienced,generaltitles.csv
+Coordinator,Experienced,,Experienced,generaltitles.csv
+Generalist,Experienced,,Experienced,generaltitles.csv
+Associate,Experienced,,Experienced,generaltitles.csv
+Agent,Experienced,,Experienced,generaltitles.csv
+Consultant,Experienced,,Experienced,generaltitles.csv
+Lead,Manager,,Manager,generaltitles.csv
+Manager,Manager,,Manager,generaltitles.csv
+Senior Manager,Manager,,Manager,generaltitles.csv
+Director,Director,,Director,generaltitles.csv
+Senior Director,Director,,Director,generaltitles.csv
+Vice President,Executive,,Executive,generaltitles.csv
+Senior Vice President,Executive,,Executive,generaltitles.csv
+President,Executive,,Executive,generaltitles.csv
+Chief Department Officer,Chief,,Chief,generaltitles.csv
+Department,Specialized,,Specialized,generaltitles.csv

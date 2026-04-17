@@ -1,0 +1,36 @@
+{
+  "name": "Hybrid Identity Lab",
+  "description": "Hybrid identity and remote-work world for AD plus Entra validation.",
+  "template": "GlobalSaaS",
+  "overlays": [
+    "RemoteWorkforce",
+    "IdentityHeavy"
+  ],
+  "companyCount": 1,
+  "industryProfile": "Software",
+  "geographyProfile": "North-America",
+  "deviationProfile": "Realistic",
+  "employeeSize": {
+    "minimum": 1500,
+    "maximum": 2400
+  },
+  "identity": {
+    "includeHybridDirectory": true,
+    "includeM365StyleGroups": true,
+    "includeExternalWorkforce": true,
+    "includeB2BGuests": true,
+    "staleAccountRate": 0.05
+  },
+  "infrastructure": {
+    "includeServers": true,
+    "includeWorkstations": true,
+    "includeNetworkAssets": true,
+    "includeTelephony": false
+  },
+  "repositories": {
+    "includeDatabases": true,
+    "includeFileShares": true,
+    "includeCollaborationSites": true
+  },
+  "officeCount": 5
+}

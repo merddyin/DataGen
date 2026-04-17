@@ -1,0 +1,52 @@
+---
+title: CMDB and Observed Data
+description: Understand canonical configuration items, source-facing CMDB views, and observed data in DataGen.
+---
+
+# CMDB and Observed Data
+
+DataGen now models CMDB realism as a first-class capability rather than a downstream afterthought.
+
+## CMDB is optional
+
+CMDB generation is intentionally opt-in. That keeps foundational world generation lean when you do not need service-management or discovery-oriented output.
+
+## Three useful layers
+
+The current CMDB shape is easiest to understand as three layers:
+
+1. Canonical configuration items and relationships
+2. Source-facing records such as CMDB, discovery, service catalog, and spreadsheet-import views
+3. Drift between canonical truth and what those sources currently claim
+
+## What this enables
+
+This lets DataGen produce worlds where:
+
+- some applications are known canonically but missing from the CMDB
+- some discovery records exist without proper ownership
+- a service catalog entry exists for something not formally deployed
+- classifications and criticality are partial or inconsistent
+
+## Observed data
+
+Observed data is separate from CMDB and is meant to represent what a source system or operational viewpoint sees about the environment.
+
+That distinction is useful because:
+
+- CMDB often reflects managed records
+- observed data often reflects operational or discovery views
+- the two do not perfectly line up in real environments
+
+## Recommended usage
+
+Use CMDB generation when:
+
+- you are validating discovery or reconciliation tooling
+- you need richer service-management realism
+- you want canonical vs source-system drift
+
+Keep it disabled when:
+
+- you only need identity or infrastructure population
+- you want a lighter-weight world focused on a single surface area

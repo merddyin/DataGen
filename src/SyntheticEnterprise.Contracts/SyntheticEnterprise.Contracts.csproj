@@ -4,4 +4,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Contracts\*.cs" Link="Recovered\Contracts\%(Filename)%(Extension)" />
+    <Compile Include="..\Contracts\Anomalies\*.cs" Link="Recovered\Contracts\Anomalies\%(Filename)%(Extension)" />
+    <Compile Include="..\SyntheticEnterprise\Contracts\*.cs" Link="Recovered\Contracts\Regeneration\%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

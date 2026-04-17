@@ -1,0 +1,10 @@
+IndustryTags,MatchCategory,MatchCapability,MatchNameContains,TargetRelationshipType,TargetSegment,LinkRelationshipType,IntegrationType,Criticality,MaximumLinks,MinimumEmployees
+Manufacturing|Industrials,Sales,Customer Relationship Management,,Customer,StrategicAccount,CustomerIntegration,DealerPortal,High,4,100
+Manufacturing|Industrials,Marketing,,,Partner,ChannelPartner,PartnerIntegration,PartnerCampaignWorkspace,Medium,2,100
+Manufacturing|Industrials,Operations,,Warehouse,Partner,DistributionPartner,PartnerIntegration,LogisticsVisibility,High,3,250
+Manufacturing|Industrials,Operations,,Supplier,Vendor,StrategicSupplier,SupplierIntegration,SupplierQualityExchange,High,4,250
+Manufacturing|Industrials,Operations,Enterprise Resource Planning,,Vendor,StrategicSupplier,SupplierIntegration,B2BOrManagedService,High,6,250
+All,Sales,Customer Relationship Management,,Customer,RegionalAccount,CustomerIntegration,PortalOrEDI,Medium,4,100
+All,Marketing,,,Partner,ChannelPartner,PartnerIntegration,PartnerPortalOrEDI,Medium,2,100
+All,Operations,,Procure,Vendor,OperationalSupplier,SupplierIntegration,B2BOrManagedService,Medium,4,100
+All,Operations,,Warehouse,Vendor,LogisticsProvider,SupplierIntegration,B2BLogisticsGateway,Medium,3,100

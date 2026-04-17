@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SyntheticEnterprise.CatalogTool/SyntheticEnterprise.CatalogTool.csproj" />
+    <Project Path="src/SyntheticEnterprise.Contracts/SyntheticEnterprise.Contracts.csproj" />
+    <Project Path="src/SyntheticEnterprise.Core/SyntheticEnterprise.Core.csproj" />
+    <Project Path="src/SyntheticEnterprise.Exporting/SyntheticEnterprise.Exporting.csproj" />
+    <Project Path="src/SyntheticEnterprise.PluginHost/SyntheticEnterprise.PluginHost.csproj" />
+    <Project Path="src/SyntheticEnterprise.PowerShell/SyntheticEnterprise.PowerShell.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SyntheticEnterprise.Core.Tests/SyntheticEnterprise.Core.Tests.csproj" />
+    <Project Path="tests/SyntheticEnterprise.Exporting.Tests/SyntheticEnterprise.Exporting.Tests.csproj" />
+    <Project Path="tests/SyntheticEnterprise.Integration.Tests/SyntheticEnterprise.Integration.Tests.csproj" />
+  </Folder>
+</Solution>

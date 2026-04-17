@@ -1,0 +1,35 @@
+{
+  "name": "Collaboration and Repository Lab",
+  "description": "Repository-heavy world for databases, file shares, collaboration sites, and access evidence.",
+  "template": "GlobalSaaS",
+  "overlays": [
+    "RemoteWorkforce"
+  ],
+  "companyCount": 1,
+  "industryProfile": "Software",
+  "geographyProfile": "Global",
+  "deviationProfile": "Realistic",
+  "employeeSize": {
+    "minimum": 900,
+    "maximum": 1600
+  },
+  "identity": {
+    "includeHybridDirectory": true,
+    "includeM365StyleGroups": true,
+    "includeExternalWorkforce": true,
+    "includeB2BGuests": true,
+    "staleAccountRate": 0.03
+  },
+  "infrastructure": {
+    "includeServers": true,
+    "includeWorkstations": true,
+    "includeNetworkAssets": true,
+    "includeTelephony": false
+  },
+  "repositories": {
+    "includeDatabases": true,
+    "includeFileShares": true,
+    "includeCollaborationSites": true
+  },
+  "officeCount": 5
+}

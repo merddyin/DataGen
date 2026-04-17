@@ -1,0 +1,53 @@
+---
+id: intro
+title: DataGen Documentation
+slug: /intro
+description: Start here for DataGen installation, workflows, scenario authoring, exports, walkthroughs, and SDK guidance.
+---
+
+# DataGen Documentation
+
+DataGen is a synthetic enterprise data generation platform. It procedurally builds realistic enterprise datasets that teams can use for labs, validation, demos, exports, discovery-tool testing, and integration work.
+
+This site is organized around how people actually use the tool:
+
+- author or choose a scenario
+- generate a world
+- inspect or export the output
+- use the data to populate a lab or validate a downstream system
+- extend the generated dataset safely through plugins
+
+## What DataGen is for
+
+DataGen is a good fit when you need believable enterprise structure without hand-curating every user, group, system, application, policy, repository, or CMDB record.
+
+Common use cases include:
+
+- identity and access labs
+- Active Directory and Entra validation environments
+- CMDB and discovery-tool testing
+- collaboration and repository-heavy tenant simulation
+- export-driven integration testing
+- plugin-driven realism overlays
+
+## What makes the current product notable
+
+- Scenario-first authoring with templates, overlays, JSON, and a terminal wizard
+- Rich generation across identity, infrastructure, repositories, applications, policies, access evidence, CMDB, and observed views
+- Configurable realism through deviation profiles such as `Clean`, `Realistic`, and `Aggressive`
+- Normalized export surfaces for downstream tooling
+- A plugin model intentionally constrained to extending the synthetic dataset, not tailoring it for consumer-specific import contracts
+
+## Recommended path through the docs
+
+1. Read [Installation](/getting-started/installation).
+2. Run the [First World](/getting-started/first-world) workflow.
+3. Pick a [Walkthrough](/walkthroughs/general-enterprise-lab) that matches your target lab or validation goal.
+4. Use the [Cmdlet Reference](/reference/cmdlets/scenario-authoring) when you need exact command surfaces.
+5. Read the [Plugin Architecture guide](/sdk/plugin-architecture) before extending the dataset.
+
+## Documentation philosophy
+
+This site is intentionally user-facing. It draws from the project’s architectural and milestone work, but it does not simply publish internal notes. The goal is to help operators, lab builders, SDK authors, and contributors work effectively with the current tool.
+
+If you want to help improve the docs site or the product, see [Contributing](/about/contributing).

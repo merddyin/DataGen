@@ -1,0 +1,57 @@
+---
+title: Catalogs and Generation
+description: Understand catalog-backed generation, packaged SQLite content, and generation layers.
+---
+
+# Catalogs and Generation
+
+DataGen generation is strongly catalog-backed. The module uses curated runtime data to drive geography, applications, vendors, patterns, service relationships, and other realism surfaces.
+
+## Why catalogs matter
+
+Catalogs make the generated output:
+
+- richer than purely heuristic generation
+- more repeatable
+- easier to curate without constantly rewriting generator code
+
+## Packaged runtime catalog
+
+The project ships a packaged SQLite catalog intended for runtime use. The catalog work in recent iterations focused on:
+
+- keeping the packaged footprint practical
+- consolidating overlapping runtime tables
+- preferring curated runtime data over build-time-only sources
+
+## Generation layers
+
+At a high level, generation flows through these major areas:
+
+- organizational structure
+- geography and offices
+- identity and directory surfaces
+- applications and services
+- infrastructure and endpoints
+- repositories and collaboration
+- policies, access evidence, and observed views
+- CMDB and source-record views
+
+## Regeneration and layering
+
+DataGen also supports selective layer addition or regeneration:
+
+- `Add-SEIdentityLayer`
+- `Add-SEInfrastructureLayer`
+- `Add-SERepositoryLayer`
+
+These are useful when you want to enrich or reprocess part of an existing generated world without starting over from scratch.
+
+## Rebuilding the packaged database
+
+Use `New-SECatalogDatabase` when you need to regenerate the packaged SQLite database from the curated source material.
+
+Typical reasons include:
+
+- refreshing seeded runtime content
+- testing catalog changes locally
+- validating packaging size and runtime contents

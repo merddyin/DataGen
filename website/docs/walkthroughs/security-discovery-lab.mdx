@@ -1,0 +1,38 @@
+---
+title: Generate a Security-Focused Discovery Lab
+description: Build a noisier world for discovery, access, and anomaly-oriented validation.
+---
+
+# Generate a Security-Focused Discovery Lab
+
+Use this walkthrough when you want a messier environment with stronger discovery and access-validation value.
+
+## Reference assets
+
+- [Scenario JSON](/examples/scenarios/security-discovery-lab.json)
+- [Reference script](/examples/scripts/generate-security-discovery-lab.ps1)
+
+## Why this scenario is useful
+
+It combines:
+
+- `HighAnomalyDensity`
+- `LegacyInfrastructure`
+- an `Aggressive` deviation profile
+
+That combination gives you a world with richer drift and more operational friction than a baseline walkthrough.
+
+## Steps
+
+```powershell
+$world = New-SEEnterpriseWorld -ScenarioPath .\security-discovery-lab.json -Seed 8891
+$world | Export-SEEnterpriseWorld -OutputPath .\out\security-discovery -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+$world | Get-SEWorldSummary
+```
+
+## Suggested validation checks
+
+- inspect access-control evidence density
+- inspect policy artifacts and target links
+- compare observed views with canonical entities
+- validate that downstream discovery tooling handles noisier structure well

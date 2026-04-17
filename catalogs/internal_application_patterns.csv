@@ -1,0 +1,9 @@
+PatternType,Name,Category,HostingModel,IndustryTags,MinimumEmployees,UserScope,Criticality,DataSensitivity,OwnerHints,BusinessCapability
+Enterprise,{Company} Platform Operations Hub,Operations,Hybrid,All,500,Enterprise,Medium,Internal,Information Technology|Operations,Platform Operations
+Enterprise,{Company} Data Governance Workbench,Analytics,SaaS,All,1000,Enterprise,High,Confidential,Analytics|Information Technology,Data Governance
+Industry,{Company} Supplier Quality Hub,Operations,Hybrid,Manufacturing|Industrials,500,Department,High,Internal,Quality|Operations,Quality Management
+Industry,{Company} Production Genealogy,Operations,Hybrid,Manufacturing|Industrials,750,Enterprise,High,Internal,Operations|Engineering,Production Traceability
+Industry,{Company} Trade Compliance Desk,Operations,SaaS,Manufacturing|Distribution|Industrials,750,Department,High,Confidential,Operations|Procurement|Finance,Trade Compliance
+Industry,{Company} Warranty Resolution Center,Operations,SaaS,Manufacturing|Industrials,500,BusinessUnit,Medium,Internal,Operations|Support,Warranty Management
+Industry,{Company} Liquidity Control Center,Finance,Hybrid,Finance|Financials|Bank|Insurance,500,Enterprise,High,Restricted,Finance|Operations,Liquidity Management
+Industry,{Company} Care Capacity Command,Operations,Hybrid,Healthcare|Health|Medical,500,Office,High,Restricted,Operations,Capacity Management

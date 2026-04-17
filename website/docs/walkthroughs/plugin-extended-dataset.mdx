@@ -1,0 +1,50 @@
+---
+title: Generate a Plugin-Extended Dataset
+description: Run a plugin capability against a generated world while staying inside the DataGen plugin boundary.
+---
+
+# Generate a Plugin-Extended Dataset
+
+Use this walkthrough when you already have a DataGen plugin capability and want to enrich the generated world with additional synthetic records.
+
+## Requirements
+
+- a plugin package or plugin root path
+- the capability name you want to enable
+- a plugin that fits the DataGen plugin model
+
+## Reference assets
+
+- [Base scenario JSON](/examples/scenarios/plugin-extended-dataset.json)
+- [Reference script](/examples/scripts/generate-plugin-extended-dataset.ps1)
+
+## Steps
+
+```powershell
+.\generate-plugin-extended-dataset.ps1 `
+  -PluginRootPath .\plugins `
+  -PluginCapability your.capability.name
+```
+
+## Important reminder
+
+This walkthrough assumes the plugin extends the synthetic dataset itself. It is **not** meant for consumer-specific import shaping.
+
+Good plugin examples include:
+
+- additional identifiers
+- richer metadata
+- realism overlays tied to real generated entities
+
+Bad plugin examples include:
+
+- emitting a downstream tool’s import payload
+- calling a downstream ingestion endpoint
+- restructuring the world for one consumer’s internal schema
+
+## What to validate
+
+- the plugin is discovered correctly
+- the capability is enabled intentionally
+- the resulting world contains the new synthetic records you expect
+- exports still look coherent after the enrichment

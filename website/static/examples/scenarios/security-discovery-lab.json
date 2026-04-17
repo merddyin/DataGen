@@ -1,0 +1,36 @@
+{
+  "name": "Security Discovery Lab",
+  "description": "High-noise environment for discovery, access, and anomaly-oriented validation.",
+  "template": "HealthcareNetwork",
+  "overlays": [
+    "HighAnomalyDensity",
+    "LegacyInfrastructure"
+  ],
+  "companyCount": 1,
+  "industryProfile": "Healthcare",
+  "geographyProfile": "Regional-US",
+  "deviationProfile": "Aggressive",
+  "employeeSize": {
+    "minimum": 2200,
+    "maximum": 4200
+  },
+  "identity": {
+    "includeHybridDirectory": true,
+    "includeM365StyleGroups": true,
+    "includeExternalWorkforce": true,
+    "includeB2BGuests": true,
+    "staleAccountRate": 0.08
+  },
+  "infrastructure": {
+    "includeServers": true,
+    "includeWorkstations": true,
+    "includeNetworkAssets": true,
+    "includeTelephony": true
+  },
+  "repositories": {
+    "includeDatabases": true,
+    "includeFileShares": true,
+    "includeCollaborationSites": true
+  },
+  "officeCount": 8
+}

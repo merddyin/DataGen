@@ -1,0 +1,20 @@
+IndustryTags,Name,Domain,BusinessCapability,OperatingModel,ProcessScope,Criticality,CustomerFacing,OwnerHints,MinimumEmployees
+Manufacturing|Industrials,Plan to Produce,Manufacturing,Manufacturing Planning,SiteBased,Enterprise,High,false,Operations|Engineering,250
+Manufacturing|Industrials,Source to Deliver,Supply Chain,Logistics Coordination,Regional,Enterprise,High,true,Operations|Procurement,250
+Manufacturing|Industrials,Quality to Release,Manufacturing,Quality Management,SiteBased,Enterprise,High,false,Operations|Engineering,100
+Manufacturing|Industrials,Maintain to Operate,Manufacturing,Asset Lifecycle,Regional,Office,Medium,false,Operations|Information Technology,100
+Distribution|Retail|Consumer,Forecast to Fulfillment,Supply Chain,Demand Fulfillment,Regional,Enterprise,High,true,Operations|Procurement,150
+Distribution|Retail|Consumer,Merchandise to Margin,Revenue,Merchandising Operations,Regional,BusinessUnit,High,true,Sales|Marketing|Operations,250
+Technology|Information|Software,Idea to Release,Engineering,Product Delivery,BusinessUnit,BusinessUnit,High,true,Engineering|Information Technology,100
+Technology|Information|Software,Lead to Subscription,Revenue,Recurring Revenue,Regional,BusinessUnit,High,true,Sales|Marketing,100
+Technology|Information|Software,Incident to Recovery,Operations,Service Reliability,Centralized,Enterprise,High,false,Information Technology|Operations,100
+Finance|Financials|Bank|Insurance,KYC to Account,Revenue,Client Onboarding,Centralized,Enterprise,High,true,Operations|Security|Sales,250
+Finance|Financials|Bank|Insurance,Trade to Settle,Finance,Treasury Operations,Centralized,Enterprise,High,false,Finance|Operations,250
+Finance|Financials|Bank|Insurance,Fraud to Resolution,Security,Fraud Operations,Centralized,Enterprise,High,true,Security|Operations,250
+Healthcare|Health|Pharma|Medical,Referral to Care,Operations,Patient Access,Regional,BusinessUnit,High,true,Operations|Support,150
+Healthcare|Health|Pharma|Medical,Case to Treatment,Operations,Care Delivery,SiteBased,BusinessUnit,High,true,Operations|Support,250
+Healthcare|Health|Pharma|Medical,Claim to Payment,Finance,Revenue Integrity,Centralized,Enterprise,High,false,Finance|Operations,250
+Communication|Telecom|Media,Subscriber to Cash,Revenue,Subscriber Revenue,Regional,Enterprise,High,true,Sales|Operations,250
+Communication|Telecom|Media,Ticket to Restore,Operations,Network Reliability,Regional,Enterprise,High,true,Operations|Information Technology,250
+Energy|Utilities,Outage to Restore,Operations,Field Service Restoration,Regional,Office,High,true,Operations|Engineering,250
+Energy|Utilities,Meter to Cash,Revenue,Utility Billing,Centralized,Enterprise,High,true,Finance|Operations,250

@@ -1,0 +1,275 @@
+{
+  "version": "2026.04",
+  "tables": [
+    {
+      "tableName": "first_names_country",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_country.csv" ]
+    },
+    {
+      "tableName": "last_names_country",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "last_names_country.csv" ]
+    },
+    {
+      "tableName": "departments",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "departments.csv" ]
+    },
+    {
+      "tableName": "titles",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "titles.csv" ]
+    },
+    {
+      "tableName": "industries",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "industries.csv" ]
+    },
+    {
+      "tableName": "company_size_bands",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "company_size_bands.csv" ]
+    },
+    {
+      "tableName": "continents",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "continents.csv" ]
+    },
+    {
+      "tableName": "countries_reference",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "countries_reference.csv" ]
+    },
+    {
+      "tableName": "country_identity_rules",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "country_identity_rules.csv" ]
+    },
+    {
+      "tableName": "locality_reference",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "locality_reference.csv" ]
+    },
+    {
+      "tableName": "company_name_elements",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "company_name_elements.csv" ]
+    },
+    {
+      "tableName": "first_names_gendered",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_gendered.csv" ]
+    },
+    {
+      "tableName": "given_names_male",
+      "strategy": "line_list_name",
+      "sourceFiles": [ "given-male.txt" ]
+    },
+    {
+      "tableName": "given_names_female",
+      "strategy": "line_list_name",
+      "sourceFiles": [ "given-female.txt" ]
+    },
+    {
+      "tableName": "surnames_reference",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "surnames_reference.csv" ]
+    },
+    {
+      "tableName": "company_suffixes",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "company_suffixes.csv" ]
+    },
+    {
+      "tableName": "domain_suffixes",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "domain_suffixes.csv" ]
+    },
+    {
+      "tableName": "street_suffixes",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "street_suffixes.csv" ]
+    },
+    {
+      "tableName": "taglines",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "taglines.csv" ]
+    },
+    {
+      "tableName": "counterparty_name_prefixes",
+      "strategy": "line_list_value",
+      "sourceFiles": [ "counterparty-prefixes.txt" ]
+    },
+    {
+      "tableName": "counterparty_name_terms",
+      "strategy": "line_list_value",
+      "sourceFiles": [ "counterparty-terms.txt" ]
+    },
+    {
+      "tableName": "software_catalog",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "software_catalog.csv" ]
+    },
+    {
+      "tableName": "application_templates",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_templates.csv" ]
+    },
+    {
+      "tableName": "enterprise_platform_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "enterprise_platform_patterns.csv" ]
+    },
+    {
+      "tableName": "essential_software_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "essential_software_patterns.csv" ]
+    },
+    {
+      "tableName": "application_suite_templates",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_suite_templates.csv" ]
+    },
+    {
+      "tableName": "business_process_templates",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "business_process_templates.csv" ]
+    },
+    {
+      "tableName": "industry_process_templates",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "industry_process_templates.csv" ]
+    },
+    {
+      "tableName": "contextual_business_process_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "contextual_business_process_patterns.csv" ]
+    },
+    {
+      "tableName": "industry_system_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "industry_system_patterns.csv" ]
+    },
+    {
+      "tableName": "industry_application_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "industry_application_patterns.csv" ]
+    },
+    {
+      "tableName": "internal_application_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "internal_application_patterns.csv" ]
+    },
+    {
+      "tableName": "department_application_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "department_application_patterns.csv" ]
+    },
+    {
+      "tableName": "office_application_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "office_application_patterns.csv" ]
+    },
+    {
+      "tableName": "application_dependency_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_dependency_patterns.csv" ]
+    },
+    {
+      "tableName": "application_topology_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_topology_patterns.csv" ]
+    },
+    {
+      "tableName": "application_service_dependency_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_service_dependency_patterns.csv" ]
+    },
+    {
+      "tableName": "application_service_hosting_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_service_hosting_patterns.csv" ]
+    },
+    {
+      "tableName": "application_process_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_process_patterns.csv" ]
+    },
+    {
+      "tableName": "application_repository_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_repository_patterns.csv" ]
+    },
+    {
+      "tableName": "application_collaboration_tab_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_collaboration_tab_patterns.csv" ]
+    },
+    {
+      "tableName": "collaboration_channel_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "collaboration_channel_patterns.csv" ]
+    },
+    {
+      "tableName": "document_library_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "document_library_patterns.csv" ]
+    },
+    {
+      "tableName": "site_page_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "site_page_patterns.csv" ]
+    },
+    {
+      "tableName": "document_folder_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "document_folder_patterns.csv" ]
+    },
+    {
+      "tableName": "application_counterparty_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "application_counterparty_patterns.csv" ]
+    },
+    {
+      "tableName": "business_process_counterparty_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "business_process_counterparty_patterns.csv" ]
+    },
+    {
+      "tableName": "observed_source_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "observed_source_patterns.csv" ]
+    },
+    {
+      "tableName": "cloud_tenant_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "cloud_tenant_patterns.csv" ]
+    },
+    {
+      "tableName": "industry_counterparty_patterns",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "industry_counterparty_patterns.csv" ]
+    },
+    {
+      "tableName": "organization_templates",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "organization_templates.csv" ]
+    },
+    {
+      "tableName": "vendor_reference",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "vendor_reference.csv" ]
+    },
+    {
+      "tableName": "vendor_aliases",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "vendor_aliases.csv" ]
+    },
+    {
+      "tableName": "fake_companies_reference",
+      "strategy": "fake_company_reference",
+      "sourceFiles": [ "fake_companies_reference.csv", "faux_id_fake_companies.csv" ]
+    }
+  ]
+}

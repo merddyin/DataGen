@@ -1,0 +1,11 @@
+MatchVendor,MatchNameContains,MatchCategory,IndustryTags,MinimumEmployees,Provider,TenantType,DomainSuffix,AuthenticationModel,RelationshipType
+Microsoft,,Security|Collaboration|Productivity|Analytics,All,1,Microsoft,ProductivitySuite,tenant.onmicrosoft.com,Federated,PrimaryWorkspace
+Salesforce,,Sales|Marketing|Analytics,All,1,Salesforce,BusinessApps,my.salesforce.com,Federated,BusinessWorkspace
+Atlassian,,Developer|Productivity,All,1,Atlassian,KnowledgeAndDelivery,atlassian.net,Federated,PrimaryTenant
+ServiceNow,,Operations,All,1,ServiceNow,ITServiceManagement,service-now.com,Federated,PrimaryTenant
+Workday,,HR,All,1,Workday,HumanCapitalManagement,workday.com,Federated,PrimaryTenant
+Okta,,Security,All,1,Okta,Identity,okta.com,Federated,IdentityControlPlane
+SAP,S/4HANA,Operations,Manufacturing|Distribution,500,SAP,BusinessApps,saps4hana.cloud,Federated,PrimaryTenant
+Databricks,,Analytics,All,500,Databricks,DataPlatform,databricks.com,Federated,AnalyticalWorkspace
+Snowflake,,Analytics,All,500,Snowflake,DataPlatform,snowflakecomputing.com,Federated,AnalyticalWorkspace
+Zoom,,Collaboration,All,1,Zoom,Collaboration,zoom.us,Federated,PrimaryWorkspace

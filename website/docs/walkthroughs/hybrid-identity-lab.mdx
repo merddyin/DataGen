@@ -1,0 +1,35 @@
+---
+title: Generate a Hybrid AD + Entra Environment
+description: Generate a world that mixes on-prem directory realism with cloud identity and collaboration.
+---
+
+# Generate a Hybrid AD + Entra Environment
+
+This walkthrough is useful when you need both sides of the hybrid story in one world.
+
+## Reference assets
+
+- [Scenario JSON](/examples/scenarios/hybrid-identity-lab.json)
+- [Reference script](/examples/scripts/generate-hybrid-identity-lab.ps1)
+
+## Steps
+
+```powershell
+$world = New-SEEnterpriseWorld -ScenarioPath .\hybrid-identity-lab.json -Seed 5079
+$world | Save-SEEnterpriseWorld -Path .\out\hybrid-identity.seworld -Compress
+$world | Export-SEEnterpriseWorld -OutputPath .\out\hybrid-identity -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+```
+
+## What this scenario is tuned for
+
+- hybrid directory behavior
+- Microsoft 365-style groups
+- guest and external workforce presence
+- collaboration-rich tenant behavior
+- enough infrastructure to support endpoint and hosting-oriented checks
+
+## Typical uses
+
+- hybrid identity labs
+- cross-surface discovery validation
+- demos that need both on-prem and cloud narratives

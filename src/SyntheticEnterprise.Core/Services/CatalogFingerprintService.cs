@@ -35,8 +35,7 @@ public sealed class CatalogFingerprintService : ICatalogFingerprintService
             });
         }
 
-        var aggregateMaterial = string.Join("
-", result.Files.Select(f => $"{f.RelativePath}|{f.Sha256}|{f.RowCount}|{f.SchemaSignature}"));
+        var aggregateMaterial = string.Join("\n", result.Files.Select(f => $"{f.RelativePath}|{f.Sha256}|{f.RowCount}|{f.SchemaSignature}"));
         result.AggregateSha256 = ComputeSha256FromString(aggregateMaterial);
         return result;
     }

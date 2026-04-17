@@ -12,10 +12,20 @@ public sealed class SnapshotSerializer : ISnapshotSerializer
         WriteIndented = true
     };
 
-    public void Save<T>(T payload, string path, bool compress)
+    public void Save(object payload, string path, bool compress)
     {
-        var envelope = payload as SnapshotEnvelope<T> ?? throw new InvalidDataException("Payload must already be wrapped in a SnapshotEnvelope.");
-        envelope.IsCompressed = compress;
+        if (payload is null)
+        {
+            throw new ArgumentNullException(nameof(payload));
+        }
+
+        var envelopeType = payload.GetType();
+        if (!envelopeType.IsGenericType || envelopeType.GetGenericTypeDefinition() != typeof(SnapshotEnvelope<>))
+        {
+            throw new InvalidDataException("Payload must already be wrapped in a SnapshotEnvelope.");
+        }
+
+        envelopeType.GetProperty(nameof(SnapshotEnvelope<object>.IsCompressed))?.SetValue(payload, compress);
 
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
 
@@ -23,12 +33,12 @@ public sealed class SnapshotSerializer : ISnapshotSerializer
         {
             using var file = File.Create(path);
             using var gzip = new GZipStream(file, CompressionLevel.SmallestSize, leaveOpen: false);
-            JsonSerializer.Serialize(gzip, envelope, Options);
+            JsonSerializer.Serialize(gzip, payload, envelopeType, Options);
             return;
         }
 
         using var stream = File.Create(path);
-        JsonSerializer.Serialize(stream, envelope, Options);
+        JsonSerializer.Serialize(stream, payload, envelopeType, Options);
     }
 
     public T Load<T>(string path)

@@ -1,0 +1,41 @@
+---
+title: Plugin Architecture
+description: The architectural intent, safety boundary, and good-fit vs bad-fit examples for DataGen plugins.
+---
+
+# Plugin Architecture
+
+DataGen plugins exist to extend synthetic enterprise data generation.
+
+## The dividing line
+
+DataGen plugins may:
+
+- add new synthetic records
+- enrich existing generated entities
+- add realism deviations
+- generate operational overlays tied to the generated world
+
+DataGen plugins must not:
+
+- translate output into consumer-specific import contracts
+- implement downstream tool adapters
+- call external ingestion endpoints as their primary function
+- reshape the world for one product’s internal schema
+
+## Good-fit examples
+
+- adding synthetic registration identifiers to companies
+- generating extra tax or compliance metadata
+- producing scenario-aware audit-style synthetic events tied to generated users and systems
+- adding richer internal business-service metadata
+
+## Bad-fit examples
+
+- converting DataGen output into a monitoring tool’s import envelope
+- calling a CMDB vendor API directly from the plugin
+- flattening the generated world to match a single consumer product’s schema
+
+## Why this matters
+
+This boundary keeps plugins reusable. A good DataGen plugin should still make sense even if a specific downstream consumer disappeared tomorrow.

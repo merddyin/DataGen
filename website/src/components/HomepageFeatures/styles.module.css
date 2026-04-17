@@ -1,0 +1,51 @@
+.features {
+  padding: 1.5rem 0 2rem;
+}
+
+.sectionLead {
+  max-width: 42rem;
+  margin-bottom: 1.5rem;
+}
+
+.sectionLead p {
+  color: var(--site-color-text-soft);
+}
+
+.featureWrap {
+  display: flex;
+}
+
+.featureCard {
+  display: flex;
+  gap: 1rem;
+  width: 100%;
+  height: 100%;
+  padding: 1.25rem;
+  border: 1px solid var(--site-color-border);
+  border-radius: 1.25rem;
+  background: var(--site-color-surface);
+  box-shadow: var(--site-shadow-soft);
+}
+
+.featureVisual {
+  flex: 0 0 92px;
+  width: 92px;
+  height: 92px;
+  border-radius: 1rem;
+}
+
+.featureCard p {
+  margin-bottom: 0;
+  color: var(--site-color-text-soft);
+}
+
+@media screen and (max-width: 996px) {
+  .featureCard {
+    flex-direction: column;
+  }
+
+  .featureVisual {
+    width: 80px;
+    height: 80px;
+  }
+}

@@ -1,0 +1,66 @@
+Name,Industry,Segment,Criticality,IndustryTags,OwnerHints,MinimumEmployees,PrimaryDomain
+Grainger,Industrial Supply,OperationalSupplier,Medium,Manufacturing|Industrials|Distribution,Procurement|Operations,50,grainger.com
+Fastenal,Industrial Supply,OperationalSupplier,Medium,Manufacturing|Industrials|Distribution,Procurement|Operations,50,fastenal.com
+McMaster-Carr,Industrial Supply,OperationalSupplier,Medium,Manufacturing|Industrials|Technology,Procurement|Engineering,50,mcmaster.com
+WESCO,Industrial Distribution,OperationalSupplier,Medium,Manufacturing|Industrials|Distribution,Procurement|Operations,250,wesco.com
+Rockwell Automation,Industrial Automation,StrategicSupplier,High,Manufacturing|Industrials,Operations|Engineering,250,rockwellautomation.com
+Siemens Digital Industries,Industrial Automation,StrategicSupplier,High,Manufacturing|Industrials,Operations|Engineering,250,siemens.com
+AVEVA,Industrial Software,StrategicSupplier,High,Manufacturing|Industrials|Energy,Operations|Engineering,500,aveva.com
+Blue Yonder,Supply Chain Software,StrategicSupplier,High,Manufacturing|Distribution|Retail,Operations|Procurement,500,blueyonder.com
+Kinaxis,Supply Chain Planning,StrategicSupplier,High,Manufacturing|Distribution,Operations|Procurement,500,kinaxis.com
+FedEx,Logistics,LogisticsProvider,Medium,All,Operations|Procurement,50,fedex.com
+UPS,Logistics,LogisticsProvider,Medium,All,Operations|Procurement,50,ups.com
+ADP,Payroll Services,SharedServiceProvider,High,All,Finance|Human Resources,100,adp.com
+UKG,Workforce Technology,SharedServiceProvider,High,All,Human Resources|Information Technology,250,ukg.com
+Accenture,Professional Services,ManagedServiceProvider,Medium,All,Information Technology|Operations,250,accenture.com
+Deloitte,Professional Services,ManagedServiceProvider,Medium,All,Finance|Information Technology,250,deloitte.com
+Kyndryl,Managed Infrastructure,ManagedServiceProvider,Medium,All,Information Technology|Operations,500,kyndryl.com
+CDW,Technology Reseller,TechnologySupplier,Medium,All,Information Technology|Procurement,100,cdw.com
+SHI International,Technology Reseller,TechnologySupplier,Medium,All,Information Technology|Procurement,100,shi.com
+Snowflake,Data Platform,TechnologySupplier,Medium,All,Information Technology|Analytics,250,snowflake.com
+Datadog,Observability,TechnologySupplier,Medium,All,Information Technology|Operations,250,datadoghq.com
+Palo Alto Networks,Cybersecurity,TechnologySupplier,High,All,Security|Information Technology,250,paloaltonetworks.com
+CrowdStrike,Cybersecurity,TechnologySupplier,High,All,Security|Information Technology,250,crowdstrike.com
+Epic,Healthcare IT,StrategicSupplier,High,Healthcare|Health|Medical,Operations|Information Technology,500,epic.com
+Oracle Health,Healthcare IT,StrategicSupplier,High,Healthcare|Health|Medical,Operations|Information Technology,500,oracle.com
+Fiserv,Financial Technology,StrategicSupplier,High,Finance|Financials|Bank|Insurance,Finance|Operations,500,fiserv.com
+Broadridge,Financial Services,StrategicSupplier,High,Finance|Financials|Bank|Insurance,Finance|Operations,500,broadridge.com
+Shopify,Commerce Platform,StrategicSupplier,High,Retail|Consumer,Sales|Operations,250,shopify.com
+Manhattan Associates,Supply Chain Software,StrategicSupplier,High,Distribution|Retail|Consumer,Operations|Procurement,500,manh.com
+Twilio,Communications Platform,TechnologySupplier,Medium,Communication|Telecom|Technology,Information Technology|Operations,250,twilio.com
+Cloudflare,Network Services,TechnologySupplier,Medium,All,Information Technology|Security,250,cloudflare.com
+Microsoft,Technology Platform,TechnologySupplier,High,All,Information Technology|Security,250,microsoft.com
+Google,Technology Platform,TechnologySupplier,Medium,All,Information Technology|Operations,250,google.com
+Oracle,Enterprise Software,StrategicSupplier,High,All,Operations|Finance|Information Technology,500,oracle.com
+SAP,Enterprise Software,StrategicSupplier,High,All,Operations|Finance|Procurement,500,sap.com
+Salesforce,CRM Platform,StrategicSupplier,High,All,Sales|Operations|Marketing,250,salesforce.com
+ServiceNow,Workflow Platform,StrategicSupplier,High,All,Information Technology|Operations,250,servicenow.com
+Workday,HCM Platform,StrategicSupplier,High,All,Human Resources|Information Technology,250,workday.com
+Atlassian,Collaboration Software,TechnologySupplier,Medium,All,Engineering|Information Technology,250,atlassian.com
+Okta,Identity Platform,TechnologySupplier,High,All,Security|Information Technology,250,okta.com
+GitHub,Developer Platform,TechnologySupplier,Medium,All,Engineering|Information Technology,250,github.com
+Databricks,Data Platform,TechnologySupplier,Medium,All,Information Technology|Analytics,500,databricks.com
+Splunk,Security Analytics,TechnologySupplier,High,All,Security|Information Technology,500,splunk.com
+MuleSoft,Integration Platform,TechnologySupplier,Medium,All,Information Technology|Engineering,500,mulesoft.com
+Box,Content Platform,TechnologySupplier,Medium,All,Information Technology|Operations,250,box.com
+Zoom,Collaboration Platform,TechnologySupplier,Medium,All,Information Technology|Operations,250,zoom.us
+Slack,Collaboration Platform,TechnologySupplier,Medium,All,Information Technology|Operations,250,slack.com
+HashiCorp,Infrastructure Automation,TechnologySupplier,Medium,All,Engineering|Information Technology,250,hashicorp.com
+VMware,Virtualization Platform,TechnologySupplier,Medium,All,Information Technology|Operations,250,vmware.com
+Citrix,Digital Workspace,TechnologySupplier,Medium,All,Information Technology|Operations,250,citrix.com
+Infor,Enterprise Software,StrategicSupplier,High,Manufacturing|Distribution|Retail,Operations|Procurement,500,infor.com
+Plex,Manufacturing Software,StrategicSupplier,High,Manufacturing|Industrials,Operations|Engineering,500,plex.com
+PTC,Engineering Software,StrategicSupplier,High,Manufacturing|Industrials,Engineering|Operations,500,ptc.com
+Qualtrics,Experience Management,TechnologySupplier,Medium,All,Marketing|Operations,250,qualtrics.com
+Zendesk,Support Platform,TechnologySupplier,Medium,All,Operations|Support,250,zendesk.com
+Netskope,Security Platform,TechnologySupplier,High,All,Security|Information Technology,250,netskope.com
+SailPoint,Identity Governance,TechnologySupplier,High,All,Security|Information Technology,250,sailpoint.com
+Coupa,Procurement Platform,TechnologySupplier,Medium,All,Procurement|Finance,250,coupa.com
+Alteryx,Analytics Platform,TechnologySupplier,Medium,All,Analytics|Information Technology,250,alteryx.com
+PagerDuty,Operations Platform,TechnologySupplier,Medium,All,Operations|Information Technology,250,pagerduty.com
+Honeywell,Industrial Automation,StrategicSupplier,High,Manufacturing|Industrials|Energy,Operations|Engineering,250,honeywell.com
+Hexagon,Industrial Software,StrategicSupplier,High,Manufacturing|Industrials|Engineering,Engineering|Operations,250,hexagon.com
+QAD,Manufacturing Software,StrategicSupplier,High,Manufacturing|Industrials,Operations|Finance,250,qad.com
+MasterControl,Quality Management Software,TechnologySupplier,Medium,Manufacturing|Healthcare|Life Sciences,Quality|Operations,150,mastercontrol.com
+Guidewire,Insurance Software,StrategicSupplier,High,Finance|Financials|Insurance,Operations|Information Technology,250,guidewire.com
+ION,Financial Technology,TechnologySupplier,Medium,Finance|Financials|Bank,Finance|Information Technology,250,iongroup.com

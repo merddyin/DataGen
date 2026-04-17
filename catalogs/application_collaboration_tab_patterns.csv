@@ -1,0 +1,9 @@
+ChannelType,WorkspaceType,MatchApplicationNameContains,MatchVendor,MatchCategory,PreferredTabName,TabType,TargetType,IndustryTags,MinimumEmployees,IsPinned
+Standard,Department,IT Service Management,,Operations,Operations Dashboard,Application,Application,All,1,true
+Standard,Department,Microsoft Teams,Microsoft,Collaboration,Team Workspace,Application,Application,All,1,true
+Standard,Project,Supplier Quality Hub,,Operations,Supplier Action Tracker,Application,Application,Manufacturing|Industrials,250,true
+Standard,Project,Production Genealogy,,Operations,Production Tracker,Application,Application,Manufacturing|Industrials,250,true
+Standard,Knowledge,Knowledge Portal,,Productivity,Knowledge Portal,Application,Application,All,1,true
+Private,Project,Contract Lifecycle,,Finance,Private Action Tracker,Application,Application,All,1,true
+Shared,Project,Supplier Quality Hub,,Operations,Partner Workspace,Application,Application,Manufacturing|Industrials,250,true
+Shared,Department,ServiceNow IT Service Management,ServiceNow,Operations,Shared Operations Board,Application,Application,All,1,true

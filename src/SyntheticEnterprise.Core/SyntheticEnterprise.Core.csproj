@@ -6,7 +6,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+    <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
     <ProjectReference Include="..\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" />
+    <ProjectReference Include="..\SyntheticEnterprise.PluginHost\SyntheticEnterprise.PluginHost.csproj" ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="..\Services\*.cs" Link="Recovered\Services\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\Anomalies\*.cs" Link="Recovered\Services\Anomalies\%(Filename)%(Extension)" />
+    <Compile Include="..\SyntheticEnterprise\Services\*.cs" Link="Recovered\Services\Regeneration\%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -1,0 +1,36 @@
+{
+  "name": "Entra Lab",
+  "description": "Cloud-first identity lab with guests, admin units, and collaboration-heavy services.",
+  "template": "GlobalSaaS",
+  "overlays": [
+    "RemoteWorkforce",
+    "MultiRegionExpansion"
+  ],
+  "companyCount": 1,
+  "industryProfile": "Software",
+  "geographyProfile": "Global",
+  "deviationProfile": "Realistic",
+  "employeeSize": {
+    "minimum": 1200,
+    "maximum": 1900
+  },
+  "identity": {
+    "includeHybridDirectory": false,
+    "includeM365StyleGroups": true,
+    "includeExternalWorkforce": true,
+    "includeB2BGuests": true,
+    "staleAccountRate": 0.02
+  },
+  "infrastructure": {
+    "includeServers": true,
+    "includeWorkstations": true,
+    "includeNetworkAssets": true,
+    "includeTelephony": false
+  },
+  "repositories": {
+    "includeDatabases": true,
+    "includeFileShares": true,
+    "includeCollaborationSites": true
+  },
+  "officeCount": 6
+}

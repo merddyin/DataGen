@@ -3,49 +3,61 @@ namespace SyntheticEnterprise.Core.Generation;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Plugins;
 
 public sealed class DefaultWorldGenerator : IWorldGenerator
 {
-    private readonly IOrganizationGenerator _organizationGenerator;
-    private readonly IGeographyGenerator _geographyGenerator;
-    private readonly IIdentityGenerator _identityGenerator;
-    private readonly IInfrastructureGenerator _infrastructureGenerator;
-    private readonly IRepositoryGenerator _repositoryGenerator;
-    private readonly IEnumerable<IAnomalyInjector> _anomalyInjectors;
+    private readonly IReadOnlyDictionary<string, IWorldGenerationPlugin> _plugins;
+    private readonly IGenerationPluginExecutionPlanner _planner;
+    private readonly IExternalPluginOrchestrator _externalPluginOrchestrator;
+    private readonly ILayerOwnershipRegistry _layerOwnershipRegistry;
+    private readonly IWorldOwnershipReconciliationService _worldOwnershipReconciliationService;
+    private readonly IWorldReferenceRepairService _worldReferenceRepairService;
+    private readonly IWorldQualityAuditService _worldQualityAuditService;
 
     public DefaultWorldGenerator(
-        IOrganizationGenerator organizationGenerator,
-        IGeographyGenerator geographyGenerator,
-        IIdentityGenerator identityGenerator,
-        IInfrastructureGenerator infrastructureGenerator,
-        IRepositoryGenerator repositoryGenerator,
-        IEnumerable<IAnomalyInjector> anomalyInjectors)
+        IEnumerable<IWorldGenerationPlugin> plugins,
+        IGenerationPluginExecutionPlanner planner,
+        IExternalPluginOrchestrator externalPluginOrchestrator,
+        ILayerOwnershipRegistry layerOwnershipRegistry,
+        IWorldOwnershipReconciliationService worldOwnershipReconciliationService,
+        IWorldReferenceRepairService worldReferenceRepairService,
+        IWorldQualityAuditService worldQualityAuditService)
     {
-        _organizationGenerator = organizationGenerator;
-        _geographyGenerator = geographyGenerator;
-        _identityGenerator = identityGenerator;
-        _infrastructureGenerator = infrastructureGenerator;
-        _repositoryGenerator = repositoryGenerator;
-        _anomalyInjectors = anomalyInjectors;
+        _plugins = plugins.ToDictionary(plugin => plugin.Manifest.Capability, StringComparer.OrdinalIgnoreCase);
+        _planner = planner;
+        _externalPluginOrchestrator = externalPluginOrchestrator;
+        _layerOwnershipRegistry = layerOwnershipRegistry;
+        _worldOwnershipReconciliationService = worldOwnershipReconciliationService;
+        _worldReferenceRepairService = worldReferenceRepairService;
+        _worldQualityAuditService = worldQualityAuditService;
     }
 
     public GenerationResult Generate(GenerationContext context, CatalogSet catalogs)
     {
         var world = new SyntheticEnterpriseWorld();
+        var plan = _planner.BuildPlan(context.Scenario, _plugins.Values);
+        var appliedPlugins = new List<string>();
 
-        _organizationGenerator.GenerateOrganizations(world, context, catalogs);
-        _geographyGenerator.GenerateOffices(world, context, catalogs);
-        _identityGenerator.GenerateIdentity(world, context, catalogs);
-        _infrastructureGenerator.GenerateInfrastructure(world, context, catalogs);
-        _repositoryGenerator.GenerateRepositories(world, context, catalogs);
-
-        foreach (var anomalyProfile in context.Scenario.Anomalies)
+        foreach (var manifest in plan.ActivePlugins)
         {
-            foreach (var injector in _anomalyInjectors)
+            if (_plugins.TryGetValue(manifest.Capability, out var plugin))
             {
-                injector.Apply(world, context, catalogs, anomalyProfile);
+                plugin.Execute(world, context, catalogs);
+                appliedPlugins.Add(manifest.Capability);
             }
         }
+
+        var warnings = new List<string>();
+        var externalPluginResult = _externalPluginOrchestrator.Apply(world, context, catalogs);
+        appliedPlugins.AddRange(externalPluginResult.AppliedCapabilities);
+        warnings.AddRange(externalPluginResult.Warnings);
+        var ownershipResult = _worldOwnershipReconciliationService.Reconcile(world);
+        warnings.AddRange(ownershipResult.Warnings);
+        var repairResult = _worldReferenceRepairService.Repair(world);
+        warnings.AddRange(repairResult.Warnings);
+        var qualityAuditResult = _worldQualityAuditService.Audit(world);
+        warnings.AddRange(qualityAuditResult.Warnings);
 
         return new GenerationResult
         {
@@ -59,7 +71,14 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
                 GroupCount = world.Groups.Count,
                 ApplicationCount = world.Applications.Count,
                 DeviceCount = world.Devices.Count + world.Servers.Count,
-                RepositoryCount = world.Databases.Count + world.FileShares.Count + world.CollaborationSites.Count
+                RepositoryCount = world.Databases.Count
+                    + world.FileShares.Count
+                    + world.CollaborationSites.Count
+                    + world.CollaborationChannels.Count
+                    + world.CollaborationChannelTabs.Count
+                    + world.DocumentLibraries.Count
+                    + world.SitePages.Count
+                    + world.DocumentFolders.Count
             },
             Catalogs = catalogs,
             WorldMetadata = new WorldMetadata
@@ -71,8 +90,10 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
                 CatalogKeys = new HashSet<string>(
                     catalogs.CsvCatalogs.Keys.Concat(catalogs.JsonCatalogs.Keys),
                     StringComparer.OrdinalIgnoreCase),
-                AppliedLayers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Organization", "Geography", "Identity", "Infrastructure", "Repository" }
-            }
+                AppliedLayers = new HashSet<string>(appliedPlugins, StringComparer.OrdinalIgnoreCase),
+                OwnedArtifacts = _layerOwnershipRegistry.GetOwnedArtifacts().ToList()
+            },
+            Warnings = warnings
         };
     }
 }

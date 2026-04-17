@@ -1,0 +1,40 @@
+PatternType,DepartmentMatch,IndustryTags,MinimumEmployees,Name,Category,HostingModel
+Workspace,Finance,All,0,{Company} Cash Position Board,Finance,SaaS
+Specialty,Finance,All,0,{Company} Expense Approvals,Finance,SaaS
+Specialty,Finance,All,0,{Company} Close Calendar,Finance,SaaS
+Specialty,Finance,All,0,{Company} Revenue Recognition Desk,Finance,SaaS
+Workspace,Human Resources,All,0,{Company} People Operations Hub,HR,SaaS
+Specialty,Human Resources,All,0,{Company} Recruiting Desk,HR,SaaS
+Specialty,Human Resources,All,0,{Company} Learning Portal,HR,SaaS
+Specialty,Human Resources,All,0,{Company} Workforce Planning Desk,HR,SaaS
+Workspace,Information Technology,All,0,{Company} Digital Operations Hub,Operations,SaaS
+Specialty,Information Technology,All,0,{Company} Change Calendar,Operations,SaaS
+Specialty,Information Technology,All,250,{Company} Endpoint Governance,Security,Hybrid
+Specialty,Information Technology,All,250,{Company} Endpoint Operations,Security,Hybrid
+Workspace,Engineering,All,0,{Company} Product Engineering Hub,Developer,SaaS
+Specialty,Engineering,All,0,{Company} Architecture Registry,Developer,SaaS
+Specialty,Engineering,All,250,{Company} Release Readiness Board,Developer,Hybrid
+Workspace,Sales,All,0,{Company} Revenue Command Center,Sales,SaaS
+Specialty,Sales,All,0,{Company} Quote Desk,Sales,SaaS
+Specialty,Sales,All,0,{Company} Territory Planner,Sales,SaaS
+Workspace,Marketing,All,0,{Company} Demand Studio,Marketing,SaaS
+Specialty,Marketing,All,0,{Company} Web Content Studio,Marketing,SaaS
+Specialty,Marketing,All,0,{Company} Event Pipeline,Marketing,SaaS
+Workspace,Operations,All,0,{Company} Execution Control Center,Operations,Hybrid
+Specialty,Operations,All,0,{Company} Scheduling Board,Operations,Hybrid
+Specialty,Operations,All,0,{Company} Dispatch Monitor,Operations,Hybrid
+Specialty,Operations,Manufacturing|Industrials,250,{Company} Capacity Commit Console,Operations,Hybrid
+Workspace,Procurement,All,0,{Company} Supplier Coordination Hub,Procurement,SaaS
+Specialty,Procurement,All,0,{Company} Vendor Intake,Procurement,SaaS
+Specialty,Procurement,All,0,{Company} Purchase Queue,Procurement,Hybrid
+Specialty,Procurement,All,250,{Company} Sourcing Exception Desk,Procurement,Hybrid
+Workspace,Security,All,0,{Company} Security Operations Hub,Security,SaaS
+Specialty,Security,All,0,{Company} Exception Review Board,Security,SaaS
+Specialty,Security,All,250,{Company} Threat Intel Workbench,Security,Hybrid
+Specialty,Security,All,250,{Company} Privileged Access Review,Security,Hybrid
+Workspace,Support,All,0,{Company} Service Center,Operations,SaaS
+Specialty,Support,All,0,{Company} Escalation Desk,Operations,SaaS
+Workspace,Legal,All,100,{Company} Legal Operations Hub,Operations,SaaS
+Specialty,Legal,All,100,{Company} Contract Review Desk,Operations,SaaS
+Workspace,Quality,Manufacturing|Industrials|Healthcare|Health|Medical,50,{Company} Quality Command Center,Operations,Hybrid
+Specialty,Quality,Manufacturing|Industrials|Healthcare|Health|Medical,100,{Company} Nonconformance Review Board,Operations,Hybrid
