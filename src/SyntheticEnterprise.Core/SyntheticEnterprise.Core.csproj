@@ -8,6 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
     <PackageReference Include="Microsoft.PowerShell.SDK" Version="7.4.6" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="8.0.3" />
     <ProjectReference Include="..\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" />
     <ProjectReference Include="..\SyntheticEnterprise.PluginHost\SyntheticEnterprise.PluginHost.csproj" ReferenceOutputAssembly="false" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />

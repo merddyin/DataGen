@@ -1,5 +1,6 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import Heading from '@theme/Heading';
 import styles from './styles.module.css';
 
@@ -57,10 +58,12 @@ const FeatureList: FeatureItem[] = [
 ];
 
 function Feature({title, image, description}: FeatureItem) {
+  const imageUrl = useBaseUrl(image);
+
   return (
     <div className={clsx('col col--6', styles.featureWrap)}>
       <div className={styles.featureCard}>
-        <img className={styles.featureVisual} src={image} alt="" />
+        <img className={styles.featureVisual} src={imageUrl} alt="" />
         <div>
           <Heading as="h3">{title}</Heading>
           <p>{description}</p>

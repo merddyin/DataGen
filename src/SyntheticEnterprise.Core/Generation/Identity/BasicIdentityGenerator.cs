@@ -1,6 +1,7 @@
 namespace SyntheticEnterprise.Core.Generation.Identity;
 
 using System.Security.Cryptography;
+using System.Text;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
@@ -515,7 +516,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = passwordLastSet.AddDays(90),
                 PasswordNeverExpires = false,
-                MustChangePasswordAtNextLogon = _randomSource.NextDouble() < 0.02,
+                MustChangePasswordAtNextLogon = ShouldRequirePasswordReset($"employee:{company.Id}:{person.Id}:{person.EmployeeId}", 0.02),
                 UserType = "Member",
                 IdentityProvider = "HybridDirectory",
                 ExternalAccessCategory = "Employee"
@@ -660,7 +661,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = passwordLastSet.AddDays(45),
                 PasswordNeverExpires = false,
-                MustChangePasswordAtNextLogon = _randomSource.NextDouble() < 0.05,
+                MustChangePasswordAtNextLogon = ShouldRequirePasswordReset($"privileged:{company.Id}:{person.Id}:{person.EmployeeId}:{tier}", 0.05),
                 UserType = "Member",
                 IdentityProvider = "HybridDirectory",
                 ExternalAccessCategory = "Privileged"
@@ -1227,7 +1228,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = accountType == "Guest" ? null : passwordLastSet.AddDays(90),
                 PasswordNeverExpires = accountType == "ManagedServiceProvider",
-                MustChangePasswordAtNextLogon = accountType == "Contractor" && _randomSource.NextDouble() < 0.04,
+                MustChangePasswordAtNextLogon = accountType == "Contractor"
+                                                && ShouldRequirePasswordReset($"contractor:{company.Id}:{person.Id}:{person.EmployeeId}:{person.EmployerOrganizationId}", 0.04),
                 UserType = userType,
                 IdentityProvider = accountType == "Guest" || accountType == "ManagedServiceProvider" ? "EntraB2B" : "HybridDirectory",
                 InvitedOrganizationId = person.EmployerOrganizationId,
@@ -2048,6 +2050,19 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
     private static string Truncate(string value, int maxLength)
         => value.Length <= maxLength ? value : value[..maxLength];
+
+    private static bool ShouldRequirePasswordReset(string scopeKey, double threshold)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(scopeKey);
+        ArgumentOutOfRangeException.ThrowIfNegative(threshold);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(threshold, 1d);
+
+        Span<byte> hashBytes = stackalloc byte[32];
+        SHA256.HashData(Encoding.UTF8.GetBytes(scopeKey), hashBytes);
+        var bucket = BitConverter.ToUInt32(hashBytes[..4]);
+        var normalized = bucket / (double)uint.MaxValue;
+        return normalized < threshold;
+    }
 
     private static string CreateUniquePassword(HashSet<string> issuedPasswords, int length = 16)
     {

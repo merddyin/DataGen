@@ -1,6 +1,7 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
+import useBaseUrl from '@docusaurus/useBaseUrl';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
@@ -31,6 +32,7 @@ const walkthroughs = [
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
+  const architectureFlowUrl = useBaseUrl('/img/site/architecture-flow.svg');
 
   return (
     <header className={clsx('hero', styles.heroBanner)}>
@@ -68,7 +70,7 @@ function HomepageHeader() {
           <div className={styles.heroVisualFrame}>
             <img
               className={styles.heroVisual}
-              src="/img/site/architecture-flow.svg"
+              src={architectureFlowUrl}
               alt="DataGen architecture and workflow overview"
             />
           </div>
@@ -108,6 +110,8 @@ function WalkthroughHighlights(): ReactNode {
 }
 
 function DocumentationFlow(): ReactNode {
+  const dataPipelineUrl = useBaseUrl('/img/site/data-pipeline.svg');
+
   return (
     <section className={styles.flowSection}>
       <div className="container">
@@ -122,7 +126,7 @@ function DocumentationFlow(): ReactNode {
         </div>
         <div className={styles.flowPanel}>
           <img
-            src="/img/site/data-pipeline.svg"
+            src={dataPipelineUrl}
             alt="DataGen flow from scenario authoring to world generation and exports"
           />
         </div>
