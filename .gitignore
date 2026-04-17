@@ -367,3 +367,6 @@ temp_*.csx
 website/.docusaurus/
 website/build/
 catalogs/catalogs.sqlite
+legacy_notes/
+tmp/
+docs/DataGen_DTEnvDiscovery_Mapping_Matrix.md
