@@ -13,6 +13,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
     private readonly ILayerOwnershipRegistry _layerOwnershipRegistry;
     private readonly IWorldOwnershipReconciliationService _worldOwnershipReconciliationService;
     private readonly IWorldReferenceRepairService _worldReferenceRepairService;
+    private readonly IWorldInvariantValidator _worldInvariantValidator;
     private readonly IWorldQualityAuditService _worldQualityAuditService;
 
     public DefaultWorldGenerator(
@@ -22,6 +23,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         ILayerOwnershipRegistry layerOwnershipRegistry,
         IWorldOwnershipReconciliationService worldOwnershipReconciliationService,
         IWorldReferenceRepairService worldReferenceRepairService,
+        IWorldInvariantValidator worldInvariantValidator,
         IWorldQualityAuditService worldQualityAuditService)
     {
         _plugins = plugins.ToDictionary(plugin => plugin.Manifest.Capability, StringComparer.OrdinalIgnoreCase);
@@ -30,6 +32,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         _layerOwnershipRegistry = layerOwnershipRegistry;
         _worldOwnershipReconciliationService = worldOwnershipReconciliationService;
         _worldReferenceRepairService = worldReferenceRepairService;
+        _worldInvariantValidator = worldInvariantValidator;
         _worldQualityAuditService = worldQualityAuditService;
     }
 
@@ -56,6 +59,12 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         warnings.AddRange(ownershipResult.Warnings);
         var repairResult = _worldReferenceRepairService.Repair(world);
         warnings.AddRange(repairResult.Warnings);
+        var invariantValidationResult = _worldInvariantValidator.Validate(world);
+        if (invariantValidationResult.Errors.Count > 0)
+        {
+            throw new InvalidOperationException(string.Join(Environment.NewLine, invariantValidationResult.Errors));
+        }
+
         var qualityAuditResult = _worldQualityAuditService.Audit(world);
         warnings.AddRange(qualityAuditResult.Warnings);
 

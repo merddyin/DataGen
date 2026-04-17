@@ -66,9 +66,30 @@ A compact example:
     "includeM365StyleGroups": true,
     "includeB2BGuests": true,
     "staleAccountRate": 0.02
+  },
+  "applications": {
+    "includeApplications": true,
+    "baseApplicationCount": 10,
+    "includeLineOfBusinessApplications": true,
+    "includeSaaSApplications": true
+  },
+  "cmdb": {
+    "includeConfigurationManagement": true,
+    "includeBusinessServices": true,
+    "includeCloudServices": true,
+    "includeAutoDiscoveryRecords": true,
+    "includeServiceCatalogRecords": true,
+    "includeSpreadsheetImportRecords": true,
+    "deviationProfile": "Clean"
+  },
+  "observedData": {
+    "includeObservedViews": true,
+    "coverageRatio": 0.85
   }
 }
 ```
+
+Authored scenarios now preserve application, CMDB, and observed-data settings all the way through resolve, validation, and generation instead of treating them as internal-only knobs.
 
 ## Resolve before generation
 
@@ -91,3 +112,14 @@ Use:
 - `Aggressive` for deliberately messier environments
 
 Read more in [Realism and Deviations](/guides/realism-and-deviations).
+
+## Hard invariants
+
+Deviation profiles do **not** relax core correctness rules.
+
+For example:
+
+- duplicate user principal names are not considered a realistic flaw
+- structurally invalid identity data should fail generation
+
+Use deviation profiles to control believable messiness, not impossible directory states.

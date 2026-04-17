@@ -92,8 +92,11 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             EmployeeSize = new SizeBand { Minimum = 800, Maximum = 1800 },
             OfficeCount = 6,
             Identity = new IdentityProfile { IncludeHybridDirectory = true, IncludeM365StyleGroups = true, StaleAccountRate = 0.02 },
+            Applications = new ApplicationProfile { IncludeApplications = true, BaseApplicationCount = 8, IncludeLineOfBusinessApplications = true, IncludeSaaSApplications = true },
             Infrastructure = new InfrastructureProfile { IncludeServers = true, IncludeWorkstations = true, IncludeNetworkAssets = true, IncludeTelephony = false },
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
+            Cmdb = new CmdbProfile(),
+            ObservedData = new ObservedDataProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
         ScenarioTemplateKind.HealthcareNetwork => new ScenarioEnvelope
@@ -108,8 +111,11 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             EmployeeSize = new SizeBand { Minimum = 2200, Maximum = 4200 },
             OfficeCount = 8,
             Identity = new IdentityProfile { IncludeHybridDirectory = true, IncludeM365StyleGroups = true, StaleAccountRate = 0.05 },
+            Applications = new ApplicationProfile { IncludeApplications = true, BaseApplicationCount = 7, IncludeLineOfBusinessApplications = true, IncludeSaaSApplications = true },
             Infrastructure = new InfrastructureProfile { IncludeServers = true, IncludeWorkstations = true, IncludeNetworkAssets = true, IncludeTelephony = true },
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
+            Cmdb = new CmdbProfile(),
+            ObservedData = new ObservedDataProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
         _ => new ScenarioEnvelope
@@ -124,8 +130,11 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             EmployeeSize = new SizeBand { Minimum = 1800, Maximum = 2600 },
             OfficeCount = 4,
             Identity = new IdentityProfile { IncludeHybridDirectory = true, IncludeM365StyleGroups = true, StaleAccountRate = 0.04 },
+            Applications = new ApplicationProfile { IncludeApplications = true, BaseApplicationCount = 6, IncludeLineOfBusinessApplications = true, IncludeSaaSApplications = true },
             Infrastructure = new InfrastructureProfile { IncludeServers = true, IncludeWorkstations = true, IncludeNetworkAssets = true, IncludeTelephony = true },
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
+            Cmdb = new CmdbProfile(),
+            ObservedData = new ObservedDataProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         }
     };
@@ -219,8 +228,11 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             DeviationProfile = ResolveDeviationProfile(envelope.DeviationProfile),
             EmployeeSize = envelope.EmployeeSize ?? new SizeBand(),
             Identity = envelope.Identity ?? new IdentityProfile(),
+            Applications = envelope.Applications ?? new ApplicationProfile(),
             Infrastructure = envelope.Infrastructure ?? new InfrastructureProfile(),
             Repositories = envelope.Repositories ?? new RepositoryProfile(),
+            Cmdb = envelope.Cmdb ?? new CmdbProfile(),
+            ObservedData = envelope.ObservedData ?? new ObservedDataProfile(),
             ExternalPlugins = envelope.ExternalPlugins ?? new ExternalPluginScenarioProfile(),
             Anomalies = NormalizeAnomalies(envelope.Anomalies),
             Companies = envelope.Companies.Count > 0
@@ -245,8 +257,11 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             DeviationProfile = overlay.DeviationProfile ?? template.DeviationProfile,
             EmployeeSize = overlay.EmployeeSize ?? template.EmployeeSize,
             Identity = overlay.Identity ?? template.Identity,
+            Applications = overlay.Applications ?? template.Applications,
             Infrastructure = overlay.Infrastructure ?? template.Infrastructure,
             Repositories = overlay.Repositories ?? template.Repositories,
+            Cmdb = overlay.Cmdb ?? template.Cmdb,
+            ObservedData = overlay.ObservedData ?? template.ObservedData,
             ExternalPlugins = overlay.ExternalPlugins ?? template.ExternalPlugins,
             Anomalies = overlay.Anomalies.Count > 0 ? overlay.Anomalies.ToList() : template.Anomalies.ToList(),
             Companies = overlay.Companies.Count > 0 ? overlay.Companies.ToList() : template.Companies.ToList(),
@@ -803,8 +818,11 @@ internal static class ScenarioSerializationHelper
                 DeviationProfile = definition.DeviationProfile,
                 EmployeeSize = definition.EmployeeSize,
                 Identity = definition.Identity,
+                Applications = definition.Applications,
                 Infrastructure = definition.Infrastructure,
                 Repositories = definition.Repositories,
+                Cmdb = definition.Cmdb,
+                ObservedData = definition.ObservedData,
                 ExternalPlugins = definition.ExternalPlugins,
                 Anomalies = definition.Anomalies.ToList(),
                 Companies = definition.Companies.ToList()
@@ -845,8 +863,11 @@ file static class ScenarioEnvelopeExtensions
             DeviationProfile = envelope.DeviationProfile,
             EmployeeSize = envelope.EmployeeSize,
             Identity = identity ?? envelope.Identity,
+            Applications = envelope.Applications,
             Infrastructure = infrastructure ?? envelope.Infrastructure,
             Repositories = envelope.Repositories,
+            Cmdb = envelope.Cmdb,
+            ObservedData = envelope.ObservedData,
             ExternalPlugins = envelope.ExternalPlugins,
             Anomalies = anomalies ?? envelope.Anomalies.ToList(),
             Companies = envelope.Companies.ToList(),

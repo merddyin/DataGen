@@ -81,8 +81,11 @@ public sealed class ScenarioEnvelope
     public string? DeviationProfile { get; init; }
     public SizeBand? EmployeeSize { get; init; }
     public IdentityProfile? Identity { get; init; }
+    public ApplicationProfile? Applications { get; init; }
     public InfrastructureProfile? Infrastructure { get; init; }
     public RepositoryProfile? Repositories { get; init; }
+    public CmdbProfile? Cmdb { get; init; }
+    public ObservedDataProfile? ObservedData { get; init; }
     public ExternalPluginScenarioProfile? ExternalPlugins { get; init; }
     public List<AnomalyProfile> Anomalies { get; init; } = new();
     public List<ScenarioCompanyDefinition> Companies { get; init; } = new();

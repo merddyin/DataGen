@@ -9,6 +9,7 @@ One of DataGen’s important current design choices is the separation between:
 
 - enterprise richness
 - realism deviations
+- hard invariants that may not be violated
 
 That means you can still generate a rich world without necessarily injecting the same level of flaws, omissions, and inconsistencies every time.
 
@@ -56,6 +57,23 @@ Before this separation, teams often had to choose between:
 - a sparse but easy-to-control one
 
 Now the goal is to keep richness high while giving you a cleaner lever over realism intensity.
+
+## Hard invariants vs soft deviations
+
+Deviation profiles control the **soft** side of realism:
+
+- missing owners
+- stale CMDB views
+- conflicting policy settings
+- incomplete observed data
+
+They do not permit **hard** correctness failures such as:
+
+- duplicate user principal names
+- structurally invalid identity records
+- impossible reference relationships
+
+If a generated world crosses one of those hard boundaries, generation should fail instead of returning an invalid environment.
 
 ## CMDB-specific override
 

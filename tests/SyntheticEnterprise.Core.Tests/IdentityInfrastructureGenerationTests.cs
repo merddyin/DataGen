@@ -314,4 +314,67 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.Servers, server => server.DistinguishedName!.Contains("OU=Staging", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.Servers, server => server.DistinguishedName!.Contains("OU=Development", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void WorldGenerator_Keeps_External_Account_User_Principal_Names_Unique_At_Scale()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 42,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Large External Workforce",
+                    IndustryProfile = "Manufacturing",
+                    GeographyProfile = "North-America",
+                    EmployeeSize = new SizeBand { Minimum = 4800, Maximum = 5200 },
+                    Identity = new IdentityProfile
+                    {
+                        IncludeHybridDirectory = true,
+                        IncludeM365StyleGroups = true,
+                        IncludeAdministrativeTiers = true,
+                        IncludeExternalWorkforce = true,
+                        IncludeB2BGuests = true,
+                        ContractorRatio = 0.10,
+                        ManagedServiceProviderRatio = 0.03,
+                        GuestUserRatio = 0.08,
+                        StaleAccountRate = 0.04
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Duckburg Scale Test",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 5000,
+                            BusinessUnitCount = 6,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 6,
+                            SharedMailboxCount = 18,
+                            ServiceAccountCount = 30,
+                            IncludePrivilegedAccounts = true,
+                            Countries = new() { "United States", "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        var distinctAccountUpns = result.World.Accounts
+            .Select(account => account.UserPrincipalName)
+            .Where(upn => !string.IsNullOrWhiteSpace(upn))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        Assert.Equal(result.World.Accounts.Count, distinctAccountUpns);
+        Assert.DoesNotContain(
+            result.Warnings,
+            warning => warning.Contains("duplicate directory account user principal", StringComparison.OrdinalIgnoreCase));
+    }
 }

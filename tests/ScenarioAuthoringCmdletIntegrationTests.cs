@@ -1,4 +1,5 @@
 using System.Management.Automation;
+using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Scenarios;
 using SyntheticEnterprise.PowerShell.Cmdlets;
 
@@ -101,6 +102,10 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
             var configuration = Assert.Single(result.ExternalPlugins!.CapabilityConfigurations);
             Assert.Equal("TaxIdentifiers", configuration.Capability);
             Assert.Equal("US", configuration.Settings["Region"]);
+            Assert.NotNull(result.Applications);
+            Assert.NotNull(result.Cmdb);
+            Assert.NotNull(result.ObservedData);
+            Assert.Equal(ScenarioDeviationProfiles.Realistic, result.DeviationProfile);
         }
         finally
         {
@@ -109,6 +114,56 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
                 Directory.Delete(tempRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void ResolveSEScenario_Preserves_Expanded_Generation_Profiles()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("Resolve-SEScenario")
+            .AddParameter("Scenario", new ScenarioEnvelope
+            {
+                Name = "Expanded Scenario",
+                Applications = new ApplicationProfile
+                {
+                    IncludeApplications = true,
+                    BaseApplicationCount = 10,
+                    IncludeLineOfBusinessApplications = true,
+                    IncludeSaaSApplications = false
+                },
+                Cmdb = new CmdbProfile
+                {
+                    IncludeConfigurationManagement = true,
+                    IncludeBusinessServices = true,
+                    IncludeCloudServices = false,
+                    IncludeAutoDiscoveryRecords = true,
+                    IncludeServiceCatalogRecords = false,
+                    IncludeSpreadsheetImportRecords = true,
+                    DeviationProfile = ScenarioDeviationProfiles.Clean
+                },
+                ObservedData = new ObservedDataProfile
+                {
+                    IncludeObservedViews = true,
+                    CoverageRatio = 0.91
+                }
+            });
+
+        var result = Assert.Single(powershell.Invoke<ScenarioDefinition>());
+
+        Assert.False(powershell.HadErrors);
+        Assert.Equal(10, result.Applications.BaseApplicationCount);
+        Assert.False(result.Applications.IncludeSaaSApplications);
+        Assert.True(result.Cmdb.IncludeConfigurationManagement);
+        Assert.False(result.Cmdb.IncludeCloudServices);
+        Assert.Equal(ScenarioDeviationProfiles.Clean, result.Cmdb.DeviationProfile);
+        Assert.True(result.ObservedData.IncludeObservedViews);
+        Assert.Equal(0.91, result.ObservedData.CoverageRatio);
     }
 
     private static string CreateTempDirectory()

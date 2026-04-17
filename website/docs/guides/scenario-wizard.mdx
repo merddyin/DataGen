@@ -13,7 +13,7 @@ Use the wizard when you want:
 
 - a guided scenario creation flow
 - to edit an existing scenario file
-- to jump directly to one section such as realism or identity
+- to jump directly to one section such as realism, applications, or CMDB
 - to save a scenario, generate a world immediately, or do both
 
 ## Basic usage
@@ -36,6 +36,13 @@ Start directly in the realism section:
 New-SEScenarioWizard -ScenarioPath .\scenario.json -StartSection Realism
 ```
 
+Jump directly to the application or CMDB sections:
+
+```powershell
+New-SEScenarioWizard -ScenarioPath .\scenario.json -StartSection Applications
+New-SEScenarioWizard -ScenarioPath .\scenario.json -StartSection Cmdb
+```
+
 Review a scenario without re-running the full prompt flow:
 
 ```powershell
@@ -49,9 +56,14 @@ The current section flow covers:
 - basic details
 - realism
 - identity
+- applications
 - infrastructure
 - repositories
+- CMDB
+- observed data
 - plugins
+
+That means the wizard now carries the same major generation surfaces as the underlying scenario model instead of only the earlier identity/infrastructure/repository subset.
 
 ## Why this matters
 

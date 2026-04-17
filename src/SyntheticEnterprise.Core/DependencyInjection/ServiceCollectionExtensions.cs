@@ -37,6 +37,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILayerOwnershipRegistry, DefaultLayerOwnershipRegistry>();
         services.AddSingleton<IWorldOwnershipReconciliationService, WorldOwnershipReconciliationService>();
         services.AddSingleton<IWorldReferenceRepairService, WorldReferenceRepairService>();
+        services.AddSingleton<IWorldInvariantValidator, WorldInvariantValidator>();
         services.AddSingleton<IWorldQualityAuditService, WorldQualityAuditService>();
 
         services.AddSingleton<IOrganizationGenerator, BasicOrganizationGenerator>();

@@ -10,6 +10,7 @@ Current product capabilities include:
 
 - scenario-first world generation with templates, overlays, JSON, and a terminal wizard
 - identity, infrastructure, repository, application, policy, access-evidence, observed-data, and CMDB generation
+- hard identity invariants so duplicate user principal names are blocked instead of emitted as "realistic" flaws
 - configurable realism through deviation profiles such as `Clean`, `Realistic`, and `Aggressive`
 - normalized export surfaces for downstream tooling
 - a plugin model for extending the synthetic dataset safely
@@ -68,8 +69,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.1.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.1.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.2.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.2.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### 5. Generate a first world

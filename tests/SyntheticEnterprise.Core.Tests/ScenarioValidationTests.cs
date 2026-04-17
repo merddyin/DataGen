@@ -27,6 +27,52 @@ public sealed class ScenarioValidationTests
     }
 
     [Fact]
+    public void Resolver_Preserves_Expanded_Generation_Profiles()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var resolver = services.GetRequiredService<IScenarioDefaultsResolver>();
+
+        var scenario = resolver.Resolve(new ScenarioEnvelope
+        {
+            Name = "Expanded Scenario",
+            DeviationProfile = ScenarioDeviationProfiles.Aggressive,
+            Applications = new ApplicationProfile
+            {
+                IncludeApplications = true,
+                BaseApplicationCount = 12,
+                IncludeLineOfBusinessApplications = true,
+                IncludeSaaSApplications = false
+            },
+            Cmdb = new CmdbProfile
+            {
+                IncludeConfigurationManagement = true,
+                IncludeBusinessServices = true,
+                IncludeCloudServices = false,
+                IncludeAutoDiscoveryRecords = true,
+                IncludeServiceCatalogRecords = false,
+                IncludeSpreadsheetImportRecords = true,
+                DeviationProfile = ScenarioDeviationProfiles.Clean
+            },
+            ObservedData = new ObservedDataProfile
+            {
+                IncludeObservedViews = true,
+                CoverageRatio = 0.83
+            }
+        });
+
+        Assert.True(scenario.Applications.IncludeApplications);
+        Assert.Equal(12, scenario.Applications.BaseApplicationCount);
+        Assert.False(scenario.Applications.IncludeSaaSApplications);
+        Assert.True(scenario.Cmdb.IncludeConfigurationManagement);
+        Assert.False(scenario.Cmdb.IncludeCloudServices);
+        Assert.Equal(ScenarioDeviationProfiles.Clean, scenario.Cmdb.DeviationProfile);
+        Assert.True(scenario.ObservedData.IncludeObservedViews);
+        Assert.Equal(0.83, scenario.ObservedData.CoverageRatio);
+    }
+
+    [Fact]
     public void Validator_Rejects_Unknown_Deviation_Profile()
     {
         var services = new ServiceCollection()

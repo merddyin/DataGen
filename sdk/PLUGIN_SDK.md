@@ -26,6 +26,17 @@ Every external plugin is expected to behave like a data transformer:
 
 Plugins should not write files, change the environment, call the network, or start processes.
 
+## Hard Invariants
+
+Realism settings can introduce omissions, drift, stale data, and other intentionally messy conditions. They cannot violate core platform invariants.
+
+Examples of hard invariants include:
+- user principal names must stay unique within the generated environment
+- plugin output must not introduce malformed references or structurally invalid records
+- realism overlays must not corrupt the generated world into something a real platform could never represent
+
+If a plugin introduces invariant-breaking data, generation is expected to fail rather than emit a "mostly valid" world.
+
 ## Architectural Constraint
 
 DataGen exists to procedurally generate synthetic enterprise data. External plugins are part of that generation surface, which means they must stay on the data-generation side of the boundary.

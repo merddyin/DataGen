@@ -190,6 +190,100 @@ public sealed class ScenarioWizardServiceTests
     }
 
     [Fact]
+    public void Run_Can_Edit_Applications_Cmdb_And_Observed_Data()
+    {
+        var existingScenario = new ScenarioEnvelope
+        {
+            Name = "Expanded Scenario",
+            Description = "Expanded settings.",
+            Template = ScenarioTemplateKind.RegionalManufacturer,
+            CompanyCount = 1,
+            IndustryProfile = "Manufacturing",
+            GeographyProfile = "Regional-US",
+            EmployeeSize = new SizeBand
+            {
+                Minimum = 1000,
+                Maximum = 2000
+            },
+            Identity = new IdentityProfile(),
+            Applications = new ApplicationProfile
+            {
+                IncludeApplications = true,
+                BaseApplicationCount = 6,
+                IncludeLineOfBusinessApplications = true,
+                IncludeSaaSApplications = true
+            },
+            Infrastructure = new InfrastructureProfile(),
+            Repositories = new RepositoryProfile(),
+            Cmdb = new CmdbProfile
+            {
+                IncludeConfigurationManagement = false,
+                IncludeBusinessServices = true,
+                IncludeCloudServices = true,
+                IncludeAutoDiscoveryRecords = true,
+                IncludeServiceCatalogRecords = true,
+                IncludeSpreadsheetImportRecords = true
+            },
+            ObservedData = new ObservedDataProfile
+            {
+                IncludeObservedViews = true,
+                CoverageRatio = 0.70
+            },
+            OfficeCount = 4
+        };
+
+        var prompter = new FakeScenarioWizardPrompter
+        {
+            BoolResponses =
+            {
+                ["Include applications"] = true,
+                ["Include line-of-business applications"] = true,
+                ["Include SaaS applications"] = false,
+                ["Override CMDB deviation profile"] = true,
+                ["Include configuration management"] = true,
+                ["Include business services"] = true,
+                ["Include cloud services"] = false,
+                ["Include auto-discovery records"] = true,
+                ["Include service catalog records"] = false,
+                ["Include spreadsheet import records"] = true,
+                ["Include observed views"] = true,
+                ["Use this scenario?"] = true
+            },
+            IntResponses =
+            {
+                ["Base application count"] = 14
+            },
+            DoubleResponses =
+            {
+                ["Observed data coverage ratio"] = 0.88
+            },
+            SelectedDeviationProfile = ScenarioDeviationProfiles.Clean
+        };
+
+        var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
+            new ScenarioValidator(),
+            prompter);
+
+        var result = service.Run(
+            existingScenario,
+            options: new ScenarioWizardRunOptions
+            {
+                StartSection = ScenarioWizardEditSection.Applications,
+                SkipSectionReview = true
+            });
+
+        Assert.True(result.Confirmed);
+        Assert.Equal(14, result.Scenario.Applications!.BaseApplicationCount);
+        Assert.False(result.Scenario.Applications.IncludeSaaSApplications);
+        Assert.True(result.Scenario.Cmdb!.IncludeConfigurationManagement);
+        Assert.False(result.Scenario.Cmdb.IncludeCloudServices);
+        Assert.Equal(ScenarioDeviationProfiles.Clean, result.Scenario.Cmdb.DeviationProfile);
+        Assert.True(result.Scenario.ObservedData!.IncludeObservedViews);
+        Assert.Equal(0.88, result.Scenario.ObservedData.CoverageRatio);
+    }
+
+    [Fact]
     public void Run_Can_Select_Save_And_Generate_Action_With_Path()
     {
         var prompter = new FakeScenarioWizardPrompter

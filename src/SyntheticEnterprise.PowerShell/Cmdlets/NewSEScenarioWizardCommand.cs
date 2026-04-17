@@ -173,8 +173,11 @@ public enum ScenarioWizardEditSection
     BasicDetails,
     Realism,
     Identity,
+    Applications,
     Infrastructure,
     Repositories,
+    Cmdb,
+    ObservedData,
     Plugins
 }
 
@@ -272,8 +275,11 @@ public sealed class ScenarioWizardService
                 ScenarioWizardEditSection.BasicDetails => PromptBasicSection(scenario, template, selectedTemplate),
                 ScenarioWizardEditSection.Realism => PromptRealismSection(scenario),
                 ScenarioWizardEditSection.Identity => PromptIdentitySection(scenario),
+                ScenarioWizardEditSection.Applications => PromptApplicationsSection(scenario),
                 ScenarioWizardEditSection.Infrastructure => PromptInfrastructureSection(scenario),
                 ScenarioWizardEditSection.Repositories => PromptRepositorySection(scenario),
+                ScenarioWizardEditSection.Cmdb => PromptCmdbSection(scenario),
+                ScenarioWizardEditSection.ObservedData => PromptObservedDataSection(scenario),
                 ScenarioWizardEditSection.Plugins => PromptPluginSection(scenario),
                 _ => scenario
             };
@@ -320,8 +326,11 @@ public sealed class ScenarioWizardService
             ScenarioWizardEditSection.BasicDetails,
             ScenarioWizardEditSection.Realism,
             ScenarioWizardEditSection.Identity,
+            ScenarioWizardEditSection.Applications,
             ScenarioWizardEditSection.Infrastructure,
             ScenarioWizardEditSection.Repositories,
+            ScenarioWizardEditSection.Cmdb,
+            ScenarioWizardEditSection.ObservedData,
             ScenarioWizardEditSection.Plugins
         };
 
@@ -340,8 +349,11 @@ public sealed class ScenarioWizardService
                 ScenarioWizardEditSection.BasicDetails => PromptBasicSection(scenario, template, selectedTemplate),
                 ScenarioWizardEditSection.Realism => PromptRealismSection(scenario),
                 ScenarioWizardEditSection.Identity => PromptIdentitySection(scenario),
+                ScenarioWizardEditSection.Applications => PromptApplicationsSection(scenario),
                 ScenarioWizardEditSection.Infrastructure => PromptInfrastructureSection(scenario),
                 ScenarioWizardEditSection.Repositories => PromptRepositorySection(scenario),
+                ScenarioWizardEditSection.Cmdb => PromptCmdbSection(scenario),
+                ScenarioWizardEditSection.ObservedData => PromptObservedDataSection(scenario),
                 ScenarioWizardEditSection.Plugins => PromptPluginSection(scenario),
                 _ => scenario
             };
@@ -379,8 +391,11 @@ public sealed class ScenarioWizardService
                 Maximum = maximumEmployeeCount
             },
             Identity = scenario.Identity,
+            Applications = scenario.Applications,
             Infrastructure = scenario.Infrastructure,
             Repositories = scenario.Repositories,
+            Cmdb = scenario.Cmdb,
+            ObservedData = scenario.ObservedData,
             ExternalPlugins = scenario.ExternalPlugins,
             Anomalies = scenario.Anomalies.ToList(),
             Companies = scenario.Companies.ToList(),
@@ -415,6 +430,20 @@ public sealed class ScenarioWizardService
             });
     }
 
+    private ScenarioEnvelope PromptApplicationsSection(ScenarioEnvelope scenario)
+    {
+        var applications = scenario.Applications ?? new ApplicationProfile();
+        return CloneScenario(
+            scenario,
+            applications: new ApplicationProfile
+            {
+                IncludeApplications = _prompter.PromptBool("Include applications", applications.IncludeApplications),
+                BaseApplicationCount = _prompter.PromptInt("Base application count", applications.BaseApplicationCount, 0),
+                IncludeLineOfBusinessApplications = _prompter.PromptBool("Include line-of-business applications", applications.IncludeLineOfBusinessApplications),
+                IncludeSaaSApplications = _prompter.PromptBool("Include SaaS applications", applications.IncludeSaaSApplications)
+            });
+    }
+
     private ScenarioEnvelope PromptInfrastructureSection(ScenarioEnvelope scenario)
     {
         var infrastructure = scenario.Infrastructure ?? new InfrastructureProfile();
@@ -439,6 +468,42 @@ public sealed class ScenarioWizardService
                 IncludeDatabases = _prompter.PromptBool("Include databases", repositories.IncludeDatabases),
                 IncludeFileShares = _prompter.PromptBool("Include file shares", repositories.IncludeFileShares),
                 IncludeCollaborationSites = _prompter.PromptBool("Include collaboration sites", repositories.IncludeCollaborationSites)
+            });
+    }
+
+    private ScenarioEnvelope PromptCmdbSection(ScenarioEnvelope scenario)
+    {
+        var cmdb = scenario.Cmdb ?? new CmdbProfile();
+        var overrideDeviationProfile = _prompter.PromptBool(
+            "Override CMDB deviation profile",
+            !string.IsNullOrWhiteSpace(cmdb.DeviationProfile));
+        var cmdbDeviationProfile = overrideDeviationProfile
+            ? _prompter.SelectDeviationProfile(cmdb.DeviationProfile ?? scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic)
+            : null;
+
+        return CloneScenario(
+            scenario,
+            cmdb: new CmdbProfile
+            {
+                IncludeConfigurationManagement = _prompter.PromptBool("Include configuration management", cmdb.IncludeConfigurationManagement),
+                IncludeBusinessServices = _prompter.PromptBool("Include business services", cmdb.IncludeBusinessServices),
+                IncludeCloudServices = _prompter.PromptBool("Include cloud services", cmdb.IncludeCloudServices),
+                IncludeAutoDiscoveryRecords = _prompter.PromptBool("Include auto-discovery records", cmdb.IncludeAutoDiscoveryRecords),
+                IncludeServiceCatalogRecords = _prompter.PromptBool("Include service catalog records", cmdb.IncludeServiceCatalogRecords),
+                IncludeSpreadsheetImportRecords = _prompter.PromptBool("Include spreadsheet import records", cmdb.IncludeSpreadsheetImportRecords),
+                DeviationProfile = cmdbDeviationProfile
+            });
+    }
+
+    private ScenarioEnvelope PromptObservedDataSection(ScenarioEnvelope scenario)
+    {
+        var observedData = scenario.ObservedData ?? new ObservedDataProfile();
+        return CloneScenario(
+            scenario,
+            observedData: new ObservedDataProfile
+            {
+                IncludeObservedViews = _prompter.PromptBool("Include observed views", observedData.IncludeObservedViews),
+                CoverageRatio = _prompter.PromptDouble("Observed data coverage ratio", observedData.CoverageRatio, 0, 1)
             });
     }
 
@@ -555,8 +620,11 @@ public sealed class ScenarioWizardService
             DeviationProfile = ChooseNullableString(scenario.DeviationProfile, template.DeviationProfile),
             EmployeeSize = scenario.EmployeeSize ?? template.EmployeeSize,
             Identity = scenario.Identity ?? template.Identity,
+            Applications = scenario.Applications ?? template.Applications,
             Infrastructure = scenario.Infrastructure ?? template.Infrastructure,
             Repositories = scenario.Repositories ?? template.Repositories,
+            Cmdb = scenario.Cmdb ?? template.Cmdb,
+            ObservedData = scenario.ObservedData ?? template.ObservedData,
             ExternalPlugins = scenario.ExternalPlugins ?? template.ExternalPlugins,
             Anomalies = scenario.Anomalies.Count > 0 ? scenario.Anomalies.ToList() : template.Anomalies.ToList(),
             Companies = scenario.Companies.Count > 0 ? scenario.Companies.ToList() : template.Companies.ToList(),
@@ -576,8 +644,11 @@ public sealed class ScenarioWizardService
         ScenarioEnvelope scenario,
         string? deviationProfile = null,
         IdentityProfile? identity = null,
+        ApplicationProfile? applications = null,
         InfrastructureProfile? infrastructure = null,
         RepositoryProfile? repositories = null,
+        CmdbProfile? cmdb = null,
+        ObservedDataProfile? observedData = null,
         ExternalPluginScenarioProfile? externalPlugins = null)
         => new()
         {
@@ -591,8 +662,11 @@ public sealed class ScenarioWizardService
             DeviationProfile = deviationProfile ?? scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic,
             EmployeeSize = scenario.EmployeeSize,
             Identity = identity ?? scenario.Identity,
+            Applications = applications ?? scenario.Applications,
             Infrastructure = infrastructure ?? scenario.Infrastructure,
             Repositories = repositories ?? scenario.Repositories,
+            Cmdb = cmdb ?? scenario.Cmdb,
+            ObservedData = observedData ?? scenario.ObservedData,
             ExternalPlugins = externalPlugins ?? scenario.ExternalPlugins,
             Anomalies = scenario.Anomalies.ToList(),
             Companies = scenario.Companies.ToList(),
@@ -791,6 +865,21 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
         table.AddRow("Deviation profile", scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic);
         table.AddRow("Companies", (scenario.CompanyCount ?? 1).ToString());
         table.AddRow("Employee range", $"{scenario.EmployeeSize?.Minimum ?? 0} - {scenario.EmployeeSize?.Maximum ?? 0}");
+        table.AddRow(
+            "Applications",
+            scenario.Applications?.IncludeApplications == true
+                ? $"enabled ({scenario.Applications.BaseApplicationCount} base)"
+                : "disabled");
+        table.AddRow(
+            "CMDB",
+            scenario.Cmdb?.IncludeConfigurationManagement == true
+                ? $"enabled ({scenario.Cmdb.DeviationProfile ?? scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic})"
+                : "disabled");
+        table.AddRow(
+            "Observed data",
+            scenario.ObservedData?.IncludeObservedViews == true
+                ? $"enabled ({scenario.ObservedData.CoverageRatio:0.00} coverage)"
+                : "disabled");
         table.AddRow("Overlays", scenario.Overlays.Count == 0 ? "None" : string.Join(", ", scenario.Overlays));
         table.AddRow(
             "Plugins",
@@ -849,8 +938,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                 ScenarioWizardEditSection.BasicDetails,
                 ScenarioWizardEditSection.Realism,
                 ScenarioWizardEditSection.Identity,
+                ScenarioWizardEditSection.Applications,
                 ScenarioWizardEditSection.Infrastructure,
                 ScenarioWizardEditSection.Repositories,
+                ScenarioWizardEditSection.Cmdb,
+                ScenarioWizardEditSection.ObservedData,
                 ScenarioWizardEditSection.Plugins
             }
             : new[]
@@ -859,8 +951,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                 ScenarioWizardEditSection.BasicDetails,
                 ScenarioWizardEditSection.Realism,
                 ScenarioWizardEditSection.Identity,
+                ScenarioWizardEditSection.Applications,
                 ScenarioWizardEditSection.Infrastructure,
-                ScenarioWizardEditSection.Repositories
+                ScenarioWizardEditSection.Repositories,
+                ScenarioWizardEditSection.Cmdb,
+                ScenarioWizardEditSection.ObservedData
             };
 
         return AnsiConsole.Prompt(
@@ -908,8 +1003,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                 ScenarioWizardEditSection.BasicDetails,
                 ScenarioWizardEditSection.Realism,
                 ScenarioWizardEditSection.Identity,
+                ScenarioWizardEditSection.Applications,
                 ScenarioWizardEditSection.Infrastructure,
                 ScenarioWizardEditSection.Repositories,
+                ScenarioWizardEditSection.Cmdb,
+                ScenarioWizardEditSection.ObservedData,
                 ScenarioWizardEditSection.Plugins
             }
             : new[]
@@ -919,7 +1017,10 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                 ScenarioWizardEditSection.Realism,
                 ScenarioWizardEditSection.Identity,
                 ScenarioWizardEditSection.Infrastructure,
-                ScenarioWizardEditSection.Repositories
+                ScenarioWizardEditSection.Applications,
+                ScenarioWizardEditSection.Repositories,
+                ScenarioWizardEditSection.Cmdb,
+                ScenarioWizardEditSection.ObservedData
             };
 
         return AnsiConsole.Prompt(
@@ -931,8 +1032,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                     ScenarioWizardEditSection.BasicDetails => "Edit basic details",
                     ScenarioWizardEditSection.Realism => "Edit realism settings",
                     ScenarioWizardEditSection.Identity => "Edit identity settings",
+                    ScenarioWizardEditSection.Applications => "Edit application settings",
                     ScenarioWizardEditSection.Infrastructure => "Edit infrastructure settings",
                     ScenarioWizardEditSection.Repositories => "Edit repository settings",
+                    ScenarioWizardEditSection.Cmdb => "Edit CMDB settings",
+                    ScenarioWizardEditSection.ObservedData => "Edit observed-data settings",
                     ScenarioWizardEditSection.Plugins => "Edit plugin settings",
                     _ => section.ToString()
                 })
@@ -961,8 +1065,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
             ScenarioWizardEditSection.BasicDetails => $"Edit basic details ({scenario.Name}, {scenario.IndustryProfile}, {scenario.GeographyProfile})",
             ScenarioWizardEditSection.Realism => $"Edit realism settings (deviation: {scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic})",
             ScenarioWizardEditSection.Identity => $"Edit identity settings (hybrid: {YesNo(scenario.Identity?.IncludeHybridDirectory)}, stale: {scenario.Identity?.StaleAccountRate:0.00})",
+            ScenarioWizardEditSection.Applications => $"Edit application settings (enabled: {YesNo(scenario.Applications?.IncludeApplications)}, base: {scenario.Applications?.BaseApplicationCount ?? 0})",
             ScenarioWizardEditSection.Infrastructure => $"Edit infrastructure settings (servers: {YesNo(scenario.Infrastructure?.IncludeServers)}, telephony: {YesNo(scenario.Infrastructure?.IncludeTelephony)})",
             ScenarioWizardEditSection.Repositories => $"Edit repository settings (db: {YesNo(scenario.Repositories?.IncludeDatabases)}, files: {YesNo(scenario.Repositories?.IncludeFileShares)}, collab: {YesNo(scenario.Repositories?.IncludeCollaborationSites)})",
+            ScenarioWizardEditSection.Cmdb => $"Edit CMDB settings (enabled: {YesNo(scenario.Cmdb?.IncludeConfigurationManagement)}, deviation: {scenario.Cmdb?.DeviationProfile ?? scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic})",
+            ScenarioWizardEditSection.ObservedData => $"Edit observed-data settings (enabled: {YesNo(scenario.ObservedData?.IncludeObservedViews)}, coverage: {scenario.ObservedData?.CoverageRatio ?? 0:0.00})",
             ScenarioWizardEditSection.Plugins => $"Edit plugin settings ({PluginSummary(scenario.ExternalPlugins)})",
             _ => section.ToString()
         };
@@ -995,6 +1102,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
             "Identity");
         AddChange(
             changes,
+            $"{YesNo(baseline.Applications?.IncludeApplications)}, base {baseline.Applications?.BaseApplicationCount ?? 0}, lob {YesNo(baseline.Applications?.IncludeLineOfBusinessApplications)}, saas {YesNo(baseline.Applications?.IncludeSaaSApplications)}",
+            $"{YesNo(scenario.Applications?.IncludeApplications)}, base {scenario.Applications?.BaseApplicationCount ?? 0}, lob {YesNo(scenario.Applications?.IncludeLineOfBusinessApplications)}, saas {YesNo(scenario.Applications?.IncludeSaaSApplications)}",
+            "Applications");
+        AddChange(
+            changes,
             $"{YesNo(baseline.Infrastructure?.IncludeServers)}, telephony {YesNo(baseline.Infrastructure?.IncludeTelephony)}",
             $"{YesNo(scenario.Infrastructure?.IncludeServers)}, telephony {YesNo(scenario.Infrastructure?.IncludeTelephony)}",
             "Infrastructure");
@@ -1003,6 +1115,16 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
             $"db {YesNo(baseline.Repositories?.IncludeDatabases)}, files {YesNo(baseline.Repositories?.IncludeFileShares)}, collab {YesNo(baseline.Repositories?.IncludeCollaborationSites)}",
             $"db {YesNo(scenario.Repositories?.IncludeDatabases)}, files {YesNo(scenario.Repositories?.IncludeFileShares)}, collab {YesNo(scenario.Repositories?.IncludeCollaborationSites)}",
             "Repositories");
+        AddChange(
+            changes,
+            $"enabled {YesNo(baseline.Cmdb?.IncludeConfigurationManagement)}, services {YesNo(baseline.Cmdb?.IncludeBusinessServices)}, cloud {YesNo(baseline.Cmdb?.IncludeCloudServices)}, deviation {baseline.Cmdb?.DeviationProfile ?? baseline.DeviationProfile ?? ScenarioDeviationProfiles.Realistic}",
+            $"enabled {YesNo(scenario.Cmdb?.IncludeConfigurationManagement)}, services {YesNo(scenario.Cmdb?.IncludeBusinessServices)}, cloud {YesNo(scenario.Cmdb?.IncludeCloudServices)}, deviation {scenario.Cmdb?.DeviationProfile ?? scenario.DeviationProfile ?? ScenarioDeviationProfiles.Realistic}",
+            "CMDB");
+        AddChange(
+            changes,
+            $"enabled {YesNo(baseline.ObservedData?.IncludeObservedViews)}, coverage {baseline.ObservedData?.CoverageRatio ?? 0:0.00}",
+            $"enabled {YesNo(scenario.ObservedData?.IncludeObservedViews)}, coverage {scenario.ObservedData?.CoverageRatio ?? 0:0.00}",
+            "Observed data");
         AddChange(changes, PluginSummary(baseline.ExternalPlugins), PluginSummary(scenario.ExternalPlugins), "Plugins");
 
         return changes;
@@ -1101,8 +1223,11 @@ internal static class ScenarioWizardEnvelopeInput
             DeviationProfile = definition.DeviationProfile,
             EmployeeSize = definition.EmployeeSize,
             Identity = definition.Identity,
+            Applications = definition.Applications,
             Infrastructure = definition.Infrastructure,
             Repositories = definition.Repositories,
+            Cmdb = definition.Cmdb,
+            ObservedData = definition.ObservedData,
             ExternalPlugins = definition.ExternalPlugins,
             Anomalies = definition.Anomalies.ToList(),
             Companies = definition.Companies.ToList(),

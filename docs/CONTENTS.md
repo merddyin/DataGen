@@ -22,12 +22,15 @@ That site contains:
 The files that remain in this folder are intentionally limited to focused project artifacts that are still useful at the repository level, such as:
 
 - acceptance coverage and user validation material
-- integration and mapping analysis that supports current product direction
+- architecture and improvement plans that support current product direction
+
+Current focused documents include:
+
+- `User_Acceptance_Test_Catalog.md`
+- `DataGen_Control_Surface_and_Invariants_Improvement_Plan.md`
 
 ## Historical design and milestone notes
 
-Older milestone-era notes and internal reconstruction documents were moved out of this folder into:
+Historical design and milestone notes are intentionally not part of the active repository-level docs surface.
 
-- `legacy_notes/recovered_docs/`
-
-They are retained for historical reference, but they are not intended to represent the current public documentation experience.
+The current docs folder is meant to stay small, current, and recovery-friendly.
