@@ -370,3 +370,8 @@ catalogs/catalogs.sqlite
 legacy_notes/
 tmp/
 docs/DataGen_DTEnvDiscovery_Mapping_Matrix.md
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
