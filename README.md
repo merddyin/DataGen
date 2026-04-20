@@ -2,6 +2,17 @@
 
 DataGen is a synthetic enterprise data generation platform. It procedurally builds realistic enterprise datasets that teams can use for labs, validation, demos, exports, discovery-tool testing, and downstream integration work.
 
+## Changelog
+
+### v0.3.0
+
+- improved end-to-end realism for people, offices, applications, repositories, and architecture objects
+- added curated country-specific name catalogs for the United States, United Kingdom, Canada, Australia, and New Zealand
+- tightened international office locality, phone, and address generation, with focused upgrades for the UK, Canada, and Mexico
+- made repository, collaboration, and application URLs more exportable and domain-consistent
+- added first-class normalized export coverage for network assets and richer office address fields
+- refreshed the Duckburg Industries DTED demo bundle with the newer realism and export improvements
+
 ## What DataGen does
 
 DataGen is designed to generate believable enterprise structure without hand-authoring every user, group, device, application, repository, policy, or CMDB record.
@@ -69,8 +80,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.2.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.2.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.3.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.3.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### 5. Generate a first world

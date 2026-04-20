@@ -1478,18 +1478,24 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         string hostingModel,
         VendorProfile? vendorProfile)
     {
-        var shortCompany = ShortCompanyKey(company);
         var appSlug = Slugify(applicationName);
+        var internalAppSlug = BuildInternalApplicationSlug(company, applicationName);
 
         if (string.Equals(hostingModel, "OnPrem", StringComparison.OrdinalIgnoreCase))
         {
-            return $"https://{appSlug}.{shortCompany}.internal";
+            return $"https://{internalAppSlug}.{ShortCompanyKey(company)}.internal";
         }
 
         if (!string.IsNullOrWhiteSpace(vendorProfile?.PrimaryDomain) &&
             !string.Equals(vendor, company.Name, StringComparison.OrdinalIgnoreCase))
         {
-            return $"https://{shortCompany}.{vendorProfile.PrimaryDomain}";
+            return $"https://{vendorProfile.PrimaryDomain.TrimEnd('/')}/{appSlug}";
+        }
+
+        var inferredVendorDomain = InferVendorDomain(vendor, company);
+        if (!string.IsNullOrWhiteSpace(inferredVendorDomain))
+        {
+            return $"https://{inferredVendorDomain}/{appSlug}";
         }
 
         return ResolveInternalApplicationUrl(company, applicationName, hostingModel);
@@ -1497,7 +1503,7 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
 
     private static string ResolveInternalApplicationUrl(Company company, string applicationName, string hostingModel)
     {
-        var appSlug = Slugify(applicationName);
+        var appSlug = BuildInternalApplicationSlug(company, applicationName);
         var companySlug = ShortCompanyKey(company);
 
         if (string.Equals(hostingModel, "OnPrem", StringComparison.OrdinalIgnoreCase))
@@ -1511,6 +1517,32 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         }
 
         return $"https://{appSlug}.{companySlug}.apps.test";
+    }
+
+    private static string BuildInternalApplicationSlug(Company company, string applicationName)
+    {
+        var appSpecificName = StripCompanyPrefix(applicationName, company.Name);
+        appSpecificName = StripCompanyPrefix(appSpecificName, ShortCompanyKey(company));
+
+        var appSlug = Slugify(appSpecificName);
+        return string.Equals(appSlug, "app", StringComparison.OrdinalIgnoreCase)
+            ? Slugify(applicationName)
+            : appSlug;
+    }
+
+    private static string StripCompanyPrefix(string value, string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(prefix))
+        {
+            return value;
+        }
+
+        if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        return value[prefix.Length..].TrimStart(' ', '-', '_', '.', ':', '/');
     }
 
     private static string ApplyOfficePatternName(string template, Company company, Office office, string sitePrefix) =>
@@ -1527,6 +1559,23 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         }
 
         return Slugify(company.Name);
+    }
+
+    private static string? InferVendorDomain(string? vendor, Company company)
+    {
+        if (string.IsNullOrWhiteSpace(vendor)
+            || string.Equals(vendor, company.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var slug = Slugify(vendor);
+        if (string.IsNullOrWhiteSpace(slug))
+        {
+            return null;
+        }
+
+        return $"{slug}.com";
     }
 
     private static List<string> SplitPipeSeparated(string? value) =>

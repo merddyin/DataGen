@@ -1073,6 +1073,68 @@ public sealed class WorldExportCoordinatorTests
     }
 
     [Fact]
+    public void Export_Writes_Office_StreetAddress_Field()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        Offices =
+                        {
+                            new Office
+                            {
+                                Id = "OFF-001",
+                                CompanyId = "CO-001",
+                                Name = "London Headquarters",
+                                Region = "Europe",
+                                Country = "United Kingdom",
+                                StateOrProvince = "England",
+                                City = "London",
+                                PostalCode = "W1B",
+                                TimeZone = "Europe/London",
+                                AddressMode = "Hybrid",
+                                BuildingNumber = "585",
+                                StreetName = "Enterprise Way",
+                                FloorOrSuite = "Suite 125",
+                                BusinessPhone = "+44 8954 826537",
+                                IsHeadquarters = true
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            var officesJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "offices.json"));
+
+            Assert.Contains("street_address", officesJson);
+            Assert.Contains("585 Enterprise Way", officesJson);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
     public void Export_Masks_Generated_Passwords_By_Default_And_Can_Include_Them_Explicitly()
     {
         var tempMasked = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
@@ -1139,6 +1201,63 @@ public sealed class WorldExportCoordinatorTests
         {
             Directory.Delete(tempMasked, true);
             Directory.Delete(tempIncluded, true);
+        }
+    }
+
+    [Fact]
+    public void Export_Writes_Network_Assets_As_A_First_Class_Entity_Table()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        NetworkAssets =
+                        {
+                            new NetworkAsset
+                            {
+                                Id = "NET-001",
+                                CompanyId = "CO-001",
+                                Hostname = "FW-CONTOS-LONDON-001",
+                                AssetType = "Firewall",
+                                OfficeId = "OFF-001",
+                                Vendor = "Palo Alto",
+                                Model = "PA-3410"
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            var jsonPath = Directory.GetFiles(manifest.OutputPath, "network_assets.json", SearchOption.AllDirectories).Single();
+            var json = File.ReadAllText(jsonPath);
+
+            Assert.Contains("FW-CONTOS-LONDON-001", json);
+            Assert.Contains("\"asset_type\": \"Firewall\"", json);
+            Assert.Contains("\"vendor\": \"Palo Alto\"", json);
+            Assert.Contains("\"model\": \"PA-3410\"", json);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
         }
     }
 

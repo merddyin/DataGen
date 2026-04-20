@@ -110,6 +110,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "postal_code",
                     "time_zone",
                     "address_mode",
+                    "street_address",
                     "building_number",
                     "street_name",
                     "floor_or_suite",
@@ -132,6 +133,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["postal_code"] = office.PostalCode,
                     ["time_zone"] = office.TimeZone,
                     ["address_mode"] = office.AddressMode,
+                    ["street_address"] = FormatStreetAddress(office),
                     ["building_number"] = office.BuildingNumber,
                     ["street_name"] = office.StreetName,
                     ["floor_or_suite"] = office.FloorOrSuite,
@@ -742,6 +744,33 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["criticality"] = server.Criticality
                 },
                 SortKeySelector = server => server.Id
+            },
+            new EntityTableDescriptor<NetworkAsset>
+            {
+                LogicalName = "network_assets",
+                RelativePathStem = "entities/network_assets",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "hostname",
+                    "asset_type",
+                    "office_id",
+                    "vendor",
+                    "model"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.NetworkAssets,
+                RowProjector = asset => new Dictionary<string, object?>
+                {
+                    ["id"] = asset.Id,
+                    ["company_id"] = asset.CompanyId,
+                    ["hostname"] = asset.Hostname,
+                    ["asset_type"] = asset.AssetType,
+                    ["office_id"] = asset.OfficeId,
+                    ["vendor"] = asset.Vendor,
+                    ["model"] = asset.Model
+                },
+                SortKeySelector = asset => asset.Id
             },
             new EntityTableDescriptor<SoftwarePackage>
             {
@@ -1486,4 +1515,11 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
             _ => $"[MASKED:{value.Length}]"
         };
     }
+
+    private static string FormatStreetAddress(Office office)
+        => string.Join(
+            " ",
+            new[] { office.BuildingNumber, office.StreetName }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim()));
 }

@@ -420,4 +420,185 @@ public sealed class ApplicationGenerationTests
             && application.Url is not null
             && application.Url.Contains(".catalogmanufacturing.com", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void WorldGenerator_Uses_Vendor_Domains_Without_Tenant_Branded_Apex_Subdomains()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Vendor URL Realism",
+                    IndustryProfile = "Manufacturing",
+                    GeographyProfile = "Regional-US",
+                    EmployeeSize = new SizeBand { Minimum = 1800, Maximum = 2600 },
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 6,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Vendor URL Realism",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 2200,
+                            BusinessUnitCount = 4,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 4,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            catalogs);
+
+        Assert.Contains(result.World.Applications, application =>
+            string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(application.Vendor)
+            && !string.Equals(application.Vendor, "Vendor URL Realism", StringComparison.OrdinalIgnoreCase)
+            && application.Url is not null
+            && !application.Url.Contains("vendorurlrealism.", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Applications, application =>
+            string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(application.Vendor)
+            && !string.Equals(application.Vendor, "Vendor URL Realism", StringComparison.OrdinalIgnoreCase)
+            && application.Url is not null
+            && application.Url.Contains($".{application.Vendor.ToLowerInvariant().Replace(" ", string.Empty)}.com", StringComparison.OrdinalIgnoreCase)
+            && application.Url.Contains("vendorurlrealism", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Falls_Back_To_Vendor_Like_Domains_When_Vendor_Metadata_Is_Missing()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 11,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Vendor Domain Fallback Test",
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 1,
+                        IncludeLineOfBusinessApplications = false,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Vendor Domain Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["software_catalog"] = new List<Dictionary<string, string?>>
+                    {
+                        NewApplicationRow(("Name", "Cisco AnyConnect"), ("Category", "VPN"), ("Vendor", "Cisco"), ("Version", "5.1"))
+                    },
+                    ["essential_software_patterns"] = new List<Dictionary<string, string?>>
+                    {
+                        NewApplicationRow(("Industry", "All"), ("MinimumEmployees", "1"), ("Priority", "1"), ("Name", "Cisco AnyConnect"), ("Category", "VPN"), ("Vendor", "Cisco"))
+                    }
+                }
+            });
+
+        Assert.Contains(result.World.Applications, application =>
+            application.Name == "Cisco AnyConnect"
+            && string.Equals(application.Vendor, "Cisco", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(application.Url, "https://cisco.com/ciscoanyconnect", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Compact_Hosts_For_Company_Owned_Applications()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Catalog Manufacturing",
+                    IndustryProfile = "Manufacturing",
+                    GeographyProfile = "Regional-US",
+                    EmployeeSize = new SizeBand { Minimum = 1800, Maximum = 2600 },
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 6,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Catalog Manufacturing",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 2200,
+                            BusinessUnitCount = 4,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 4,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            catalogs);
+
+        Assert.Contains(result.World.Applications, application =>
+            application.Name == "Catalog Manufacturing ERP Core"
+            && string.Equals(application.Vendor, "Catalog Manufacturing", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(application.Url, "https://erpcore.catalogmanufacturing.com", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Applications, application =>
+            string.Equals(application.Vendor, "Catalog Manufacturing", StringComparison.OrdinalIgnoreCase)
+            && application.Url is not null
+            && application.Url.Contains("catalogmanufacturingerpcore.catalogmanufacturing.com", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Dictionary<string, string?> NewApplicationRow(params (string Key, string? Value)[] entries)
+    {
+        var row = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in entries)
+        {
+            row[key] = value;
+        }
+
+        return row;
+    }
 }

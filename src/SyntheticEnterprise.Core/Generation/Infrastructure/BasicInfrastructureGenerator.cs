@@ -232,14 +232,15 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var targetOu = serverEnvironments.TryGetValue(environment, out var environmentOu)
                 ? environmentOu
                 : serversOu;
-            var hostname = BuildHostname(company.Name, roles[i % roles.Length].Replace(" ", ""), i + 1, "SRV");
+            var role = roles[i % roles.Length];
+            var hostname = BuildServerHostname(company.Name, role, i + 1);
 
             world.Servers.Add(new ServerAsset
             {
                 Id = _idFactory.Next("SRV"),
                 CompanyId = company.Id,
                 Hostname = hostname,
-                ServerRole = roles[i % roles.Length],
+                ServerRole = role,
                 Environment = environment,
                 OperatingSystem = "Windows Server",
                 OperatingSystemVersion = i % 3 == 0 ? "2022" : "2019",
@@ -259,23 +260,30 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         ScenarioCompanyDefinition definition,
         IReadOnlyList<Office> offices)
     {
-        var assetTypes = new[] { "Switch", "Router", "Firewall", "Wireless Controller", "Access Point", "Load Balancer" };
-        var vendors = new[] { ("Cisco", "Catalyst"), ("Palo Alto", "PA-Series"), ("Fortinet", "FortiGate"), ("Aruba", "CX") };
+        var networkProfiles = new[]
+        {
+            new NetworkAssetProfile("Switch", "Cisco", "Catalyst 9300", "SW"),
+            new NetworkAssetProfile("Router", "Cisco", "ISR 4451", "RTR"),
+            new NetworkAssetProfile("Firewall", "Palo Alto", "PA-3410", "FW"),
+            new NetworkAssetProfile("Wireless Controller", "Cisco", "Catalyst 9800", "WLC"),
+            new NetworkAssetProfile("Access Point", "Aruba", "AP-635", "AP"),
+            new NetworkAssetProfile("Load Balancer", "F5", "BIG-IP i2600", "LB")
+        };
 
         foreach (var office in offices)
         {
             for (var i = 0; i < Math.Max(1, definition.NetworkAssetCountPerOffice); i++)
             {
-                var vendor = vendors[i % vendors.Length];
+                var profile = networkProfiles[i % networkProfiles.Length];
                 world.NetworkAssets.Add(new NetworkAsset
                 {
                     Id = _idFactory.Next("NET"),
                     CompanyId = company.Id,
-                    AssetType = assetTypes[i % assetTypes.Length],
-                    Hostname = BuildHostname(company.Name, office.City, i + 1, "NET"),
+                    AssetType = profile.AssetType,
+                    Hostname = BuildNetworkHostname(company.Name, office.City, i + 1, profile.HostPrefix),
                     OfficeId = office.Id,
-                    Vendor = vendor.Item1,
-                    Model = vendor.Item2
+                    Vendor = profile.Vendor,
+                    Model = profile.Model
                 });
             }
         }
@@ -678,8 +686,35 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         return $"{prefix}-{company[..Math.Min(6, company.Length)]}-{part[..Math.Min(6, part.Length)]}-{index:000}".ToUpperInvariant();
     }
 
+    private static string BuildServerHostname(string companyName, string role, int index)
+    {
+        var company = Slug(companyName);
+        var roleCode = role switch
+        {
+            "Domain Controller" => "DC",
+            "File Server" => "FS",
+            "SQL Server" => "SQL",
+            "Web Server" => "WEB",
+            "Application Server" => "APP",
+            "Jump Host" => "JMP",
+            "Print Server" => "PRN",
+            _ => Slug(role)[..Math.Min(4, Slug(role).Length)].ToUpperInvariant()
+        };
+
+        return $"SRV-{company[..Math.Min(6, company.Length)]}-{roleCode}-{index:000}".ToUpperInvariant();
+    }
+
+    private static string BuildNetworkHostname(string companyName, string city, int index, string prefix)
+    {
+        var company = Slug(companyName);
+        var location = Slug(city);
+        return $"{prefix}-{company[..Math.Min(6, company.Length)]}-{location[..Math.Min(6, location.Length)]}-{index:000}".ToUpperInvariant();
+    }
+
     private static string Slug(string value)
         => new string(value.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+    private sealed record NetworkAssetProfile(string AssetType, string Vendor, string Model, string HostPrefix);
 
     private static string Read(Dictionary<string, string?> row, string key)
         => row.TryGetValue(key, out var value) ? value ?? "" : "";

@@ -316,6 +316,106 @@ public sealed class IdentityInfrastructureGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Uses_Role_Aligned_Network_Assets()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Network Realism Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Network Realism Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 180,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            NetworkAssetCountPerOffice = 6,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.Contains(result.World.NetworkAssets, asset =>
+            asset.AssetType == "Switch"
+            && asset.Vendor == "Cisco"
+            && asset.Model == "Catalyst 9300"
+            && asset.Hostname.StartsWith("SW-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.NetworkAssets, asset =>
+            asset.AssetType == "Firewall"
+            && asset.Vendor == "Palo Alto"
+            && asset.Model == "PA-3410"
+            && asset.Hostname.StartsWith("FW-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.NetworkAssets, asset =>
+            asset.AssetType == "Access Point"
+            && asset.Vendor == "Aruba"
+            && asset.Model == "AP-635"
+            && asset.Hostname.StartsWith("AP-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.NetworkAssets, asset =>
+            asset.AssetType == "Firewall"
+            && asset.Vendor == "Cisco");
+        Assert.DoesNotContain(result.World.NetworkAssets, asset =>
+            asset.AssetType == "Switch"
+            && asset.Vendor == "Palo Alto");
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Role_Aware_Server_Hostnames()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Server Hostname Realism Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Server Hostname Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 180,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            ServerCount = 7,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "Domain Controller" && server.Hostname.Contains("-DC-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "File Server" && server.Hostname.Contains("-FS-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "SQL Server" && server.Hostname.Contains("-SQL-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "Web Server" && server.Hostname.Contains("-WEB-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "Application Server" && server.Hostname.Contains("-APP-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "Jump Host" && server.Hostname.Contains("-JMP-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Servers, server => server.ServerRole == "Print Server" && server.Hostname.Contains("-PRN-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Servers, server => server.Hostname.Contains("DOMAIN", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Servers, server => server.Hostname.Contains("FILESE", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void WorldGenerator_Keeps_External_Account_User_Principal_Names_Unique_At_Scale()
     {
         var services = new ServiceCollection()

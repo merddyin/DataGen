@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.RegularExpressions;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Core.Abstractions;
@@ -118,7 +119,308 @@ public sealed class CatalogDrivenGenerationTests
         Assert.All(result.World.Offices, office => Assert.False(string.IsNullOrWhiteSpace(office.PostalCode)));
         Assert.Contains(result.World.Offices, office => office.City == "Toronto" && office.StateOrProvince == "Ontario" && office.TimeZone == "America/Toronto");
         Assert.Contains(result.World.Offices, office => office.City == "Montreal" && office.StateOrProvince == "Quebec" && office.TimeZone == "America/Toronto");
-        Assert.All(result.World.Offices, office => Assert.EndsWith("Way", office.StreetName, StringComparison.OrdinalIgnoreCase));
+        Assert.All(
+            result.World.Offices,
+            office => Assert.Contains(
+                office.StreetName.Split(' ').Last(),
+                new[] { "Avenue", "Boulevard", "Court", "Drive", "Road", "Street", "Way" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Repairs_NorthAmerica_Localities_With_Missing_State_And_PostalCode()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "North America Locality Repair Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Locality Repair Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 6,
+                            Countries = { "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "CA"), ("City", "Québec"), ("PostalCode", ""), ("StateOrProvince", ""), ("Latitude", "52.00017"), ("Longitude", "-71.99907"), ("Accuracy", "0"), ("TimeZone", "America/Halifax"), ("Population", "7730612")),
+                        NewRow(("CountryCode", "CA"), ("City", "Montréal"), ("PostalCode", ""), ("StateOrProvince", ""), ("Latitude", "45.50884"), ("Longitude", "-73.58781"), ("Accuracy", "0"), ("TimeZone", "America/Halifax"), ("Population", "1600000")),
+                        NewRow(("CountryCode", "MX"), ("City", "Mexico City"), ("PostalCode", ""), ("StateOrProvince", ""), ("Latitude", "19.42847"), ("Longitude", "-99.12766"), ("Accuracy", "0"), ("TimeZone", "America/Mexico_City"), ("Population", "12294193")),
+                        NewRow(("CountryCode", "MX"), ("City", "Ecatepec"), ("PostalCode", ""), ("StateOrProvince", ""), ("Latitude", "19.60492"), ("Longitude", "-99.06064"), ("Accuracy", "0"), ("TimeZone", "America/Mexico_City"), ("Population", "1806226")),
+                        NewRow(("CountryCode", "MX"), ("City", "Tijuana"), ("PostalCode", "22703"), ("StateOrProvince", "Baja California"), ("Latitude", "32.2528"), ("Longitude", "-116.8907"), ("Accuracy", "4"), ("TimeZone", "America/Mexico_City"), ("Population", "1376457")),
+                        NewRow(("CountryCode", "MX"), ("City", "Naucalpan de Juárez"), ("PostalCode", "41666"), ("StateOrProvince", "Guerrero"), ("Latitude", "17.0764"), ("Longitude", "-98.4192"), ("Accuracy", "4"), ("TimeZone", "America/Mexico_City"), ("Population", "846185"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Canada"), ("Code", "CA"), ("Continent", "North America")),
+                        NewRow(("Name", "Mexico"), ("Code", "MX"), ("Continent", "North America"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.Offices, office => Assert.False(string.IsNullOrWhiteSpace(office.PostalCode)));
+        Assert.Contains(result.World.Offices, office => office.City == "Québec" && office.StateOrProvince == "Quebec" && office.PostalCode == "G1A");
+        Assert.Contains(result.World.Offices, office => office.City == "Montréal" && office.StateOrProvince == "Quebec" && office.PostalCode == "H2Y");
+        Assert.Contains(result.World.Offices, office => office.City == "Mexico City" && office.StateOrProvince == "Ciudad de Mexico" && office.PostalCode == "06000");
+        Assert.Contains(result.World.Offices, office => office.City == "Ecatepec" && office.StateOrProvince == "Estado de Mexico" && office.PostalCode == "55000");
+        Assert.Contains(result.World.Offices, office => office.City == "Tijuana" && office.TimeZone == "America/Tijuana");
+        Assert.Contains(result.World.Offices, office => office.City == "Naucalpan de Juárez" && office.StateOrProvince == "Estado de Mexico" && office.PostalCode == "53370");
+    }
+
+    [Fact]
+    public void WorldGenerator_Prefers_Distinctive_Localities_Over_Ambiguous_Duplicate_City_Names()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Ambiguous Locality Ranking Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Distinctive Locality Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 3,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "US"), ("StateOrProvince", "Kansas"), ("City", "Long Island"), ("PostalCode", "67647"), ("TimeZone", "America/Chicago"), ("Latitude", "39.9517"), ("Longitude", "-99.5391"), ("Population", "7838822"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "US"), ("StateOrProvince", "Maine"), ("City", "Long Island"), ("PostalCode", "04050"), ("TimeZone", "America/New_York"), ("Latitude", "43.6920"), ("Longitude", "-70.1551"), ("Population", "7838822"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "US"), ("StateOrProvince", "Virginia"), ("City", "Long Island"), ("PostalCode", "24569"), ("TimeZone", "America/New_York"), ("Latitude", "37.0644"), ("Longitude", "-79.1219"), ("Population", "7838822"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "US"), ("StateOrProvince", "New York"), ("City", "New York"), ("PostalCode", "10001"), ("TimeZone", "America/New_York"), ("Latitude", "40.7484"), ("Longitude", "-73.9967"), ("Population", "8175133"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "US"), ("StateOrProvince", "Illinois"), ("City", "Chicago"), ("PostalCode", "60601"), ("TimeZone", "America/Chicago"), ("Latitude", "41.8781"), ("Longitude", "-87.6298"), ("Population", "2746388"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "US"), ("StateOrProvince", "Texas"), ("City", "Dallas"), ("PostalCode", "75201"), ("TimeZone", "America/Chicago"), ("Latitude", "32.7767"), ("Longitude", "-96.7970"), ("Population", "1304379"), ("Accuracy", "4"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United States"), ("Code", "US"), ("Continent", "North America"))
+                    }
+                }
+            });
+
+        Assert.Equal(3, result.World.Offices.Count);
+        Assert.DoesNotContain(result.World.Offices, office => office.City == "Long Island");
+        Assert.Contains(result.World.Offices, office => office.City == "New York");
+        Assert.Contains(result.World.Offices, office => office.City == "Chicago");
+        Assert.Contains(result.World.Offices, office => office.City == "Dallas");
+    }
+
+    [Fact]
+    public void WorldGenerator_Prefers_Major_International_Cities_Over_Subcity_Localities()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "International Locality Quality Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "International Quality Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 160,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 4,
+                            Countries = { "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "CA"), ("StateOrProvince", "Quebec"), ("City", "Ahuntsic Central"), ("PostalCode", "H2C"), ("TimeZone", "America/Toronto"), ("Latitude", "45.5606"), ("Longitude", "-73.6584"), ("Population", "0"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "CA"), ("StateOrProvince", "Quebec"), ("City", "Ahuntsic East"), ("PostalCode", "H2M"), ("TimeZone", "America/Toronto"), ("Latitude", "45.5528"), ("Longitude", "-73.6411"), ("Population", "0"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "CA"), ("StateOrProvince", "Ontario"), ("City", "Toronto"), ("PostalCode", "M5H"), ("TimeZone", "America/Toronto"), ("Latitude", "43.6532"), ("Longitude", "-79.3832"), ("Population", "2731571"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "CA"), ("StateOrProvince", "Quebec"), ("City", "Montreal"), ("PostalCode", "H2Y"), ("TimeZone", "America/Toronto"), ("Latitude", "45.5019"), ("Longitude", "-73.5674"), ("Population", "1762949"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateOrProvince", "Guerrero"), ("City", "Naucalpan de Juárez"), ("PostalCode", "41666"), ("TimeZone", "America/Mexico_City"), ("Latitude", "17.0764"), ("Longitude", "-98.4192"), ("Population", "846185"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "MX"), ("StateOrProvince", "México"), ("City", "Santa María Chimalhuacán"), ("PostalCode", "56330"), ("TimeZone", "America/Mexico_City"), ("Latitude", "19.4216"), ("Longitude", "-98.9504"), ("Population", "525389"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "MX"), ("StateOrProvince", "Ciudad de Mexico"), ("City", "Mexico City"), ("PostalCode", "06000"), ("TimeZone", "America/Mexico_City"), ("Latitude", "19.4326"), ("Longitude", "-99.1332"), ("Population", "9209944"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateOrProvince", "Baja California"), ("City", "Tijuana"), ("PostalCode", "22000"), ("TimeZone", "America/Tijuana"), ("Latitude", "32.5149"), ("Longitude", "-117.0382"), ("Population", "1810645"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Canada"), ("Code", "CA"), ("Continent", "North America")),
+                        NewRow(("Name", "Mexico"), ("Code", "MX"), ("Continent", "North America"))
+                    }
+                }
+            });
+
+        Assert.Equal(4, result.World.Offices.Count);
+        Assert.DoesNotContain(result.World.Offices, office => office.City.StartsWith("Ahuntsic", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.World.Offices, office => office.City == "Cartier");
+        Assert.DoesNotContain(result.World.Offices, office => office.City == "Old Montreal");
+        Assert.Contains(result.World.Offices, office => office.City == "Toronto");
+        Assert.Contains(result.World.Offices, office => office.City == "Montreal");
+        Assert.Contains(result.World.Offices, office => office.City == "Mexico City");
+        Assert.Contains(result.World.Offices, office => office.City == "Tijuana");
+        Assert.Contains(result.World.Offices, office => office.City == "Tijuana" && office.TimeZone == "America/Tijuana");
+    }
+
+    [Fact]
+    public void WorldGenerator_Normalizes_Street_Suffix_Abbreviations_And_Filters_Odd_Suffixes()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 7,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Street Suffix Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Street Suffix Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 40,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 1,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 2,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "US"), ("StateCode", "TX"), ("StateOrProvince", "Texas"), ("City", "Houston"), ("PostalCode", "77001"), ("TimeZone", "America/Chicago"), ("Population", "2300000"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "US"), ("StateCode", "OK"), ("StateOrProvince", "Oklahoma"), ("City", "Tulsa"), ("PostalCode", "74103"), ("TimeZone", "America/Chicago"), ("Population", "411000"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United States"), ("Code", "US"), ("Continent", "North America"))
+                    },
+                    ["street_suffixes"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "blvd")),
+                        NewRow(("Value", "clf"))
+                    }
+                }
+            });
+
+        var safeSuffixes = new[] { "Boulevard", "Drive", "Lane", "Road", "Street", "Way" };
+        Assert.All(result.World.Offices, office => Assert.Contains(safeSuffixes, suffix => office.StreetName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(result.World.Offices, office => Regex.IsMatch(office.StreetName, "\\bclf\\b", RegexOptions.IgnoreCase));
+        Assert.DoesNotContain(result.World.Offices, office => Regex.IsMatch(office.StreetName, "\\bblvd\\b", RegexOptions.IgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_RegionalUs_Scenario_Description_To_Filter_States()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Regional US Hint Test",
+                    Description = "Mid-size manufacturer operating in Texas, Oklahoma, and Arkansas.",
+                    GeographyProfile = "Regional-US",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Hinted Geography Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 3,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "US"), ("StateCode", "NY"), ("StateOrProvince", "New York"), ("City", "New York"), ("PostalCode", "10001"), ("TimeZone", "America/New_York"), ("Population", "8804190"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "US"), ("StateCode", "TX"), ("StateOrProvince", "Texas"), ("City", "Dallas"), ("PostalCode", "75201"), ("TimeZone", "America/Chicago"), ("Population", "1304379"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "US"), ("StateCode", "OK"), ("StateOrProvince", "Oklahoma"), ("City", "Oklahoma City"), ("PostalCode", "73102"), ("TimeZone", "America/Chicago"), ("Population", "681054"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "US"), ("StateCode", "AR"), ("StateOrProvince", "Arkansas"), ("City", "Little Rock"), ("PostalCode", "72201"), ("TimeZone", "America/Chicago"), ("Population", "202591"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United States"), ("Code", "US"), ("Continent", "North America"))
+                    },
+                    ["street_suffixes"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Boulevard"))
+                    }
+                }
+            });
+
+        Assert.Equal(new[] { "Dallas", "Oklahoma City", "Little Rock" }, result.World.Offices.Select(office => office.City).ToArray());
+        Assert.DoesNotContain(result.World.Offices, office => office.StateOrProvince == "New York");
     }
 
     [Fact]
@@ -169,6 +471,64 @@ public sealed class CatalogDrivenGenerationTests
 
         var office = Assert.Single(result.World.Offices);
         Assert.Equal("Shanghai", office.City);
+    }
+
+    [Fact]
+    public void WorldGenerator_Filters_LowFidelity_Uk_Locality_Rows_From_Merged_Runtime_Catalog()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "UK Locality Filter Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Midland Fabrication Group",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 3,
+                            Countries = { "United Kingdom" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "GB"), ("City", "London"), ("StateOrProvince", "England"), ("PostalCode", "W1B"), ("TimeZone", "Europe/London"), ("Population", "7556900"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "GB"), ("City", "Kent"), ("Population", "1541893"), ("Accuracy", "0")),
+                        NewRow(("CountryCode", "GB"), ("City", "City And Borough Of Birmingham"), ("Population", "1124569"), ("Accuracy", "0")),
+                        NewRow(("CountryCode", "GB"), ("City", "Birmingham"), ("StateOrProvince", "England"), ("PostalCode", "B1"), ("TimeZone", "Europe/London"), ("Population", "984333"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "GB"), ("City", "Manchester"), ("StateOrProvince", "England"), ("PostalCode", "M1"), ("TimeZone", "Europe/London"), ("Population", "552858"), ("Accuracy", "4"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United Kingdom"), ("Code", "GB"), ("Continent", "Europe"))
+                    },
+                    ["street_suffixes"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Road"))
+                    }
+                }
+            });
+
+        Assert.Equal(new[] { "London", "Birmingham", "Manchester" }, result.World.Offices.Select(office => office.City).ToArray());
+        Assert.DoesNotContain(result.World.Offices, office => office.City == "Kent" || office.City == "City And Borough Of Birmingham");
+        Assert.All(result.World.Offices, office => Assert.False(string.IsNullOrWhiteSpace(office.PostalCode)));
     }
 
     [Fact]
@@ -260,7 +620,7 @@ public sealed class CatalogDrivenGenerationTests
                             DepartmentCountPerBusinessUnit = 2,
                             TeamCountPerDepartment = 1,
                             OfficeCount = 1,
-                            Countries = { "Canada" }
+                            Countries = { "Ireland" }
                         }
                     }
                 }
@@ -291,8 +651,804 @@ public sealed class CatalogDrivenGenerationTests
         {
             Assert.Contains(person.FirstName, new[] { "Liam", "Noah", "Emma", "Ava" });
             Assert.Contains(person.LastName, new[] { "Martin", "Tremblay" });
-            Assert.Equal("Canada", person.Country);
+            Assert.Equal("Ireland", person.Country);
         });
+    }
+
+    [Fact]
+    public void WorldGenerator_Filters_Synthetic_Affix_Name_Artifacts_From_Country_Catalogs()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Name Catalog Sanitization Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Name Sanitization Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 12,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_country"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "DiDavid"), ("Gender", "Male"), ("Country", "United States")),
+                        NewRow(("Name", "SanMary"), ("Gender", "Female"), ("Country", "United States"))
+                    },
+                    ["last_names_country"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Johnsonov"), ("Country", "United States")),
+                        NewRow(("Name", "Williamsov"), ("Country", "United States"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.DoesNotMatch("[A-Z][a-z]+[A-Z]", person.FirstName));
+        Assert.All(result.World.People, person => Assert.DoesNotContain("ov", person.LastName, StringComparison.OrdinalIgnoreCase));
+        Assert.All(result.World.People, person => Assert.False(LooksSyntheticFirstName(person.FirstName)));
+        Assert.All(result.World.People, person => Assert.False(LooksSyntheticLastName(person.LastName)));
+    }
+
+    [Fact]
+    public void WorldGenerator_Filters_First_Name_Leakage_From_Surname_Catalogs()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Surname Leakage Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Surname Leakage Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 12,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_gendered"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "James"), ("Gender", "Male")),
+                        NewRow(("Name", "Emma"), ("Gender", "Female")),
+                        NewRow(("Name", "Abigail"), ("Gender", "Female"))
+                    },
+                    ["surnames_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "James")),
+                        NewRow(("Value", "Abigail"))
+                    }
+                }
+            });
+
+        Assert.DoesNotContain(result.World.People, person => string.Equals(person.LastName, "James", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.People, person => string.Equals(person.LastName, "Abigail", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.People, person => person.LastName == "Smith" || person.LastName == "Johnson");
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Curated_Us_Name_Catalogs_For_Conservative_Name_Fallbacks()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 5,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated US Name Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated US Name Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 16,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_country"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "DiDavid"), ("Gender", "Male"), ("Country", "United States")),
+                        NewRow(("Name", "SanMary"), ("Gender", "Female"), ("Country", "United States"))
+                    },
+                    ["last_names_country"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Johnsonov"), ("Country", "United States")),
+                        NewRow(("Name", "Williamsov"), ("Country", "United States"))
+                    },
+                    ["first_names_curated_us"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "James"), ("Gender", "Male"), ("Country", "United States"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Olivia"), ("Gender", "Female"), ("Country", "United States"), ("CareerStage", "Modern"))
+                    },
+                    ["surnames_curated_us"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Smith"), ("Country", "United States")),
+                        NewRow(("Value", "Brown"), ("Country", "United States"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "James", "Olivia" }));
+        Assert.All(result.World.People, person => Assert.Contains(person.LastName, new[] { "Smith", "Brown" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Career_Stage_From_Curated_Us_Name_Catalogs()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 2,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated US Career Stage Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated Stage Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 20,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_us"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Edward"), ("Gender", "Male"), ("Country", "United States"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Emma"), ("Gender", "Female"), ("Country", "United States"), ("CareerStage", "Modern"))
+                    },
+                    ["surnames_curated_us"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Smith"), ("Country", "United States"))
+                    }
+                }
+            });
+
+        Assert.Equal("Chief Executive Officer", result.World.People[0].Title);
+        Assert.Contains(result.World.People.Take(15), person => person.FirstName == "Edward");
+        Assert.Contains(result.World.People.Skip(15), person => person.FirstName == "Emma");
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Country_Specific_Curated_Name_Catalogs_For_United_Kingdom()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated UK Name Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated UK Name Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 18,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United Kingdom" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_uk"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Harry"), ("Gender", "Male"), ("Country", "United Kingdom"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Olivia"), ("Gender", "Female"), ("Country", "United Kingdom"), ("CareerStage", "Modern"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Harry", "Olivia" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Country_Specific_Curated_Name_Catalogs_For_Canada()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 6,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated Canada Name Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated Canada Name Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 18,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "Canada" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_ca"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Noah"), ("Gender", "Male"), ("Country", "Canada"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Olivia"), ("Gender", "Female"), ("Country", "Canada"), ("CareerStage", "Modern"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Noah", "Olivia" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Country_Specific_Curated_Name_Catalogs_For_Australia()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 8,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated Australia Name Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated Australia Name Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 18,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "Australia" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_au"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Oliver"), ("Gender", "Male"), ("Country", "Australia"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Charlotte"), ("Gender", "Female"), ("Country", "Australia"), ("CareerStage", "Modern"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Oliver", "Charlotte" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Country_Specific_Curated_Name_Catalogs_For_NewZealand()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 9,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated New Zealand Name Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated New Zealand Name Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 18,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "New Zealand" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_nz"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Noah"), ("Gender", "Male"), ("Country", "New Zealand"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Charlotte"), ("Gender", "Female"), ("Country", "New Zealand"), ("CareerStage", "Modern"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Noah", "Charlotte" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Country_Specific_Curated_Surname_Catalogs_For_NewZealand()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 10,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated New Zealand Surname Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated New Zealand Surname Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 18,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "New Zealand" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_nz"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Noah"), ("Gender", "Male"), ("Country", "New Zealand"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Charlotte"), ("Gender", "Female"), ("Country", "New Zealand"), ("CareerStage", "Modern"))
+                    },
+                    ["surnames_curated_nz"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Singh"), ("Country", "New Zealand")),
+                        NewRow(("Value", "Taylor"), ("Country", "New Zealand"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.LastName, new[] { "Singh", "Taylor" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Country_Specific_Curated_Surname_Catalogs_For_UnitedKingdom()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 11,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Curated UK Surname Catalog Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Curated UK Surname Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 18,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United Kingdom" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["first_names_curated_uk"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Oliver"), ("Gender", "Male"), ("Country", "United Kingdom"), ("CareerStage", "Experienced")),
+                        NewRow(("Name", "Amelia"), ("Gender", "Female"), ("Country", "United Kingdom"), ("CareerStage", "Modern"))
+                    },
+                    ["surnames_curated_uk"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Smith"), ("Country", "United Kingdom")),
+                        NewRow(("Value", "Khan"), ("Country", "United Kingdom"))
+                    }
+                }
+            });
+
+        Assert.All(result.World.People, person => Assert.Contains(person.LastName, new[] { "Smith", "Khan" }));
+    }
+
+    [Fact]
+    public void WorldGenerator_Expands_Npa_And_Nxx_Phone_Tokens_To_Digits()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Phone Pattern Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Phone Pattern Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 20,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "US"), ("StateCode", "TX"), ("StateOrProvince", "Texas"), ("City", "Dallas"), ("PostalCode", "75201"), ("TimeZone", "America/Chicago"), ("Latitude", "32.7767"), ("Longitude", "-96.7970"), ("Population", "1304379"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United States"), ("Code", "US"), ("Continent", "North America"), ("Phone", "1"))
+                    },
+                    ["country_identity_rules"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Country", "United States"), ("DialCode", "1"), ("PhonePattern", "+1 NPA-NXX-XXXX"))
+                    }
+                }
+            });
+
+        var phone = Assert.Single(result.World.Offices).BusinessPhone;
+        Assert.Matches(new Regex(@"^\+1 [2-9]\d{2}-[2-9]\d{2}-\d{4}$"), phone);
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Plausible_Uk_Business_Phone_Format()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 11,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "UK Phone Pattern Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Midland Fabrication Group",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 20,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United Kingdom" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "GB"), ("StateOrProvince", "England"), ("City", "London"), ("PostalCode", "W1B"), ("TimeZone", "Europe/London"), ("Latitude", "51.5072"), ("Longitude", "-0.1276"), ("Population", "7556900"), ("Accuracy", "4"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United Kingdom"), ("Code", "GB"), ("Continent", "Europe"), ("Phone", "44"))
+                    },
+                    ["country_identity_rules"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Country", "United Kingdom"), ("DialCode", "44"), ("PhonePattern", "+44 XXXX XXXXXX"))
+                    }
+                }
+            });
+
+        var phone = Assert.Single(result.World.Offices).BusinessPhone;
+        Assert.Matches(new Regex(@"^\+44 ((20 \d{4} \d{4})|((121|131|141|151|161|191|113|114|115|116|117|118) \d{3} \d{4}))$"), phone);
+        Assert.DoesNotContain("+44 00", phone, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Uk_City_Area_Codes_For_Common_Office_Cities()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 21,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "UK City Phone Mapping Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Midland Fabrication Group",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 40,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 3,
+                            Countries = { "United Kingdom" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "GB"), ("StateOrProvince", "England"), ("City", "London"), ("PostalCode", "W1B"), ("TimeZone", "Europe/London"), ("Population", "7556900"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "GB"), ("StateOrProvince", "England"), ("City", "Birmingham"), ("PostalCode", "B1"), ("TimeZone", "Europe/London"), ("Population", "984333"), ("Accuracy", "4")),
+                        NewRow(("CountryCode", "GB"), ("StateOrProvince", "England"), ("City", "Liverpool"), ("PostalCode", "L1"), ("TimeZone", "Europe/London"), ("Population", "864122"), ("Accuracy", "4"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United Kingdom"), ("Code", "GB"), ("Continent", "Europe"), ("Phone", "44"))
+                    },
+                    ["country_identity_rules"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Country", "United Kingdom"), ("DialCode", "44"), ("PhonePattern", "+44 XXXX XXXXXX"))
+                    }
+                }
+            });
+
+        Assert.Contains(result.World.Offices, office => office.City == "London" && office.BusinessPhone.StartsWith("+44 20 ", StringComparison.Ordinal));
+        Assert.Contains(result.World.Offices, office => office.City == "Birmingham" && office.BusinessPhone.StartsWith("+44 121 ", StringComparison.Ordinal));
+        Assert.Contains(result.World.Offices, office => office.City == "Liverpool" && office.BusinessPhone.StartsWith("+44 151 ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_City_Aware_Canadian_And_Mexican_Business_Phones()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 31,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Canada Mexico Phone Mapping Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "International Manufacturing Group",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 60,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 4,
+                            Countries = { "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "CA"), ("StateOrProvince", "Ontario"), ("City", "Toronto"), ("PostalCode", "M5H"), ("TimeZone", "America/Toronto"), ("Population", "2731571"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "CA"), ("StateOrProvince", "Quebec"), ("City", "Montreal"), ("PostalCode", "H2Y"), ("TimeZone", "America/Toronto"), ("Population", "1762949"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateOrProvince", "Ciudad de Mexico"), ("City", "Mexico City"), ("PostalCode", "06000"), ("TimeZone", "America/Mexico_City"), ("Population", "9209944"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateOrProvince", "Baja California"), ("City", "Tijuana"), ("PostalCode", "22000"), ("TimeZone", "America/Tijuana"), ("Population", "1810645"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Canada"), ("Code", "CA"), ("Continent", "North America"), ("Phone", "1")),
+                        NewRow(("Name", "Mexico"), ("Code", "MX"), ("Continent", "North America"), ("Phone", "52"))
+                    },
+                    ["country_identity_rules"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Country", "Canada"), ("DialCode", "1"), ("PhonePattern", "+1 NPA-NXX-XXXX")),
+                        NewRow(("Country", "Mexico"), ("DialCode", "52"), ("PhonePattern", "+52 XX XXXX XXXX"))
+                    }
+                }
+            });
+
+        Assert.Contains(result.World.Offices, office => office.City == "Toronto" && Regex.IsMatch(office.BusinessPhone, @"^\+1 (416|437|647)-\d{3}-\d{4}$"));
+        Assert.Contains(result.World.Offices, office => office.City == "Montreal" && Regex.IsMatch(office.BusinessPhone, @"^\+1 (438|514)-\d{3}-\d{4}$"));
+        Assert.Contains(result.World.Offices, office => office.City == "Mexico City" && Regex.IsMatch(office.BusinessPhone, @"^\+52 55 \d{4} \d{4}$"));
+        Assert.Contains(result.World.Offices, office => office.City == "Tijuana" && Regex.IsMatch(office.BusinessPhone, @"^\+52 664 \d{3} \d{4}$"));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Uk_Style_Office_Address_Components()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 17,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "UK Address Style Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Midland Fabrication Group",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 20,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United Kingdom" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "GB"), ("StateOrProvince", "England"), ("City", "London"), ("PostalCode", "W1B"), ("TimeZone", "Europe/London"), ("Latitude", "51.5072"), ("Longitude", "-0.1276"), ("Population", "7556900"), ("Accuracy", "4"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United Kingdom"), ("Code", "GB"), ("Continent", "Europe"), ("Phone", "44"))
+                    },
+                    ["country_identity_rules"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Country", "United Kingdom"), ("DialCode", "44"), ("PhonePattern", "+44 XXXX XXXXXX"))
+                    },
+                    ["street_suffixes"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Value", "Boulevard")),
+                        NewRow(("Value", "Road")),
+                        NewRow(("Value", "Lane"))
+                    }
+                }
+            });
+
+        var office = Assert.Single(result.World.Offices);
+        Assert.DoesNotContain("Boulevard", office.StreetName, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("High Way", office.StreetName, StringComparison.OrdinalIgnoreCase);
+        Assert.Matches(new Regex(@"\b(Road|Lane|Street|Way|Close)$"), office.StreetName);
+        Assert.Matches(new Regex(@"^(Bridge|Station|Market|Mill|Victoria|King|Queen|Albion|Manor|High) "), office.StreetName);
+        Assert.StartsWith("Floor ", office.FloorOrSuite, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -507,4 +1663,14 @@ public sealed class CatalogDrivenGenerationTests
 
         return row;
     }
+
+    private static bool LooksSyntheticLastName(string value)
+        => value.StartsWith("Di", StringComparison.OrdinalIgnoreCase)
+           || value.StartsWith("San", StringComparison.OrdinalIgnoreCase)
+           || value.EndsWith("ov", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksSyntheticFirstName(string value)
+        => value.StartsWith("Di", StringComparison.OrdinalIgnoreCase)
+           || value.StartsWith("San", StringComparison.OrdinalIgnoreCase)
+           || Regex.IsMatch(value, "[A-Z][a-z]+[A-Z]");
 }

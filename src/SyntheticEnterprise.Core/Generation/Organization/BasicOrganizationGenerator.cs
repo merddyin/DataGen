@@ -165,17 +165,55 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         ScenarioCompanyDefinition companyDefinition,
         CatalogSet catalogs)
     {
-        var maleFirstNames = ReadFilteredNameCatalog(catalogs, "first_names_country", "Male", companyDefinition.Countries);
-        var femaleFirstNames = ReadFilteredNameCatalog(catalogs, "first_names_country", "Female", companyDefinition.Countries);
-        var lastNames = ReadFilteredLastNameCatalog(catalogs, "last_names_country", companyDefinition.Countries);
+        var maleFirstNames = ReadGenderedReferenceNameCatalog(catalogs, "first_names_gendered", "Male", companyDefinition.Countries);
+        var femaleFirstNames = ReadGenderedReferenceNameCatalog(catalogs, "first_names_gendered", "Female", companyDefinition.Countries);
+        var lastNames = ReadSimpleNameCatalog(catalogs, "surnames_reference", companyDefinition.Countries, "Value");
+        var curatedFirstNameCatalog = ResolveCuratedCatalogName("first_names_curated", companyDefinition.Countries);
+        var curatedSurnameCatalog = ResolveCuratedCatalogName("surnames_curated", companyDefinition.Countries);
+        var curatedMaleFirstNames = string.IsNullOrWhiteSpace(curatedFirstNameCatalog)
+            ? new List<CuratedFirstNameEntry>()
+            : ReadCuratedFirstNameCatalog(catalogs, curatedFirstNameCatalog, "Male", companyDefinition.Countries);
+        var curatedFemaleFirstNames = string.IsNullOrWhiteSpace(curatedFirstNameCatalog)
+            ? new List<CuratedFirstNameEntry>()
+            : ReadCuratedFirstNameCatalog(catalogs, curatedFirstNameCatalog, "Female", companyDefinition.Countries);
+        var curatedLastNames = string.IsNullOrWhiteSpace(curatedSurnameCatalog)
+            ? new List<(string Name, string Country)>()
+            : ReadSimpleNameCatalog(catalogs, curatedSurnameCatalog, companyDefinition.Countries, "Value");
+
+        if (maleFirstNames.Count == 0) maleFirstNames = ReadFilteredNameCatalog(catalogs, "first_names_country", "Male", companyDefinition.Countries);
+        if (femaleFirstNames.Count == 0) femaleFirstNames = ReadFilteredNameCatalog(catalogs, "first_names_country", "Female", companyDefinition.Countries);
+        if (lastNames.Count == 0) lastNames = ReadFilteredLastNameCatalog(catalogs, "last_names_country", companyDefinition.Countries);
 
         if (maleFirstNames.Count == 0) maleFirstNames = ReadSimpleNameCatalog(catalogs, "given_names_male", companyDefinition.Countries);
         if (femaleFirstNames.Count == 0) femaleFirstNames = ReadSimpleNameCatalog(catalogs, "given_names_female", companyDefinition.Countries);
-        if (lastNames.Count == 0) lastNames = ReadSimpleNameCatalog(catalogs, "surnames_reference", companyDefinition.Countries, "Value");
 
         if (maleFirstNames.Count == 0) maleFirstNames = GetFallbackFirstNames("Male", companyDefinition.Countries);
         if (femaleFirstNames.Count == 0) femaleFirstNames = GetFallbackFirstNames("Female", companyDefinition.Countries);
         if (lastNames.Count == 0) lastNames = GetFallbackLastNames(companyDefinition.Countries);
+
+        lastNames = FilterLastNames(lastNames, maleFirstNames, femaleFirstNames, companyDefinition.Countries);
+        var preferConservativeNames = ShouldPreferConservativeNames(companyDefinition.Countries);
+        if (preferConservativeNames)
+        {
+            if (curatedMaleFirstNames.Count > 0)
+            {
+                maleFirstNames = curatedMaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList();
+            }
+
+            if (curatedFemaleFirstNames.Count > 0)
+            {
+                femaleFirstNames = curatedFemaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList();
+            }
+
+            if (curatedLastNames.Count > 0)
+            {
+                lastNames = curatedLastNames;
+            }
+        }
+
+        var fallbackMaleFirstNames = curatedMaleFirstNames.Count > 0 ? curatedMaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList() : GetFallbackFirstNames("Male", companyDefinition.Countries);
+        var fallbackFemaleFirstNames = curatedFemaleFirstNames.Count > 0 ? curatedFemaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList() : GetFallbackFirstNames("Female", companyDefinition.Countries);
+        var fallbackLastNames = curatedLastNames.Count > 0 ? curatedLastNames : GetFallbackLastNames(companyDefinition.Countries);
 
         var fallbackTitles = ReadCatalogValues(catalogs, "titles", "Title", new[]
         {
@@ -194,9 +232,6 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         for (var i = 0; i < companyDefinition.EmployeeCount; i++)
         {
             var isFemale = _randomSource.NextDouble() >= 0.5;
-            var firstPool = isFemale ? femaleFirstNames : maleFirstNames;
-            var first = firstPool[_randomSource.Next(firstPool.Count)];
-            var last = lastNames[_randomSource.Next(lastNames.Count)];
             var team = teams[i % teams.Count];
             var departmentId = team.DepartmentId;
             var employeeNumber = (100000 + i).ToString();
@@ -204,6 +239,11 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 ? department.Name
                 : string.Empty;
             var title = PickTitle(i, departmentName, titleProfiles, fallbackTitles);
+            var firstPool = isFemale ? femaleFirstNames : maleFirstNames;
+            var fallbackFirstPool = isFemale ? fallbackFemaleFirstNames : fallbackMaleFirstNames;
+            var curatedFirstPool = isFemale ? curatedFemaleFirstNames : curatedMaleFirstNames;
+            var first = SelectFirstNameEntry(firstPool, fallbackFirstPool, curatedFirstPool, title, preferConservativeNames);
+            var last = SelectNameEntry(lastNames, fallbackLastNames, preferConservativeNames, fallbackBias: 0.75);
 
             var person = new Person
             {
@@ -697,9 +737,10 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             .Where(row => countries.Count == 0 || (row.TryGetValue("Country", out var c) && c is not null && countries.Contains(c)))
             .Where(row => row.TryGetValue("Name", out var n) && !string.IsNullOrWhiteSpace(n))
             .Select(row => (
-                Name: row["Name"] ?? "",
+                Name: NormalizePersonName(row["Name"] ?? string.Empty, isLastName: false),
                 Country: row.TryGetValue("Country", out var country) ? country ?? "" : ""
             ))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
             .Distinct()
             .ToList();
 
@@ -720,9 +761,10 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             .Where(row => countries.Count == 0 || (row.TryGetValue("Country", out var c) && c is not null && countries.Contains(c)))
             .Where(row => row.TryGetValue("Name", out var n) && !string.IsNullOrWhiteSpace(n))
             .Select(row => (
-                Name: row["Name"] ?? "",
+                Name: NormalizePersonName(row["Name"] ?? string.Empty, isLastName: true),
                 Country: row.TryGetValue("Country", out var country) ? country ?? "" : ""
             ))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
             .Distinct()
             .ToList();
 
@@ -744,10 +786,65 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         return rows
             .Where(row => row.TryGetValue(field, out var name) && !string.IsNullOrWhiteSpace(name))
             .Select(row => (
-                Name: row[field] ?? string.Empty,
+                Name: NormalizePersonName(row[field] ?? string.Empty, isLastName: field.Contains("surname", StringComparison.OrdinalIgnoreCase) || field.Contains("last", StringComparison.OrdinalIgnoreCase) || string.Equals(catalogName, "surnames_reference", StringComparison.OrdinalIgnoreCase)),
                 Country: row.TryGetValue("Country", out var country) && !string.IsNullOrWhiteSpace(country)
                     ? country!
                     : defaultCountry))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+            .Distinct()
+            .ToList();
+    }
+
+    private static List<(string Name, string Country)> ReadGenderedReferenceNameCatalog(
+        CatalogSet catalogs,
+        string catalogName,
+        string gender,
+        IReadOnlyCollection<string> countries)
+    {
+        if (!catalogs.CsvCatalogs.TryGetValue(catalogName, out var rows))
+        {
+            return new();
+        }
+
+        var defaultCountry = NormalizeCountries(countries).FirstOrDefault() ?? "United States";
+        return rows
+            .Where(row => row.TryGetValue("Gender", out var value) && string.Equals(value, gender, StringComparison.OrdinalIgnoreCase))
+            .Where(row => row.TryGetValue("Name", out var name) && !string.IsNullOrWhiteSpace(name))
+            .Select(row => (Name: NormalizePersonName(row["Name"] ?? string.Empty, isLastName: false), Country: defaultCountry))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+            .Distinct()
+            .ToList();
+    }
+
+    private static List<CuratedFirstNameEntry> ReadCuratedFirstNameCatalog(
+        CatalogSet catalogs,
+        string catalogName,
+        string gender,
+        IReadOnlyCollection<string> countries)
+    {
+        if (!catalogs.CsvCatalogs.TryGetValue(catalogName, out var rows))
+        {
+            return new();
+        }
+
+        var normalizedCountries = NormalizeCountries(countries).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var defaultCountry = normalizedCountries.FirstOrDefault() ?? "United States";
+
+        return rows
+            .Where(row => row.TryGetValue("Gender", out var value) && string.Equals(value, gender, StringComparison.OrdinalIgnoreCase))
+            .Where(row => row.TryGetValue("Name", out var name) && !string.IsNullOrWhiteSpace(name))
+            .Where(row =>
+            {
+                var country = row.TryGetValue("Country", out var rawCountry) && !string.IsNullOrWhiteSpace(rawCountry)
+                    ? rawCountry!
+                    : defaultCountry;
+                return normalizedCountries.Count == 0 || normalizedCountries.Contains(country);
+            })
+            .Select(row => new CuratedFirstNameEntry(
+                NormalizePersonName(row["Name"] ?? string.Empty, isLastName: false),
+                row.TryGetValue("Country", out var country) && !string.IsNullOrWhiteSpace(country) ? country! : defaultCountry,
+                row.TryGetValue("CareerStage", out var careerStage) ? careerStage ?? string.Empty : string.Empty))
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
             .Distinct()
             .ToList();
     }
@@ -829,6 +926,216 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
     private static IEnumerable<(string Name, string Country)> CreateNamePairs(string country, params string[] names)
         => names.Select(name => (name, country));
 
+    private (string Name, string Country) SelectNameEntry(
+        IReadOnlyList<(string Name, string Country)> primaryPool,
+        IReadOnlyList<(string Name, string Country)> fallbackPool,
+        bool preferFallback,
+        double fallbackBias)
+    {
+        if (primaryPool.Count == 0 && fallbackPool.Count == 0)
+        {
+            return (string.Empty, string.Empty);
+        }
+
+        if (fallbackPool.Count == 0)
+        {
+            return primaryPool[_randomSource.Next(primaryPool.Count)];
+        }
+
+        if (primaryPool.Count == 0)
+        {
+            return fallbackPool[_randomSource.Next(fallbackPool.Count)];
+        }
+
+        if (preferFallback && _randomSource.NextDouble() < fallbackBias)
+        {
+            return fallbackPool[_randomSource.Next(fallbackPool.Count)];
+        }
+
+        return primaryPool[_randomSource.Next(primaryPool.Count)];
+    }
+
+    private (string Name, string Country) SelectFirstNameEntry(
+        IReadOnlyList<(string Name, string Country)> primaryPool,
+        IReadOnlyList<(string Name, string Country)> fallbackPool,
+        IReadOnlyList<CuratedFirstNameEntry> curatedPool,
+        string title,
+        bool preferConservativeNames)
+    {
+        if (preferConservativeNames && curatedPool.Count > 0)
+        {
+            var stage = ResolveNameCareerStage(title);
+            var stagePool = curatedPool
+                .Where(entry => string.IsNullOrWhiteSpace(entry.CareerStage)
+                    || string.Equals(entry.CareerStage, "Any", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(entry.CareerStage, stage, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (stagePool.Count > 0)
+            {
+                var selected = stagePool[_randomSource.Next(stagePool.Count)];
+                return (selected.Name, selected.Country);
+            }
+        }
+
+        return SelectNameEntry(primaryPool, fallbackPool, preferConservativeNames, fallbackBias: 0.55);
+    }
+
+    private static bool ShouldPreferConservativeNames(IReadOnlyCollection<string> countries)
+    {
+        var primaryCountry = ResolvePrimaryCountry(countries);
+        return primaryCountry is "United States" or "Canada" or "United Kingdom" or "Australia" or "New Zealand";
+    }
+
+    private static string? ResolveCuratedCatalogName(string prefix, IReadOnlyCollection<string> countries)
+    {
+        var primaryCountry = ResolvePrimaryCountry(countries);
+        return primaryCountry switch
+        {
+            "United States" => $"{prefix}_us",
+            "Canada" => $"{prefix}_ca",
+            "Australia" => $"{prefix}_au",
+            "New Zealand" => $"{prefix}_nz",
+            "United Kingdom" => $"{prefix}_uk",
+            _ => null
+        };
+    }
+
+    private static string ResolveNameCareerStage(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return "Any";
+        }
+
+        if (title.Contains("Chief", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Vice President", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Director", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Manager", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Experienced";
+        }
+
+        return "Modern";
+    }
+
+    private static List<(string Name, string Country)> FilterLastNames(
+        IReadOnlyList<(string Name, string Country)> lastNames,
+        IReadOnlyList<(string Name, string Country)> maleFirstNames,
+        IReadOnlyList<(string Name, string Country)> femaleFirstNames,
+        IReadOnlyCollection<string> countries)
+    {
+        var firstNameSet = maleFirstNames
+            .Concat(femaleFirstNames)
+            .Select(entry => entry.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var filtered = lastNames
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+            .Where(entry => !firstNameSet.Contains(entry.Name))
+            .Where(entry => !LooksSyntheticAffixName(entry.Name))
+            .Distinct()
+            .ToList();
+
+        if (filtered.Count > 0)
+        {
+            return filtered;
+        }
+
+        return GetFallbackLastNames(countries);
+    }
+
+    private static string NormalizePersonName(string value, bool isLastName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Length is < 2 or > 24)
+        {
+            return string.Empty;
+        }
+
+        if (trimmed.Any(character => !char.IsLetter(character) && character is not '\'' and not '-' and not ' '))
+        {
+            return string.Empty;
+        }
+
+        var tokens = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var normalizedTokens = new List<string>(tokens.Length);
+        foreach (var token in tokens)
+        {
+            if (HasEmbeddedCamelCase(token))
+            {
+                return string.Empty;
+            }
+
+            var normalizedToken = NormalizeToken(token);
+            if (string.IsNullOrWhiteSpace(normalizedToken) || IsSuspiciousGeneratedSurname(normalizedToken, isLastName))
+            {
+                return string.Empty;
+            }
+
+            normalizedTokens.Add(normalizedToken);
+        }
+
+        return string.Join(' ', normalizedTokens);
+    }
+
+    private static bool HasEmbeddedCamelCase(string token)
+    {
+        var uppercaseCount = token.Count(char.IsUpper);
+        return uppercaseCount > 1 && !token.Contains('-') && !token.Contains('\'');
+    }
+
+    private static string NormalizeToken(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return string.Empty;
+        }
+
+        var chars = token.ToLowerInvariant().ToCharArray();
+        chars[0] = char.ToUpperInvariant(chars[0]);
+        return new string(chars);
+    }
+
+    private static bool IsSuspiciousGeneratedSurname(string token, bool isLastName)
+    {
+        if (!isLastName)
+        {
+            return false;
+        }
+
+        return token switch
+        {
+            "Johnsonov" or "Williamsov" or "Brownson" or "Jonesu" or "Smithov" or "Millerov" or "Davisov" => true,
+            _ => false
+        };
+    }
+
+    private static bool LooksSyntheticAffixName(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token.Length < 5)
+        {
+            return false;
+        }
+
+        var prefixes = new[] { "Al", "De", "Di", "El", "La", "Le", "San", "Van", "Von" };
+        return prefixes.Any(prefix =>
+            token.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            && token.Length > prefix.Length
+            && char.IsUpper(token[prefix.Length]));
+    }
+
     private static string FirstNonEmpty(params string[] values)
         => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value)) ?? string.Empty;
 
@@ -877,6 +1184,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
     }
 
     private sealed record TitleProfile(string Title, string Department, string Level);
+    private sealed record CuratedFirstNameEntry(string Name, string Country, string CareerStage);
     private sealed record OrganizationTemplate(string Layer, string Name, IReadOnlyList<string> IndustryTags, IReadOnlyList<string> ParentHints, int MinimumEmployees);
     private sealed record IndustryTaxonomyMatch(string Sector, string IndustryGroup, string Industry, string SubIndustry);
 }

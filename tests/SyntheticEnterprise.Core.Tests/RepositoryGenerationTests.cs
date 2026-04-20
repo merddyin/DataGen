@@ -207,6 +207,109 @@ public sealed class RepositoryGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Uses_Company_Primary_Domain_For_Repository_Endpoints()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Repository Domain Test",
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 4,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Repository Domain Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 80,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            FileShareCount = 3,
+                            CollaborationSiteCount = 3,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        var company = Assert.Single(result.World.Companies);
+        Assert.All(result.World.FileShares, share => Assert.Contains(company.PrimaryDomain, share.UncPath, StringComparison.OrdinalIgnoreCase));
+        Assert.All(result.World.CollaborationSites, site => Assert.Contains(company.PrimaryDomain, site.Url, StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.FileShares, share => share.UncPath.Contains(".test", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => site.Url.Contains(".test", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Makes_Repeated_Collaboration_Site_Names_And_Urls_Unique()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Collaboration Site Uniqueness Test",
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 4,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Unique Site Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            CollaborationSiteCount = 6,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["repository_patterns"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Type", "CollaborationSite"), ("Pattern", "{dept} Projects"), ("OwnerHint", "Department"), ("AccessModel", "Private"))
+                    }
+                }
+            });
+
+        Assert.Equal(result.World.CollaborationSites.Count, result.World.CollaborationSites.Select(site => site.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(result.World.CollaborationSites.Count, result.World.CollaborationSites.Select(site => site.Url).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(result.World.CollaborationSites, site => site.Name.EndsWith(" 2", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => site.Name.Contains(" 2 2", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void WorldGenerator_Uses_Application_Repository_Pattern_Catalog_For_Link_Shaping()
     {
         var services = new ServiceCollection()
@@ -432,6 +535,45 @@ public sealed class RepositoryGenerationTests
             && result.World.DocumentFolders.Any(parent =>
                 parent.Id == folder.ParentFolderId
                 && parent.Name == "Escalations"));
+    }
+
+    [Fact]
+    public void WorldGenerator_Avoids_Duplicated_Fallback_Collaboration_Site_Names()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 3,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Collab Naming Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Collab Naming Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 220,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            CollaborationSiteCount = 18,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.DoesNotContain(result.World.CollaborationSites, site => string.Equals(site.Name, "Operations Operations", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => string.Equals(site.Name, "Projects Projects", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(site.Name, "\\b\\d+\\s+(Operations|Workspace|Projects)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
 
     private static Dictionary<string, string?> NewRow(params (string Key, string? Value)[] entries)

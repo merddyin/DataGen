@@ -62,6 +62,31 @@
       "sourceFiles": [ "first_names_gendered.csv" ]
     },
     {
+      "tableName": "first_names_curated_us",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_curated_us.csv" ]
+    },
+    {
+      "tableName": "first_names_curated_ca",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_curated_ca.csv" ]
+    },
+    {
+      "tableName": "first_names_curated_au",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_curated_au.csv" ]
+    },
+    {
+      "tableName": "first_names_curated_nz",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_curated_nz.csv" ]
+    },
+    {
+      "tableName": "first_names_curated_uk",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "first_names_curated_uk.csv" ]
+    },
+    {
       "tableName": "given_names_male",
       "strategy": "line_list_name",
       "sourceFiles": [ "given-male.txt" ]
@@ -75,6 +100,21 @@
       "tableName": "surnames_reference",
       "strategy": "copy_csv",
       "sourceFiles": [ "surnames_reference.csv" ]
+    },
+    {
+      "tableName": "surnames_curated_us",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "surnames_curated_us.csv" ]
+    },
+    {
+      "tableName": "surnames_curated_nz",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "surnames_curated_nz.csv" ]
+    },
+    {
+      "tableName": "surnames_curated_uk",
+      "strategy": "copy_csv",
+      "sourceFiles": [ "surnames_curated_uk.csv" ]
     },
     {
       "tableName": "company_suffixes",

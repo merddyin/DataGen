@@ -4,6 +4,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using System.Text.RegularExpressions;
 
 public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 {
@@ -137,7 +138,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 Id = _idFactory.Next("FS"),
                 CompanyId = company.Id,
                 ShareName = shareName,
-                UncPath = $"\\\\files.{Slug(company.Name)}.test\\{shareName}",
+                UncPath = $"\\\\{ResolveCompanyHost(company, "files")}\\{shareName}",
                 OwnerDepartmentId = dept.Id,
                 OwnerPersonId = null,
                 HostServerId = hostServer?.Id,
@@ -198,7 +199,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 Id = _idFactory.Next("FS"),
                 CompanyId = company.Id,
                 ShareName = $"home-{shareToken}",
-                UncPath = $"\\\\files.{Slug(company.Name)}.test\\home\\{shareToken}",
+                UncPath = $"\\\\{ResolveCompanyHost(company, "files")}\\home\\{shareToken}",
                 OwnerDepartmentId = person.DepartmentId,
                 OwnerPersonId = person.Id,
                 HostServerId = hostServer?.Id,
@@ -217,7 +218,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                     Id = _idFactory.Next("FS"),
                     CompanyId = company.Id,
                     ShareName = $"profile-{shareToken}",
-                    UncPath = $"\\\\profiles.{Slug(company.Name)}.test\\profiles$\\{shareToken}",
+                    UncPath = $"\\\\{ResolveCompanyHost(company, "profiles")}\\profiles$\\{shareToken}",
                     OwnerDepartmentId = person.DepartmentId,
                     OwnerPersonId = person.Id,
                     HostServerId = hostServer?.Id,
@@ -247,6 +248,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         IReadOnlyList<DocumentFolderPatternRule> documentFolderPatterns)
     {
         var patterns = ReadRepositoryPatterns(catalogs, "CollaborationSite");
+        var siteNameUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < Math.Max(1, definition.CollaborationSiteCount); i++)
         {
@@ -255,6 +257,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             var platform = i % 5 == 0 ? "Teams" : "SharePoint";
             var pattern = patterns.Count == 0 ? null : patterns[i % patterns.Count];
             var siteName = pattern is null ? $"{dept.Name} {(i % 3 == 0 ? "Operations" : i % 3 == 1 ? "Workspace" : "Projects")}" : ApplyDisplayPattern(pattern.Pattern, dept.Name, i + 1);
+            siteName = NormalizeSiteName(siteName, dept.Name);
+            siteName = EnsureUniqueSiteName(siteNameUsage, siteName);
             var workspaceType = platform == "Teams"
                 ? (i % 3 == 0 ? "Team" : i % 3 == 1 ? "Project" : "Department")
                 : (i % 3 == 0 ? "Department" : i % 3 == 1 ? "Knowledge" : "Project");
@@ -265,7 +269,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 CompanyId = company.Id,
                 Platform = platform,
                 Name = siteName,
-                Url = $"https://collab.{Slug(company.Name)}.test/sites/{Slug(siteName)}",
+                Url = $"https://{ResolveCompanyHost(company, "collab")}/sites/{Slug(siteName)}",
                 OwnerPersonId = owner.Id,
                 OwnerDepartmentId = dept.Id,
                 MemberCount = (8 + _randomSource.Next(0, 220)).ToString(),
@@ -1510,6 +1514,114 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 Read(row, "AccessModel")))
             .Where(rule => !string.IsNullOrWhiteSpace(rule.Pattern))
             .ToList();
+    }
+
+    private static string ResolveCompanyHost(Company company, string subdomain)
+    {
+        if (!string.IsNullOrWhiteSpace(company.PrimaryDomain))
+        {
+            return $"{subdomain}.{company.PrimaryDomain}";
+        }
+
+        return $"{subdomain}.{Slug(company.Name)}.test";
+    }
+
+    private static string NormalizeSiteName(string siteName, string departmentName)
+    {
+        if (string.IsNullOrWhiteSpace(siteName))
+        {
+            return departmentName;
+        }
+
+        var trimmedName = siteName.Trim();
+        if (TryExtractNumberedDepartmentLabel(trimmedName, out var baseName, out var suffix, out var sequence))
+        {
+            if (baseName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{baseName} Workspace {sequence}";
+            }
+
+            return $"{baseName} {suffix} {sequence}";
+        }
+
+        var suffixes = new[] { "Operations", "Workspace", "Projects" };
+
+        foreach (var siteSuffix in suffixes)
+        {
+            if (!trimmedName.EndsWith($" {siteSuffix}", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (departmentName.EndsWith(siteSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{departmentName} Workspace";
+            }
+        }
+
+        return trimmedName;
+    }
+
+    private static string EnsureUniqueSiteName(IDictionary<string, int> usage, string siteName)
+    {
+        if (!usage.TryGetValue(siteName, out var count))
+        {
+            usage[siteName] = 1;
+            return siteName;
+        }
+
+        count++;
+        usage[siteName] = count;
+        if (TrySplitTrailingNumber(siteName, out var baseName, out var existingNumber))
+        {
+            return $"{baseName} {existingNumber + count - 1}";
+        }
+
+        return $"{siteName} {count}";
+    }
+
+    private static bool TrySplitTrailingNumber(string value, out string baseName, out int number)
+    {
+        baseName = value;
+        number = 0;
+
+        var match = Regex.Match(value, @"^(.*?)(?:\s+)(\d+)$", RegexOptions.CultureInvariant);
+        if (!match.Success || !int.TryParse(match.Groups[2].Value, out number))
+        {
+            return false;
+        }
+
+        baseName = match.Groups[1].Value.TrimEnd();
+        return !string.IsNullOrWhiteSpace(baseName);
+    }
+
+    private static bool TryExtractNumberedDepartmentLabel(string value, out string baseName, out string suffix, out string sequence)
+    {
+        baseName = value;
+        suffix = string.Empty;
+        sequence = string.Empty;
+
+        var parts = value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length < 3)
+        {
+            return false;
+        }
+
+        suffix = parts[^1];
+        if (suffix is not ("Operations" or "Workspace" or "Projects"))
+        {
+            return false;
+        }
+
+        var candidate = parts[^2];
+        if (!int.TryParse(candidate, out _))
+        {
+            return false;
+        }
+
+        sequence = candidate;
+        baseName = string.Join(' ', parts[..^2]);
+        return true;
     }
 
     private static List<ApplicationRepositoryPatternRule> ReadApplicationRepositoryPatterns(
