@@ -65,6 +65,10 @@ public sealed class TemporalSimulationTests
         Assert.Contains(result.Temporal.Events, record => record.EventType == "person.hired");
         Assert.Contains(result.Temporal.Events, record => record.EventType == "identity.account_provisioned");
         Assert.Contains(result.Temporal.Events, record => record.EventType == "infrastructure.device_enrolled");
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("person.", StringComparison.Ordinal) && record.EventType != "person.hired");
+        Assert.Contains(
+            result.Temporal.Events,
+            record => record.EventType is "identity.account_disabled" or "identity.password_rotated" or "identity.mfa_enrolled");
     }
 
     [Fact]
