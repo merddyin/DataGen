@@ -66,21 +66,24 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Kind = ScenarioTemplateKind.RegionalManufacturer,
             Name = "Regional Manufacturer",
             Description = "A balanced regional operating company with hybrid identity, on-prem infrastructure, and shared repositories.",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.RegionalManufacturer)
         },
         new ScenarioTemplateDescriptor
         {
             Kind = ScenarioTemplateKind.GlobalSaaS,
             Name = "Global SaaS",
             Description = "A collaboration-heavy, identity-forward software company with global offices and cloud bias.",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.GlobalSaaS)
         },
         new ScenarioTemplateDescriptor
         {
             Kind = ScenarioTemplateKind.HealthcareNetwork,
             Name = "Healthcare Network",
             Description = "A regulated enterprise with distributed sites, mixed device populations, and sensitive repositories.",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.LegacyInfrastructure }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.LegacyInfrastructure },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.HealthcareNetwork)
         }
     };
 
@@ -93,7 +96,8 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A balanced regional operating company with hybrid identity, on-prem infrastructure, and shared repositories.",
             IndustryProfile = "Manufacturing",
             GeographyProfile = "Regional-US",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.RegionalManufacturer)
         },
         new ScenarioArchetypeDescriptor
         {
@@ -102,7 +106,8 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A collaboration-heavy, identity-forward software company with global offices and cloud bias.",
             IndustryProfile = "Software",
             GeographyProfile = "Global",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.GlobalSaaS)
         },
         new ScenarioArchetypeDescriptor
         {
@@ -111,7 +116,8 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A regulated enterprise with distributed sites, mixed device populations, and sensitive repositories.",
             IndustryProfile = "Healthcare",
             GeographyProfile = "Regional-US",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.LegacyInfrastructure }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.LegacyInfrastructure },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.HealthcareNetwork)
         },
         new ScenarioArchetypeDescriptor
         {
@@ -120,7 +126,8 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A policy-heavy public service organization with regulated workflows, broad device coverage, and audit-sensitive operations.",
             IndustryProfile = "Public Sector",
             GeographyProfile = "Regional-US",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.UnderGoverned }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.UnderGoverned },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.PublicSectorAgency)
         },
         new ScenarioArchetypeDescriptor
         {
@@ -129,7 +136,8 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A distributed retail and distribution operator with branch locations, frontline devices, and supply-chain application dependencies.",
             IndustryProfile = "Retail",
             GeographyProfile = "North-America",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.PostMerger }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.PostMerger },
+            RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.RetailDistribution)
         }
     };
 
@@ -277,6 +285,50 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             ExternalPlugins = new ExternalPluginScenarioProfile()
         }
     };
+
+    private static List<ScenarioPackSelection> BuildRecommendedPacks(ScenarioArchetypeKind kind) => kind switch
+    {
+        ScenarioArchetypeKind.GlobalSaaS => new()
+        {
+            CreatePack("FirstParty.ITSM", ("TicketCount", "18")),
+            CreatePack("FirstParty.SecOps", ("AlertCount", "12"))
+        },
+        ScenarioArchetypeKind.HealthcareNetwork => new()
+        {
+            CreatePack("FirstParty.ITSM", ("TicketCount", "20")),
+            CreatePack("FirstParty.SecOps", ("AlertCount", "14"))
+        },
+        ScenarioArchetypeKind.PublicSectorAgency => new()
+        {
+            CreatePack("FirstParty.ITSM", ("TicketCount", "14")),
+            CreatePack("FirstParty.BusinessOps", ("RequestCount", "8"))
+        },
+        ScenarioArchetypeKind.RetailDistribution => new()
+        {
+            CreatePack("FirstParty.ITSM", ("TicketCount", "16")),
+            CreatePack("FirstParty.BusinessOps", ("RequestCount", "12"))
+        },
+        _ => new()
+        {
+            CreatePack("FirstParty.ITSM", ("TicketCount", "12")),
+            CreatePack("FirstParty.BusinessOps", ("RequestCount", "6"))
+        }
+    };
+
+    private static ScenarioPackSelection CreatePack(string packId, params (string Key, string Value)[] settings)
+    {
+        var selection = new ScenarioPackSelection
+        {
+            PackId = packId
+        };
+
+        foreach (var (key, value) in settings)
+        {
+            selection.Settings[key] = value;
+        }
+
+        return selection;
+    }
 }
 
 public sealed class ScenarioOverlayService : IScenarioOverlayService

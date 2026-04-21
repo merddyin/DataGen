@@ -72,6 +72,7 @@ public sealed class ScenarioTemplateDescriptor
     public required string Name { get; init; }
     public required string Description { get; init; }
     public List<ScenarioOverlayKind> RecommendedOverlays { get; init; } = new();
+    public List<ScenarioPackSelection> RecommendedPacks { get; init; } = new();
     public List<GenerationPluginCapabilityContribution> PluginContributions { get; init; } = new();
     public List<ScenarioPluginAuthoringHint> PluginAuthoringHints { get; init; } = new();
 }
@@ -84,6 +85,7 @@ public sealed class ScenarioArchetypeDescriptor
     public string IndustryProfile { get; init; } = string.Empty;
     public string GeographyProfile { get; init; } = string.Empty;
     public List<ScenarioOverlayKind> RecommendedOverlays { get; init; } = new();
+    public List<ScenarioPackSelection> RecommendedPacks { get; init; } = new();
     public List<GenerationPluginCapabilityContribution> PluginContributions { get; init; } = new();
     public List<ScenarioPluginAuthoringHint> PluginAuthoringHints { get; init; } = new();
 }

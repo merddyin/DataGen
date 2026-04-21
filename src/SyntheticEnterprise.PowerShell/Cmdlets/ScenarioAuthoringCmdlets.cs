@@ -42,6 +42,9 @@ public sealed class GetSEScenarioTemplateCommand : PSCmdlet
                 Name = descriptor.Name,
                 Description = descriptor.Description,
                 RecommendedOverlays = descriptor.RecommendedOverlays.ToList(),
+                RecommendedPacks = descriptor.RecommendedPacks
+                    .Select(ScenarioCmdletInput.ClonePackSelection)
+                    .ToList(),
                 PluginContributions = validation.Contributions,
                 PluginAuthoringHints = validation.AuthoringHints
             });
@@ -84,6 +87,9 @@ public sealed class GetSEScenarioArchetypeCommand : PSCmdlet
                 IndustryProfile = descriptor.IndustryProfile,
                 GeographyProfile = descriptor.GeographyProfile,
                 RecommendedOverlays = descriptor.RecommendedOverlays.ToList(),
+                RecommendedPacks = descriptor.RecommendedPacks
+                    .Select(ScenarioCmdletInput.ClonePackSelection)
+                    .ToList(),
                 PluginContributions = validation.Contributions,
                 PluginAuthoringHints = validation.AuthoringHints
             });
@@ -288,6 +294,14 @@ file static class ScenarioCmdletInput
             OfficeCount = envelope.OfficeCount
         };
     }
+
+    public static ScenarioPackSelection ClonePackSelection(ScenarioPackSelection selection)
+        => new()
+        {
+            PackId = selection.PackId,
+            Enabled = selection.Enabled,
+            Settings = new Dictionary<string, string?>(selection.Settings, StringComparer.OrdinalIgnoreCase)
+        };
 
     public static ScenarioEnvelope ToEnvelope(ScenarioDefinition definition)
         => new()

@@ -132,7 +132,8 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
         var results = powershell.Invoke<ScenarioArchetypeDescriptor>();
 
         Assert.False(powershell.HadErrors);
-        Assert.Contains(results, item => item.Kind == ScenarioArchetypeKind.PublicSectorAgency);
+        var publicSector = Assert.Single(results, item => item.Kind == ScenarioArchetypeKind.PublicSectorAgency);
+        Assert.Contains(publicSector.RecommendedPacks, pack => pack.PackId == "FirstParty.ITSM");
         Assert.Contains(results, item => item.Kind == ScenarioArchetypeKind.RetailDistribution);
     }
 

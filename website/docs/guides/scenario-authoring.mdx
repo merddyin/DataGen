@@ -9,9 +9,11 @@ DataGen scenarios can be authored in several ways:
 
 - archetype-first with `New-SEScenarioFromArchetype`
 - template-first with `New-SEScenarioFromTemplate`
-- interactive authoring with `New-SEScenarioWizard`
+- guided interactive authoring with `New-SEScenarioWizard`
 - JSON files checked into source control
 - pipeline object editing and validation
+
+For most new scenarios, start with an archetype or the wizard. The wizard now leads with archetypes, recommends overlays, and can suggest bundled domain packs such as `FirstParty.ITSM`, `FirstParty.SecOps`, and `FirstParty.BusinessOps` based on the archetype and overlays you choose.
 
 ## Archetypes
 
@@ -71,6 +73,18 @@ Compatibility overlays are still accepted for existing scenarios:
 $scenario = New-SEScenarioFromArchetype -Archetype GlobalSaaS
 $merged = Merge-SEScenarioOverlay -Scenario $scenario -Overlay FastGrowth,PostMerger
 ```
+
+## Guided composition
+
+`New-SEScenarioWizard` is now the easiest way to build a scenario without dropping into low-level tuning immediately.
+
+The guided flow does three things:
+
+- starts from an archetype instead of a legacy template
+- recommends overlays that fit that archetype
+- recommends bundled first-party packs when the archetype or overlays imply operating domains such as ITSM, SecOps, or BusinessOps
+
+If you keep the guided defaults, the wizard preserves the archetype's industry and geography settings. You can still opt into editing those details when needed.
 
 ## JSON authoring
 

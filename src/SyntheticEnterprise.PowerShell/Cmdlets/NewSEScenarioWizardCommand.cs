@@ -47,6 +47,7 @@ public sealed class NewSEScenarioWizardCommand : PSCmdlet
         using var services = BuildServices();
         var wizard = new ScenarioWizardService(
             services.GetRequiredService<IScenarioTemplateRegistry>(),
+            services.GetRequiredService<IScenarioArchetypeRegistry>(),
             services.GetRequiredService<IScenarioValidator>(),
             new SpectreScenarioWizardPrompter());
 
@@ -184,8 +185,12 @@ public enum ScenarioWizardEditSection
 public interface IScenarioWizardPrompter
 {
     void ShowEditingExistingScenario(string label);
-    ScenarioTemplateDescriptor SelectTemplate(IReadOnlyList<ScenarioTemplateDescriptor> templates);
+    ScenarioArchetypeDescriptor SelectArchetype(IReadOnlyList<ScenarioArchetypeDescriptor> archetypes);
     IReadOnlyCollection<ScenarioOverlayKind> SelectOverlays(IReadOnlyList<ScenarioOverlayKind> overlays, IReadOnlyCollection<ScenarioOverlayKind> recommendedOverlays);
+    IReadOnlyCollection<ScenarioPackSelection> SelectPacks(
+        IReadOnlyList<ScenarioPackSelection> availablePacks,
+        IReadOnlyCollection<ScenarioPackSelection> recommendedPacks,
+        IReadOnlyCollection<ScenarioPackSelection> currentPacks);
     string PromptText(string prompt, string defaultValue);
     int PromptInt(string prompt, int defaultValue, int minimumValue);
     double PromptDouble(string prompt, double defaultValue, double minimumValue, double maximumValue);
@@ -209,15 +214,18 @@ public sealed class ScenarioWizardValidationState
 public sealed class ScenarioWizardService
 {
     private readonly IScenarioTemplateRegistry _templateRegistry;
+    private readonly IScenarioArchetypeRegistry _archetypeRegistry;
     private readonly IScenarioValidator _validator;
     private readonly IScenarioWizardPrompter _prompter;
 
     public ScenarioWizardService(
         IScenarioTemplateRegistry templateRegistry,
+        IScenarioArchetypeRegistry archetypeRegistry,
         IScenarioValidator validator,
         IScenarioWizardPrompter prompter)
     {
         _templateRegistry = templateRegistry;
+        _archetypeRegistry = archetypeRegistry;
         _validator = validator;
         _prompter = prompter;
     }
@@ -230,21 +238,28 @@ public sealed class ScenarioWizardService
     {
         options ??= new ScenarioWizardRunOptions();
 
+        var archetypes = _archetypeRegistry.GetArchetypes()
+            .OrderBy(archetype => archetype.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var templates = _templateRegistry.GetTemplates()
             .OrderBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        ScenarioArchetypeDescriptor? selectedArchetype = null;
         ScenarioTemplateDescriptor? selectedTemplate = null;
         ScenarioEnvelope template;
         if (initialScenario is null)
         {
-            selectedTemplate = _prompter.SelectTemplate(templates);
-            template = _templateRegistry.CreateTemplate(selectedTemplate.Kind);
+            selectedArchetype = _prompter.SelectArchetype(archetypes);
+            template = _archetypeRegistry.CreateArchetype(selectedArchetype.Kind);
         }
         else
         {
             _prompter.ShowEditingExistingScenario(existingScenarioLabel
                 ?? $"Editing existing scenario '{initialScenario.Name}'.");
+            selectedArchetype = initialScenario.Archetype is { } existingArchetypeKind
+                ? archetypes.FirstOrDefault(archetypeDescriptor => archetypeDescriptor.Kind == existingArchetypeKind)
+                : null;
             selectedTemplate = initialScenario.Template is { } existingTemplateKind
                 ? templates.FirstOrDefault(templateDescriptor => templateDescriptor.Kind == existingTemplateKind)
                 : null;
@@ -255,7 +270,7 @@ public sealed class ScenarioWizardService
 
         var scenario = options.ReviewOnly
             ? template
-            : PromptAllSections(template, selectedTemplate, options.StartSection);
+            : PromptAllSections(template, selectedArchetype, selectedTemplate, options.StartSection);
         var validationState = ValidateScenario(scenario);
         scenario = validationState.Scenario;
         var validation = validationState.Validation;
@@ -272,7 +287,7 @@ public sealed class ScenarioWizardService
 
             scenario = editSection switch
             {
-                ScenarioWizardEditSection.BasicDetails => PromptBasicSection(scenario, template, selectedTemplate),
+                ScenarioWizardEditSection.BasicDetails => PromptBasicSection(scenario, template, selectedArchetype, selectedTemplate),
                 ScenarioWizardEditSection.Realism => PromptRealismSection(scenario),
                 ScenarioWizardEditSection.Identity => PromptIdentitySection(scenario),
                 ScenarioWizardEditSection.Applications => PromptApplicationsSection(scenario),
@@ -317,6 +332,7 @@ public sealed class ScenarioWizardService
 
     private ScenarioEnvelope PromptAllSections(
         ScenarioEnvelope template,
+        ScenarioArchetypeDescriptor? selectedArchetype,
         ScenarioTemplateDescriptor? selectedTemplate,
         ScenarioWizardEditSection? startSection)
     {
@@ -346,7 +362,7 @@ public sealed class ScenarioWizardService
         {
             scenario = orderedSections[index] switch
             {
-                ScenarioWizardEditSection.BasicDetails => PromptBasicSection(scenario, template, selectedTemplate),
+                ScenarioWizardEditSection.BasicDetails => PromptBasicSection(scenario, template, selectedArchetype, selectedTemplate),
                 ScenarioWizardEditSection.Realism => PromptRealismSection(scenario),
                 ScenarioWizardEditSection.Identity => PromptIdentitySection(scenario),
                 ScenarioWizardEditSection.Applications => PromptApplicationsSection(scenario),
@@ -365,13 +381,34 @@ public sealed class ScenarioWizardService
     private ScenarioEnvelope PromptBasicSection(
         ScenarioEnvelope scenario,
         ScenarioEnvelope template,
+        ScenarioArchetypeDescriptor? selectedArchetype,
         ScenarioTemplateDescriptor? selectedTemplate)
     {
         var employeeSize = scenario.EmployeeSize ?? template.EmployeeSize ?? new SizeBand();
+        IReadOnlyCollection<ScenarioOverlayKind> recommendedOverlays = selectedArchetype is not null
+            ? selectedArchetype.RecommendedOverlays
+            : selectedTemplate is not null
+                ? selectedTemplate.RecommendedOverlays
+                : Array.Empty<ScenarioOverlayKind>();
+        IReadOnlyCollection<ScenarioPackSelection> baseRecommendedPacks = selectedArchetype is not null
+            ? selectedArchetype.RecommendedPacks
+            : selectedTemplate is not null
+                ? selectedTemplate.RecommendedPacks
+                : Array.Empty<ScenarioPackSelection>();
         var overlays = _prompter.SelectOverlays(
                 Enum.GetValues<ScenarioOverlayKind>(),
-                selectedTemplate is null ? Array.Empty<ScenarioOverlayKind>() : selectedTemplate.RecommendedOverlays)
+                recommendedOverlays)
             .ToList();
+        var availablePacks = BuildAvailablePacks(selectedArchetype, selectedTemplate, scenario);
+        var currentPacks = scenario.Packs?.EnabledPacks ?? new List<ScenarioPackSelection>();
+        var recommendedPacks = BuildRecommendedPacks(baseRecommendedPacks, overlays);
+        var selectedPacks = _prompter.SelectPacks(availablePacks, recommendedPacks, currentPacks)
+            .Select(ClonePackSelection)
+            .ToList();
+        var promptProfileDetails = selectedArchetype is null
+            || _prompter.PromptBool(
+                "Customize industry and geography defaults",
+                !MatchesArchetypeProfiles(scenario, template));
         var minimumEmployeeCount = _prompter.PromptInt("Minimum employee count", Math.Max(1, employeeSize.Minimum), 1);
         var maximumEmployeeCount = _prompter.PromptInt("Maximum employee count", Math.Max(minimumEmployeeCount, employeeSize.Maximum), minimumEmployeeCount);
 
@@ -379,11 +416,16 @@ public sealed class ScenarioWizardService
         {
             Name = _prompter.PromptText("Scenario name", scenario.Name),
             Description = _prompter.PromptText("Scenario description", scenario.Description),
+            Archetype = scenario.Archetype ?? template.Archetype,
             Template = scenario.Template,
             Overlays = overlays,
             CompanyCount = _prompter.PromptInt("Company count", scenario.CompanyCount ?? template.CompanyCount ?? 1, 1),
-            IndustryProfile = _prompter.PromptText("Industry profile", scenario.IndustryProfile ?? template.IndustryProfile ?? "General"),
-            GeographyProfile = _prompter.PromptText("Geography profile", scenario.GeographyProfile ?? template.GeographyProfile ?? "Regional-US"),
+            IndustryProfile = promptProfileDetails
+                ? _prompter.PromptText("Industry profile", scenario.IndustryProfile ?? template.IndustryProfile ?? "General")
+                : scenario.IndustryProfile ?? template.IndustryProfile ?? "General",
+            GeographyProfile = promptProfileDetails
+                ? _prompter.PromptText("Geography profile", scenario.GeographyProfile ?? template.GeographyProfile ?? "Regional-US")
+                : scenario.GeographyProfile ?? template.GeographyProfile ?? "Regional-US",
             DeviationProfile = scenario.DeviationProfile ?? template.DeviationProfile ?? ScenarioDeviationProfiles.Realistic,
             EmployeeSize = new SizeBand
             {
@@ -396,6 +438,14 @@ public sealed class ScenarioWizardService
             Repositories = scenario.Repositories,
             Cmdb = scenario.Cmdb,
             ObservedData = scenario.ObservedData,
+            Timeline = scenario.Timeline ?? template.Timeline,
+            Packs = new ScenarioPackProfile
+            {
+                DiscoveryMode = scenario.Packs?.DiscoveryMode ?? template.Packs?.DiscoveryMode ?? "Bundled",
+                IncludeBundledPacks = scenario.Packs?.IncludeBundledPacks ?? template.Packs?.IncludeBundledPacks ?? true,
+                PackRootPaths = scenario.Packs?.PackRootPaths.ToList() ?? template.Packs?.PackRootPaths.ToList() ?? new List<string>(),
+                EnabledPacks = selectedPacks
+            },
             ExternalPlugins = scenario.ExternalPlugins,
             Anomalies = scenario.Anomalies.ToList(),
             Companies = scenario.Companies.ToList(),
@@ -612,6 +662,7 @@ public sealed class ScenarioWizardService
         {
             Name = ChooseString(scenario.Name, "Default", template.Name),
             Description = ChooseString(scenario.Description, "Synthetic enterprise scenario", template.Description),
+            Archetype = scenario.Archetype ?? template.Archetype,
             Template = scenario.Template ?? template.Template,
             Overlays = scenario.Overlays.Count > 0 ? scenario.Overlays.ToList() : template.Overlays.ToList(),
             CompanyCount = scenario.CompanyCount ?? template.CompanyCount,
@@ -625,6 +676,8 @@ public sealed class ScenarioWizardService
             Repositories = scenario.Repositories ?? template.Repositories,
             Cmdb = scenario.Cmdb ?? template.Cmdb,
             ObservedData = scenario.ObservedData ?? template.ObservedData,
+            Timeline = scenario.Timeline ?? template.Timeline,
+            Packs = scenario.Packs ?? template.Packs,
             ExternalPlugins = scenario.ExternalPlugins ?? template.ExternalPlugins,
             Anomalies = scenario.Anomalies.Count > 0 ? scenario.Anomalies.ToList() : template.Anomalies.ToList(),
             Companies = scenario.Companies.Count > 0 ? scenario.Companies.ToList() : template.Companies.ToList(),
@@ -654,6 +707,7 @@ public sealed class ScenarioWizardService
         {
             Name = scenario.Name,
             Description = scenario.Description,
+            Archetype = scenario.Archetype,
             Template = scenario.Template,
             Overlays = scenario.Overlays.ToList(),
             CompanyCount = scenario.CompanyCount,
@@ -667,10 +721,122 @@ public sealed class ScenarioWizardService
             Repositories = repositories ?? scenario.Repositories,
             Cmdb = cmdb ?? scenario.Cmdb,
             ObservedData = observedData ?? scenario.ObservedData,
+            Timeline = scenario.Timeline,
+            Packs = scenario.Packs,
             ExternalPlugins = externalPlugins ?? scenario.ExternalPlugins,
             Anomalies = scenario.Anomalies.ToList(),
             Companies = scenario.Companies.ToList(),
             OfficeCount = scenario.OfficeCount
+        };
+
+    private static bool MatchesArchetypeProfiles(ScenarioEnvelope scenario, ScenarioEnvelope template)
+        => string.Equals(
+                scenario.IndustryProfile ?? template.IndustryProfile,
+                template.IndustryProfile,
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                scenario.GeographyProfile ?? template.GeographyProfile,
+                template.GeographyProfile,
+                StringComparison.OrdinalIgnoreCase);
+
+    private static List<ScenarioPackSelection> BuildAvailablePacks(
+        ScenarioArchetypeDescriptor? selectedArchetype,
+        ScenarioTemplateDescriptor? selectedTemplate,
+        ScenarioEnvelope scenario)
+    {
+        var packs = new Dictionary<string, ScenarioPackSelection>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var pack in selectedArchetype?.RecommendedPacks ?? Enumerable.Empty<ScenarioPackSelection>())
+        {
+            packs[pack.PackId] = ClonePackSelection(pack);
+        }
+
+        foreach (var pack in selectedTemplate?.RecommendedPacks ?? Enumerable.Empty<ScenarioPackSelection>())
+        {
+            packs[pack.PackId] = ClonePackSelection(pack);
+        }
+
+        foreach (var pack in scenario.Packs?.EnabledPacks ?? Enumerable.Empty<ScenarioPackSelection>())
+        {
+            packs[pack.PackId] = ClonePackSelection(pack);
+        }
+
+        foreach (var pack in GetKnownBundledPacks())
+        {
+            if (!packs.ContainsKey(pack.PackId))
+            {
+                packs[pack.PackId] = ClonePackSelection(pack);
+            }
+        }
+
+        return packs.Values
+            .OrderBy(pack => pack.PackId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<ScenarioPackSelection> BuildRecommendedPacks(
+        IReadOnlyCollection<ScenarioPackSelection> baselineRecommendations,
+        IReadOnlyCollection<ScenarioOverlayKind> overlays)
+    {
+        var recommended = baselineRecommendations
+            .Select(ClonePackSelection)
+            .ToDictionary(pack => pack.PackId, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var overlay in overlays)
+        {
+            switch (overlay)
+            {
+                case ScenarioOverlayKind.FastGrowth:
+                    recommended["FirstParty.ITSM"] = CreatePack("FirstParty.ITSM", ("TicketCount", "20"));
+                    break;
+                case ScenarioOverlayKind.PostMerger:
+                    recommended["FirstParty.BusinessOps"] = CreatePack("FirstParty.BusinessOps", ("RequestCount", "14"));
+                    recommended["FirstParty.ITSM"] = CreatePack("FirstParty.ITSM", ("TicketCount", "18"));
+                    break;
+                case ScenarioOverlayKind.ComplianceHeavy:
+                case ScenarioOverlayKind.UnderGoverned:
+                case ScenarioOverlayKind.Modernization:
+                    if (!recommended.ContainsKey("FirstParty.SecOps"))
+                    {
+                        recommended["FirstParty.SecOps"] = CreatePack("FirstParty.SecOps", ("AlertCount", "10"));
+                    }
+                    break;
+            }
+        }
+
+        return recommended.Values
+            .OrderBy(pack => pack.PackId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<ScenarioPackSelection> GetKnownBundledPacks() => new[]
+    {
+        CreatePack("FirstParty.BusinessOps", ("RequestCount", "6")),
+        CreatePack("FirstParty.ITSM", ("TicketCount", "12")),
+        CreatePack("FirstParty.SecOps", ("AlertCount", "8"))
+    };
+
+    private static ScenarioPackSelection CreatePack(string packId, params (string Key, string Value)[] settings)
+    {
+        var selection = new ScenarioPackSelection
+        {
+            PackId = packId
+        };
+
+        foreach (var (key, value) in settings)
+        {
+            selection.Settings[key] = value;
+        }
+
+        return selection;
+    }
+
+    private static ScenarioPackSelection ClonePackSelection(ScenarioPackSelection selection)
+        => new()
+        {
+            PackId = selection.PackId,
+            Enabled = selection.Enabled,
+            Settings = new Dictionary<string, string?>(selection.Settings, StringComparer.OrdinalIgnoreCase)
         };
 
     private static ScenarioEnvelope EnsureDeviationProfile(ScenarioEnvelope scenario)
@@ -743,14 +909,14 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
         AnsiConsole.Write(new Panel(Escape(label)).Header("[yellow]Edit Existing Scenario[/]"));
     }
 
-    public ScenarioTemplateDescriptor SelectTemplate(IReadOnlyList<ScenarioTemplateDescriptor> templates)
+    public ScenarioArchetypeDescriptor SelectArchetype(IReadOnlyList<ScenarioArchetypeDescriptor> archetypes)
     {
         AnsiConsole.Write(new Rule("[yellow]Scenario Wizard[/]"));
         return AnsiConsole.Prompt(
-            new SelectionPrompt<ScenarioTemplateDescriptor>()
-                .Title("Choose a [green]scenario template[/]:")
-                .UseConverter(template => $"{template.Name} - {template.Description}")
-                .AddChoices(templates));
+            new SelectionPrompt<ScenarioArchetypeDescriptor>()
+                .Title("Choose a [green]scenario archetype[/]:")
+                .UseConverter(archetype => $"{archetype.Name} - {archetype.Description}")
+                .AddChoices(archetypes));
     }
 
     public IReadOnlyCollection<ScenarioOverlayKind> SelectOverlays(IReadOnlyList<ScenarioOverlayKind> overlays, IReadOnlyCollection<ScenarioOverlayKind> recommendedOverlays)
@@ -766,6 +932,35 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                 .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept)[/]")
                 .UseConverter(overlay => overlay.ToString())
                 .AddChoices(overlays));
+    }
+
+    public IReadOnlyCollection<ScenarioPackSelection> SelectPacks(
+        IReadOnlyList<ScenarioPackSelection> availablePacks,
+        IReadOnlyCollection<ScenarioPackSelection> recommendedPacks,
+        IReadOnlyCollection<ScenarioPackSelection> currentPacks)
+    {
+        var selectedPackIds = currentPacks.Count > 0
+            ? currentPacks.Select(pack => pack.PackId).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : recommendedPacks.Select(pack => pack.PackId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var recommendedNames = recommendedPacks.Count == 0
+            ? "none"
+            : string.Join(", ", recommendedPacks.Select(pack => pack.PackId));
+
+        var prompt = new MultiSelectionPrompt<ScenarioPackSelection>()
+            .Title($"Choose optional [green]domain packs[/] ([grey]recommended: {recommendedNames}[/]):")
+            .NotRequired()
+            .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept)[/]")
+            .UseConverter(pack => $"{pack.PackId} ({FormatPackSettings(pack)})")
+            .AddChoices(availablePacks);
+
+        foreach (var pack in availablePacks.Where(pack => selectedPackIds.Contains(pack.PackId)))
+        {
+            prompt.Select(pack);
+        }
+
+        return AnsiConsole.Prompt(prompt)
+            .Select(ClonePackSelection)
+            .ToList();
     }
 
     public string PromptText(string prompt, string defaultValue)
@@ -859,6 +1054,7 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
             .AddColumn("Value");
 
         table.AddRow("Name", scenario.Name);
+        table.AddRow("Archetype", scenario.Archetype?.ToString() ?? "Custom");
         table.AddRow("Template", scenario.Template?.ToString() ?? "Custom");
         table.AddRow("Industry", scenario.IndustryProfile ?? "General");
         table.AddRow("Geography", scenario.GeographyProfile ?? "Regional-US");
@@ -881,6 +1077,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
                 ? $"enabled ({scenario.ObservedData.CoverageRatio:0.00} coverage)"
                 : "disabled");
         table.AddRow("Overlays", scenario.Overlays.Count == 0 ? "None" : string.Join(", ", scenario.Overlays));
+        table.AddRow(
+            "Packs",
+            scenario.Packs is { EnabledPacks.Count: > 0 }
+                ? string.Join(", ", scenario.Packs.EnabledPacks.Select(pack => pack.PackId))
+                : "None");
         table.AddRow(
             "Plugins",
             scenario.ExternalPlugins is { PluginRootPaths.Count: > 0, EnabledCapabilities.Count: > 0 }
@@ -1080,6 +1281,7 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
 
         AddChange(changes, baseline.Name, scenario.Name, "Name");
         AddChange(changes, baseline.Description, scenario.Description, "Description");
+        AddChange(changes, baseline.Archetype?.ToString(), scenario.Archetype?.ToString(), "Archetype");
         AddChange(changes, baseline.IndustryProfile, scenario.IndustryProfile, "Industry");
         AddChange(changes, baseline.GeographyProfile, scenario.GeographyProfile, "Geography");
         AddChange(changes, baseline.DeviationProfile, scenario.DeviationProfile, "Deviation profile");
@@ -1095,6 +1297,11 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
             string.Join(", ", baseline.Overlays.OrderBy(item => item)),
             string.Join(", ", scenario.Overlays.OrderBy(item => item)),
             "Overlays");
+        AddChange(
+            changes,
+            PackSummary(baseline.Packs),
+            PackSummary(scenario.Packs),
+            "Packs");
         AddChange(
             changes,
             $"{YesNo(baseline.Identity?.IncludeHybridDirectory)}, stale {baseline.Identity?.StaleAccountRate:0.00}",
@@ -1150,6 +1357,24 @@ public sealed class SpectreScenarioWizardPrompter : IScenarioWizardPrompter
             : "none";
 
     private static string Escape(string value) => Markup.Escape(value);
+
+    private static string PackSummary(ScenarioPackProfile? profile)
+        => profile is { EnabledPacks.Count: > 0 }
+            ? string.Join(", ", profile.EnabledPacks.Select(pack => pack.PackId).OrderBy(item => item, StringComparer.OrdinalIgnoreCase))
+            : "none";
+
+    private static string FormatPackSettings(ScenarioPackSelection pack)
+        => pack.Settings.Count == 0
+            ? "default settings"
+            : string.Join(", ", pack.Settings.Select(setting => $"{setting.Key}={setting.Value}"));
+
+    private static ScenarioPackSelection ClonePackSelection(ScenarioPackSelection selection)
+        => new()
+        {
+            PackId = selection.PackId,
+            Enabled = selection.Enabled,
+            Settings = new Dictionary<string, string?>(selection.Settings, StringComparer.OrdinalIgnoreCase)
+        };
 }
 
 public static class ScenarioWizardJson

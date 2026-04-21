@@ -13,7 +13,7 @@ public sealed class ScenarioWizardServiceTests
     {
         var prompter = new FakeScenarioWizardPrompter
         {
-            SelectedTemplate = ScenarioTemplateKind.GlobalSaaS,
+            SelectedArchetype = ScenarioArchetypeKind.GlobalSaaS,
             SelectedOverlays = new[] { ScenarioOverlayKind.IdentityHeavy, ScenarioOverlayKind.MultiRegionExpansion },
             TextResponses =
             {
@@ -46,11 +46,13 @@ public sealed class ScenarioWizardServiceTests
                 ["Include databases"] = true,
                 ["Include file shares"] = true,
                 ["Include collaboration sites"] = true,
+                ["Customize industry and geography defaults"] = false,
                 ["Use this scenario?"] = true
             }
         };
 
         var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
             new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
@@ -60,7 +62,8 @@ public sealed class ScenarioWizardServiceTests
         Assert.True(result.Confirmed);
         Assert.Equal("Wizard Built Scenario", result.Scenario.Name);
         Assert.Equal("Built from an interactive helper.", result.Scenario.Description);
-        Assert.Equal(ScenarioTemplateKind.GlobalSaaS, result.Scenario.Template);
+        Assert.Equal(ScenarioArchetypeKind.GlobalSaaS, result.Scenario.Archetype);
+        Assert.Null(result.Scenario.Template);
         Assert.Equal(ScenarioDeviationProfiles.Realistic, result.Scenario.DeviationProfile);
         Assert.Equal("Software", result.Scenario.IndustryProfile);
         Assert.Equal("Global", result.Scenario.GeographyProfile);
@@ -70,6 +73,8 @@ public sealed class ScenarioWizardServiceTests
         Assert.Equal(1900, result.Scenario.EmployeeSize!.Maximum);
         Assert.Contains(ScenarioOverlayKind.IdentityHeavy, result.Scenario.Overlays);
         Assert.Contains(ScenarioOverlayKind.MultiRegionExpansion, result.Scenario.Overlays);
+        Assert.Contains(result.Scenario.Packs!.EnabledPacks, pack => pack.PackId == "FirstParty.ITSM");
+        Assert.Contains(result.Scenario.Packs.EnabledPacks, pack => pack.PackId == "FirstParty.SecOps");
         Assert.NotNull(prompter.LastValidation);
         Assert.Equal(ScenarioWizardCompletionAction.ReturnScenario, result.CompletionAction);
     }
@@ -79,7 +84,7 @@ public sealed class ScenarioWizardServiceTests
     {
         var prompter = new FakeScenarioWizardPrompter
         {
-            SelectedTemplate = ScenarioTemplateKind.RegionalManufacturer,
+            SelectedArchetype = ScenarioArchetypeKind.RegionalManufacturer,
             SelectedOverlays = Array.Empty<ScenarioOverlayKind>(),
             BoolResponses =
             {
@@ -94,11 +99,13 @@ public sealed class ScenarioWizardServiceTests
                 ["Include databases"] = true,
                 ["Include file shares"] = true,
                 ["Include collaboration sites"] = true,
+                ["Customize industry and geography defaults"] = false,
                 ["Use this scenario?"] = false
             }
         };
 
         var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
             new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
@@ -106,7 +113,7 @@ public sealed class ScenarioWizardServiceTests
         var result = service.Run();
 
         Assert.False(result.Confirmed);
-        Assert.Equal(ScenarioTemplateKind.RegionalManufacturer, result.Scenario.Template);
+        Assert.Equal(ScenarioArchetypeKind.RegionalManufacturer, result.Scenario.Archetype);
     }
 
     [Fact]
@@ -136,7 +143,8 @@ public sealed class ScenarioWizardServiceTests
 
             var prompter = new FakeScenarioWizardPrompter
             {
-                SelectedTemplate = ScenarioTemplateKind.RegionalManufacturer,
+                SelectedArchetype = ScenarioArchetypeKind.RegionalManufacturer,
+                AcceptRecommendedPacks = false,
                 SelectedOverlays = Array.Empty<ScenarioOverlayKind>(),
                 TextResponses =
                 {
@@ -158,11 +166,13 @@ public sealed class ScenarioWizardServiceTests
                     ["Include databases"] = true,
                     ["Include file shares"] = true,
                     ["Include collaboration sites"] = true,
+                    ["Customize industry and geography defaults"] = false,
                     ["Use this scenario?"] = true
                 }
             };
 
             var service = new ScenarioWizardService(
+                new ScenarioTemplateRegistry(),
                 new ScenarioTemplateRegistry(),
                 new ScenarioValidator(),
                 prompter);
@@ -262,6 +272,7 @@ public sealed class ScenarioWizardServiceTests
 
         var service = new ScenarioWizardService(
             new ScenarioTemplateRegistry(),
+            new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
 
@@ -288,7 +299,7 @@ public sealed class ScenarioWizardServiceTests
     {
         var prompter = new FakeScenarioWizardPrompter
         {
-            SelectedTemplate = ScenarioTemplateKind.RegionalManufacturer,
+            SelectedArchetype = ScenarioArchetypeKind.RegionalManufacturer,
             SelectedCompletionAction = ScenarioWizardCompletionAction.SaveScenarioAndGenerateWorld,
             PromptedPath = @"C:\temp\scenario.json",
             SelectedOverlays = Array.Empty<ScenarioOverlayKind>(),
@@ -306,11 +317,13 @@ public sealed class ScenarioWizardServiceTests
                 ["Include databases"] = true,
                 ["Include file shares"] = true,
                 ["Include collaboration sites"] = true,
+                ["Customize industry and geography defaults"] = false,
                 ["Use this scenario?"] = true
             }
         };
 
         var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
             new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
@@ -408,13 +421,14 @@ public sealed class ScenarioWizardServiceTests
 
         var service = new ScenarioWizardService(
             new ScenarioTemplateRegistry(),
+            new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
 
         var result = service.Run(existingScenario);
 
         Assert.True(result.Confirmed);
-        Assert.Equal(0, prompter.SelectTemplateCalls);
+        Assert.Equal(0, prompter.SelectArchetypeCalls);
         Assert.Contains("Editing existing scenario", prompter.LastEditingLabel);
         Assert.Equal("Edited Scenario", result.Scenario.Name);
         Assert.Equal("Edited interactively.", result.Scenario.Description);
@@ -432,7 +446,7 @@ public sealed class ScenarioWizardServiceTests
     {
         var prompter = new FakeScenarioWizardPrompter
         {
-            SelectedTemplate = ScenarioTemplateKind.RegionalManufacturer,
+            SelectedArchetype = ScenarioArchetypeKind.RegionalManufacturer,
             SelectedCompletionAction = ScenarioWizardCompletionAction.SaveScenario,
             PromptedPath = @"C:\existing\scenario.json",
             SelectedOverlays = Array.Empty<ScenarioOverlayKind>(),
@@ -450,11 +464,13 @@ public sealed class ScenarioWizardServiceTests
                 ["Include databases"] = true,
                 ["Include file shares"] = true,
                 ["Include collaboration sites"] = true,
+                ["Customize industry and geography defaults"] = false,
                 ["Use this scenario?"] = true
             }
         };
 
         var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
             new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
@@ -471,7 +487,7 @@ public sealed class ScenarioWizardServiceTests
     {
         var prompter = new FakeScenarioWizardPrompter
         {
-            SelectedTemplate = ScenarioTemplateKind.RegionalManufacturer,
+            SelectedArchetype = ScenarioArchetypeKind.RegionalManufacturer,
             SelectedOverlays = Array.Empty<ScenarioOverlayKind>(),
             EditSectionSelections = new Queue<ScenarioWizardEditSection>(new[]
             {
@@ -492,6 +508,7 @@ public sealed class ScenarioWizardServiceTests
                 ["Include databases"] = true,
                 ["Include file shares"] = true,
                 ["Include collaboration sites"] = true,
+                ["Customize industry and geography defaults"] = false,
                 ["Use this scenario?"] = true
             }
         };
@@ -503,6 +520,7 @@ public sealed class ScenarioWizardServiceTests
                 : null;
 
         var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
             new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
@@ -577,6 +595,7 @@ public sealed class ScenarioWizardServiceTests
 
         var service = new ScenarioWizardService(
             new ScenarioTemplateRegistry(),
+            new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
 
@@ -631,6 +650,7 @@ public sealed class ScenarioWizardServiceTests
         };
 
         var service = new ScenarioWizardService(
+            new ScenarioTemplateRegistry(),
             new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
@@ -705,6 +725,7 @@ public sealed class ScenarioWizardServiceTests
 
         var service = new ScenarioWizardService(
             new ScenarioTemplateRegistry(),
+            new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
 
@@ -753,6 +774,7 @@ public sealed class ScenarioWizardServiceTests
 
         var service = new ScenarioWizardService(
             new ScenarioTemplateRegistry(),
+            new ScenarioTemplateRegistry(),
             new ScenarioValidator(),
             prompter);
 
@@ -778,8 +800,10 @@ public sealed class ScenarioWizardServiceTests
 
     private sealed class FakeScenarioWizardPrompter : IScenarioWizardPrompter
     {
-        public ScenarioTemplateKind SelectedTemplate { get; init; }
+        public ScenarioArchetypeKind SelectedArchetype { get; init; }
         public IReadOnlyCollection<ScenarioOverlayKind> SelectedOverlays { get; init; } = Array.Empty<ScenarioOverlayKind>();
+        public IReadOnlyCollection<ScenarioPackSelection> SelectedPacks { get; init; } = Array.Empty<ScenarioPackSelection>();
+        public bool AcceptRecommendedPacks { get; init; } = true;
         public Dictionary<string, string> TextResponses { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, int> IntResponses { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, double> DoubleResponses { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -791,7 +815,7 @@ public sealed class ScenarioWizardServiceTests
         public IReadOnlyCollection<string> LastChangeSummary { get; private set; } = Array.Empty<string>();
         public ScenarioWizardCompletionAction SelectedCompletionAction { get; init; } = ScenarioWizardCompletionAction.ReturnScenario;
         public string PromptedPath { get; init; } = "scenario.json";
-        public int SelectTemplateCalls { get; private set; }
+        public int SelectArchetypeCalls { get; private set; }
         public int SelectEditSectionCalls { get; private set; }
         public string LastEditingLabel { get; private set; } = string.Empty;
         public Queue<ScenarioWizardEditSection> EditSectionSelections { get; init; } = new();
@@ -803,14 +827,24 @@ public sealed class ScenarioWizardServiceTests
         public void ShowEditingExistingScenario(string label)
             => LastEditingLabel = label;
 
-        public ScenarioTemplateDescriptor SelectTemplate(IReadOnlyList<ScenarioTemplateDescriptor> templates)
+        public ScenarioArchetypeDescriptor SelectArchetype(IReadOnlyList<ScenarioArchetypeDescriptor> archetypes)
         {
-            SelectTemplateCalls++;
-            return Assert.Single(templates, template => template.Kind == SelectedTemplate);
+            SelectArchetypeCalls++;
+            return Assert.Single(archetypes, archetype => archetype.Kind == SelectedArchetype);
         }
 
         public IReadOnlyCollection<ScenarioOverlayKind> SelectOverlays(IReadOnlyList<ScenarioOverlayKind> overlays, IReadOnlyCollection<ScenarioOverlayKind> recommendedOverlays)
             => SelectedOverlays;
+
+        public IReadOnlyCollection<ScenarioPackSelection> SelectPacks(
+            IReadOnlyList<ScenarioPackSelection> availablePacks,
+            IReadOnlyCollection<ScenarioPackSelection> recommendedPacks,
+            IReadOnlyCollection<ScenarioPackSelection> currentPacks)
+            => SelectedPacks.Count > 0
+                ? SelectedPacks
+                : AcceptRecommendedPacks
+                    ? recommendedPacks.ToList()
+                    : Array.Empty<ScenarioPackSelection>();
 
         public string PromptText(string prompt, string defaultValue)
             => OnPromptText?.Invoke(prompt)
