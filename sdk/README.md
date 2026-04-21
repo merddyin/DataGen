@@ -9,19 +9,21 @@ This SDK is the starting point for writing external DataGen plugins without havi
 - example commands for inspection, validation, build, and execution
 
 ## Quick Start
-1. Inspect a plugin root:
+1. Scaffold a new pack package:
+   - `New-SEGenerationPluginPackage -Path 'E:\work\plugins\Contoso.RiskOps' -Capability 'Contoso.RiskOps' -DisplayName 'Contoso RiskOps'`
+2. Inspect a plugin root:
    - `Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
-2. Validate a plugin package:
+3. Validate a plugin package:
    - `Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
-3. Install and register an approved plugin into the managed plugin store:
+4. Install and register an approved plugin into the managed plugin store:
    - `Install-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
-4. Register an approved plugin directly from its source root when install is not needed:
+5. Register an approved plugin directly from its source root when install is not needed:
    - `Register-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
-5. Build the binary sample if needed:
+6. Build the binary sample if needed:
    - `dotnet build E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj`
-6. Re-inspect or re-validate with trust settings:
+7. Re-inspect or re-validate with trust settings:
    - `Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins -PluginAllowedContentHash '<hash>'`
-7. Execute with `New-SEEnterpriseWorld` once the plugin is trusted.
+8. Execute with `New-SEEnterpriseWorld` once the plugin is trusted.
 
 ## Documents
 - [Plugin SDK Guide](E:\source\DataGen\sdk\PLUGIN_SDK.md)

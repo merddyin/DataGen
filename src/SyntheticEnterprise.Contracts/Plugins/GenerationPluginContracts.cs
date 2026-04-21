@@ -295,3 +295,26 @@ public sealed class GenerationPluginInstallationResult
     public List<GenerationPluginRegistration> Registered { get; init; } = new();
     public List<string> Messages { get; init; } = new();
 }
+
+public sealed class GenerationPluginPackageScaffoldRequest
+{
+    public required string RootPath { get; init; }
+    public required string Capability { get; init; }
+    public string? DisplayName { get; init; }
+    public string? Description { get; init; }
+    public string PluginKind { get; init; } = "ScenarioPack";
+    public string PackPhase { get; init; } = "PostWorldGeneration";
+    public string Category { get; init; } = "Custom";
+    public bool Force { get; init; }
+}
+
+public sealed class GenerationPluginPackageScaffoldResult
+{
+    public required string RootPath { get; init; }
+    public required string Capability { get; init; }
+    public required string DisplayName { get; init; }
+    public required string ManifestPath { get; init; }
+    public required string EntryPointPath { get; init; }
+    public required string ReadmePath { get; init; }
+    public List<string> CreatedPaths { get; init; } = new();
+}

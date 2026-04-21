@@ -72,6 +72,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IExternalGenerationPluginCatalog, FileSystemExternalGenerationPluginCatalog>();
         services.AddSingleton<IGenerationPluginRegistry, GenerationPluginRegistry>();
         services.AddSingleton<IGenerationPluginPackageValidator, GenerationPluginPackageValidator>();
+        services.AddSingleton<IGenerationPluginPackageScaffolder, GenerationPluginPackageScaffolder>();
         services.AddSingleton<IGenerationPluginRegistrationStore, JsonGenerationPluginRegistrationStore>();
         services.AddSingleton<IGenerationPluginRegistrationService, GenerationPluginRegistrationService>();
         services.AddSingleton<IGenerationPluginInstallationService, GenerationPluginInstallationService>();

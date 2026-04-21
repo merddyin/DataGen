@@ -163,6 +163,15 @@ The request contains:
 
 ## Inspection and Validation
 
+Scaffold a starter package:
+
+```powershell
+New-SEGenerationPluginPackage `
+  -Path 'E:\work\plugins\Contoso.RiskOps' `
+  -Capability 'Contoso.RiskOps' `
+  -DisplayName 'Contoso RiskOps'
+```
+
 Inspect discovered plugins:
 
 ```powershell

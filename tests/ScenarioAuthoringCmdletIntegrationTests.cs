@@ -61,6 +61,52 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
     }
 
     [Fact]
+    public void NewSEGenerationPluginPackage_Creates_A_Valid_Starter_Pack()
+    {
+        var tempRoot = CreateTempDirectory();
+
+        try
+        {
+            using var powershell = System.Management.Automation.PowerShell.Create();
+            powershell.AddCommand("Import-Module")
+                .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+            powershell.Invoke();
+            Assert.False(powershell.HadErrors);
+
+            powershell.Commands.Clear();
+            powershell.AddCommand("New-SEGenerationPluginPackage")
+                .AddParameter("Path", tempRoot)
+                .AddParameter("Capability", "Contoso.RiskOps")
+                .AddParameter("DisplayName", "Contoso RiskOps");
+
+            var scaffold = Assert.Single(powershell.Invoke<GenerationPluginPackageScaffoldResult>());
+
+            Assert.False(powershell.HadErrors);
+            Assert.True(File.Exists(scaffold.ManifestPath));
+            Assert.True(File.Exists(scaffold.EntryPointPath));
+            Assert.True(File.Exists(scaffold.ReadmePath));
+
+            powershell.Commands.Clear();
+            powershell.AddCommand("Test-SEGenerationPluginPackage")
+                .AddParameter("PluginRootPath", tempRoot);
+
+            var report = Assert.Single(powershell.Invoke<GenerationPluginPackageValidationReport>());
+
+            Assert.False(powershell.HadErrors);
+            Assert.False(report.HasErrors);
+            Assert.Equal(1, report.PluginCount);
+            Assert.Equal("Contoso.RiskOps", Assert.Single(report.Plugins).Capability);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void NewSEScenarioFromTemplate_Hydrates_Plugin_Defaults_Into_Envelope()
     {
         var tempRoot = CreateTempDirectory();
