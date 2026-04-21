@@ -31,6 +31,13 @@ jobs:
       - name: Restore solution
         run: dotnet restore .\DataGen.slnx
 
+      - name: Build solution
+        run: dotnet build .\DataGen.slnx -v minimal --no-restore
+
+      - name: Validate bundled first-party packs
+        shell: pwsh
+        run: .\scripts\validate-first-party-packs.ps1
+
       - name: Run solution tests
         run: dotnet test .\DataGen.slnx -v minimal /p:UseSharedCompilation=false -m:1 --no-restore
 
