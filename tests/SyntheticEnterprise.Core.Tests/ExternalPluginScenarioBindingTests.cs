@@ -161,6 +161,23 @@ public sealed class ExternalPluginScenarioBindingTests
     }
 
     [Fact]
+    public void ScenarioDefaultsResolver_Uses_Persona_Preset_As_First_Class_Default_Source()
+    {
+        var resolver = new ScenarioDefaultsResolver();
+
+        var scenario = resolver.Resolve(new ScenarioEnvelope
+        {
+            Name = "Persona Envelope",
+            Personas = new() { ScenarioPersonaKind.SecurityLab }
+        });
+
+        Assert.Equal(ScenarioArchetypeKind.GlobalSaaS, scenario.Archetype);
+        Assert.Contains(ScenarioPersonaKind.SecurityLab, scenario.Personas);
+        Assert.Contains("FirstParty.SecOps", scenario.Packs.EnabledPacks.Select(pack => pack.PackId));
+        Assert.Contains("FirstParty.ITSM", scenario.Packs.EnabledPacks.Select(pack => pack.PackId));
+    }
+
+    [Fact]
     public void ScenarioOverlayService_Applies_Productized_Overlays_Coherently()
     {
         var service = new ScenarioOverlayService();

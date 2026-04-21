@@ -8,6 +8,7 @@ public record ScenarioDefinition
     public string Name { get; init; } = "Default";
     public string Description { get; init; } = "Synthetic enterprise scenario";
     public ScenarioArchetypeKind? Archetype { get; init; }
+    public List<ScenarioPersonaKind> Personas { get; init; } = new();
     public int CompanyCount { get; init; } = 1;
     public string IndustryProfile { get; init; } = "General";
     public string GeographyProfile { get; init; } = "Regional";

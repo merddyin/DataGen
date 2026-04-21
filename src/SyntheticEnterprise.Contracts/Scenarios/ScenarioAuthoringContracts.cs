@@ -35,6 +35,14 @@ public enum ScenarioOverlayKind
     MultiRegionExpansion
 }
 
+public enum ScenarioPersonaKind
+{
+    SecurityLab,
+    ItOperations,
+    ComplianceAudit,
+    EngineeringCollaboration
+}
+
 public enum ScenarioValidationSeverity
 {
     Info,
@@ -90,6 +98,16 @@ public sealed class ScenarioArchetypeDescriptor
     public List<ScenarioPluginAuthoringHint> PluginAuthoringHints { get; init; } = new();
 }
 
+public sealed class ScenarioPersonaDescriptor
+{
+    public required ScenarioPersonaKind Kind { get; init; }
+    public required string Name { get; init; }
+    public required string Description { get; init; }
+    public ScenarioArchetypeKind DefaultArchetype { get; init; }
+    public List<ScenarioOverlayKind> RecommendedOverlays { get; init; } = new();
+    public List<ScenarioPackSelection> RecommendedPacks { get; init; } = new();
+}
+
 public sealed class ScenarioMergeResult
 {
     public ScenarioEnvelope Scenario { get; init; } = new();
@@ -103,6 +121,7 @@ public sealed class ScenarioEnvelope
     public string Description { get; init; } = "Synthetic enterprise scenario";
     public ScenarioArchetypeKind? Archetype { get; init; }
     public ScenarioTemplateKind? Template { get; init; }
+    public List<ScenarioPersonaKind> Personas { get; init; } = new();
     public List<ScenarioOverlayKind> Overlays { get; init; } = new();
     public int? CompanyCount { get; init; }
     public string? IndustryProfile { get; init; }

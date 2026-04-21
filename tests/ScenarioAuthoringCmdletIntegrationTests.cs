@@ -138,6 +138,26 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
     }
 
     [Fact]
+    public void GetSEScenarioPersonaPreset_Returns_Productized_Persona_Catalog()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("Get-SEScenarioPersonaPreset");
+
+        var results = powershell.Invoke<ScenarioPersonaDescriptor>();
+
+        Assert.False(powershell.HadErrors);
+        var securityLab = Assert.Single(results, item => item.Kind == ScenarioPersonaKind.SecurityLab);
+        Assert.Equal(ScenarioArchetypeKind.GlobalSaaS, securityLab.DefaultArchetype);
+        Assert.Contains(securityLab.RecommendedPacks, pack => pack.PackId == "FirstParty.SecOps");
+    }
+
+    [Fact]
     public void NewSEScenarioFromArchetype_Creates_Archetype_First_Envelope()
     {
         using var powershell = System.Management.Automation.PowerShell.Create();
@@ -158,6 +178,27 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
         Assert.Equal("Regional-US", result.GeographyProfile);
         Assert.NotNull(result.Cmdb);
         Assert.True(result.Cmdb.IncludeConfigurationManagement);
+    }
+
+    [Fact]
+    public void NewSEScenarioFromPersonaPreset_Creates_Persona_First_Envelope()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("New-SEScenarioFromPersonaPreset")
+            .AddParameter("Persona", ScenarioPersonaKind.ComplianceAudit);
+
+        var result = Assert.Single(powershell.Invoke<ScenarioEnvelope>());
+
+        Assert.False(powershell.HadErrors);
+        Assert.Contains(ScenarioPersonaKind.ComplianceAudit, result.Personas);
+        Assert.Equal(ScenarioArchetypeKind.PublicSectorAgency, result.Archetype);
+        Assert.Contains(result.Packs!.EnabledPacks, pack => pack.PackId == "FirstParty.BusinessOps");
     }
 
     [Fact]

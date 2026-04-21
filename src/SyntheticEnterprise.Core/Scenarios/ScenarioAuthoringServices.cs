@@ -19,9 +19,20 @@ public interface IScenarioArchetypeRegistry
     ScenarioEnvelope CreateArchetype(ScenarioArchetypeKind kind);
 }
 
+public interface IScenarioPersonaRegistry
+{
+    IReadOnlyCollection<ScenarioPersonaDescriptor> GetPersonas();
+    ScenarioEnvelope CreatePersonaPreset(ScenarioPersonaKind kind);
+}
+
 public interface IScenarioOverlayService
 {
     ScenarioMergeResult ApplyOverlays(object baseScenario, IReadOnlyCollection<ScenarioOverlayKind> overlays);
+}
+
+public interface IScenarioPersonaPresetService
+{
+    ScenarioMergeResult ApplyPersonas(object baseScenario, IReadOnlyCollection<ScenarioPersonaKind> personas);
 }
 
 public interface IScenarioDefaultsResolver
@@ -57,7 +68,7 @@ public sealed class ScenarioPluginHydrationResult
     public List<ScenarioValidationMessage> Messages { get; init; } = new();
 }
 
-public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScenarioArchetypeRegistry
+public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScenarioArchetypeRegistry, IScenarioPersonaRegistry
 {
     public IReadOnlyCollection<ScenarioTemplateDescriptor> GetTemplates() => new[]
     {
@@ -138,6 +149,62 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             GeographyProfile = "North-America",
             RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.PostMerger },
             RecommendedPacks = BuildRecommendedPacks(ScenarioArchetypeKind.RetailDistribution)
+        }
+    };
+
+    public IReadOnlyCollection<ScenarioPersonaDescriptor> GetPersonas() => new[]
+    {
+        new ScenarioPersonaDescriptor
+        {
+            Kind = ScenarioPersonaKind.SecurityLab,
+            Name = "Security Lab",
+            Description = "A security-focused operating view with modern controls, detections, and purposeful enterprise drift.",
+            DefaultArchetype = ScenarioArchetypeKind.GlobalSaaS,
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.UnderGoverned, ScenarioOverlayKind.Modernization },
+            RecommendedPacks = new List<ScenarioPackSelection>
+            {
+                CreatePack("FirstParty.SecOps", ("AlertCount", "16")),
+                CreatePack("FirstParty.ITSM", ("TicketCount", "10"))
+            }
+        },
+        new ScenarioPersonaDescriptor
+        {
+            Kind = ScenarioPersonaKind.ItOperations,
+            Name = "IT Operations",
+            Description = "An operations-centric view with service management, infrastructure coverage, and day-two support workflows.",
+            DefaultArchetype = ScenarioArchetypeKind.RegionalManufacturer,
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization },
+            RecommendedPacks = new List<ScenarioPackSelection>
+            {
+                CreatePack("FirstParty.ITSM", ("TicketCount", "18")),
+                CreatePack("FirstParty.BusinessOps", ("RequestCount", "8"))
+            }
+        },
+        new ScenarioPersonaDescriptor
+        {
+            Kind = ScenarioPersonaKind.ComplianceAudit,
+            Name = "Compliance and Audit",
+            Description = "A regulated audit-ready environment with richer CMDB coverage, observed views, and business-process traceability.",
+            DefaultArchetype = ScenarioArchetypeKind.PublicSectorAgency,
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy },
+            RecommendedPacks = new List<ScenarioPackSelection>
+            {
+                CreatePack("FirstParty.ITSM", ("TicketCount", "12")),
+                CreatePack("FirstParty.BusinessOps", ("RequestCount", "10"))
+            }
+        },
+        new ScenarioPersonaDescriptor
+        {
+            Kind = ScenarioPersonaKind.EngineeringCollaboration,
+            Name = "Engineering Collaboration",
+            Description = "A collaboration-heavy engineering environment with active SaaS usage, shared repositories, and rapid team growth.",
+            DefaultArchetype = ScenarioArchetypeKind.GlobalSaaS,
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.Modernization },
+            RecommendedPacks = new List<ScenarioPackSelection>
+            {
+                CreatePack("FirstParty.ITSM", ("TicketCount", "14")),
+                CreatePack("FirstParty.SecOps", ("AlertCount", "8"))
+            }
         }
     };
 
@@ -286,6 +353,46 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
         }
     };
 
+    public ScenarioEnvelope CreatePersonaPreset(ScenarioPersonaKind kind)
+    {
+        var descriptor = GetPersonas().First(persona => persona.Kind == kind);
+        var archetype = CreateArchetype(descriptor.DefaultArchetype);
+
+        return new ScenarioEnvelope
+        {
+            Name = descriptor.Name,
+            Description = descriptor.Description,
+            Archetype = descriptor.DefaultArchetype,
+            Personas = new List<ScenarioPersonaKind> { kind },
+            Overlays = descriptor.RecommendedOverlays.ToList(),
+            CompanyCount = archetype.CompanyCount,
+            IndustryProfile = archetype.IndustryProfile,
+            GeographyProfile = archetype.GeographyProfile,
+            DeviationProfile = archetype.DeviationProfile,
+            EmployeeSize = archetype.EmployeeSize,
+            Identity = archetype.Identity,
+            Applications = archetype.Applications,
+            Infrastructure = archetype.Infrastructure,
+            Repositories = archetype.Repositories,
+            Cmdb = archetype.Cmdb,
+            ObservedData = archetype.ObservedData,
+            Timeline = archetype.Timeline,
+            Packs = new ScenarioPackProfile
+            {
+                DiscoveryMode = archetype.Packs?.DiscoveryMode ?? "Bundled",
+                IncludeBundledPacks = archetype.Packs?.IncludeBundledPacks ?? true,
+                PackRootPaths = archetype.Packs?.PackRootPaths.ToList() ?? new List<string>(),
+                EnabledPacks = descriptor.RecommendedPacks
+                    .Select(ClonePack)
+                    .ToList()
+            },
+            ExternalPlugins = archetype.ExternalPlugins,
+            Anomalies = archetype.Anomalies.ToList(),
+            Companies = archetype.Companies.ToList(),
+            OfficeCount = archetype.OfficeCount
+        };
+    }
+
     private static List<ScenarioPackSelection> BuildRecommendedPacks(ScenarioArchetypeKind kind) => kind switch
     {
         ScenarioArchetypeKind.GlobalSaaS => new()
@@ -329,6 +436,14 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
 
         return selection;
     }
+
+    private static ScenarioPackSelection ClonePack(ScenarioPackSelection selection)
+        => new()
+        {
+            PackId = selection.PackId,
+            Enabled = selection.Enabled,
+            Settings = new Dictionary<string, string?>(selection.Settings, StringComparer.OrdinalIgnoreCase)
+        };
 }
 
 public sealed class ScenarioOverlayService : IScenarioOverlayService
@@ -497,24 +612,117 @@ public sealed class ScenarioOverlayService : IScenarioOverlayService
         };
 }
 
+public sealed class ScenarioPersonaPresetService : IScenarioPersonaPresetService
+{
+    private readonly IScenarioPersonaRegistry _personaRegistry;
+
+    public ScenarioPersonaPresetService(IScenarioPersonaRegistry personaRegistry)
+    {
+        _personaRegistry = personaRegistry;
+    }
+
+    public ScenarioMergeResult ApplyPersonas(object baseScenario, IReadOnlyCollection<ScenarioPersonaKind> personas)
+    {
+        var current = ScenarioSerializationHelper.ToEnvelope(baseScenario);
+        var applied = new List<string>();
+
+        foreach (var persona in personas)
+        {
+            var preset = _personaRegistry.CreatePersonaPreset(persona);
+            current = MergePersona(current, preset, persona);
+            applied.Add($"Persona:{persona}");
+        }
+
+        return new ScenarioMergeResult
+        {
+            Scenario = current,
+            AppliedSources = applied
+        };
+    }
+
+    private static ScenarioEnvelope MergePersona(ScenarioEnvelope current, ScenarioEnvelope preset, ScenarioPersonaKind persona)
+    {
+        var personas = current.Personas.ToHashSet();
+        personas.Add(persona);
+
+        var overlays = current.Overlays.Count > 0
+            ? current.Overlays.Union(preset.Overlays).Distinct().ToList()
+            : preset.Overlays.ToList();
+        var existingPacks = (current.Packs?.EnabledPacks ?? new List<ScenarioPackSelection>())
+            .ToDictionary(pack => pack.PackId, ClonePack, StringComparer.OrdinalIgnoreCase);
+        foreach (var pack in preset.Packs?.EnabledPacks ?? Enumerable.Empty<ScenarioPackSelection>())
+        {
+            existingPacks[pack.PackId] = ClonePack(pack);
+        }
+
+        return new ScenarioEnvelope
+        {
+            Name = current.Name != "Default" ? current.Name : preset.Name,
+            Description = current.Description != "Synthetic enterprise scenario" ? current.Description : preset.Description,
+            Archetype = current.Archetype ?? preset.Archetype,
+            Template = current.Template,
+            Personas = personas.OrderBy(value => value).ToList(),
+            Overlays = overlays,
+            CompanyCount = current.CompanyCount ?? preset.CompanyCount,
+            IndustryProfile = current.IndustryProfile ?? preset.IndustryProfile,
+            GeographyProfile = current.GeographyProfile ?? preset.GeographyProfile,
+            DeviationProfile = current.DeviationProfile ?? preset.DeviationProfile,
+            EmployeeSize = current.EmployeeSize ?? preset.EmployeeSize,
+            Identity = current.Identity ?? preset.Identity,
+            Applications = current.Applications ?? preset.Applications,
+            Infrastructure = current.Infrastructure ?? preset.Infrastructure,
+            Repositories = current.Repositories ?? preset.Repositories,
+            Cmdb = current.Cmdb ?? preset.Cmdb,
+            ObservedData = current.ObservedData ?? preset.ObservedData,
+            Timeline = current.Timeline ?? preset.Timeline,
+            Packs = new ScenarioPackProfile
+            {
+                DiscoveryMode = current.Packs?.DiscoveryMode ?? preset.Packs?.DiscoveryMode ?? "Bundled",
+                IncludeBundledPacks = current.Packs?.IncludeBundledPacks ?? preset.Packs?.IncludeBundledPacks ?? true,
+                PackRootPaths = current.Packs?.PackRootPaths.ToList() ?? preset.Packs?.PackRootPaths.ToList() ?? new List<string>(),
+                EnabledPacks = existingPacks.Values.OrderBy(pack => pack.PackId, StringComparer.OrdinalIgnoreCase).ToList()
+            },
+            ExternalPlugins = current.ExternalPlugins ?? preset.ExternalPlugins,
+            Anomalies = current.Anomalies.Count > 0 ? current.Anomalies.ToList() : preset.Anomalies.ToList(),
+            Companies = current.Companies.Count > 0 ? current.Companies.ToList() : preset.Companies.ToList(),
+            OfficeCount = current.OfficeCount ?? preset.OfficeCount
+        };
+    }
+
+    private static ScenarioPackSelection ClonePack(ScenarioPackSelection selection)
+        => new()
+        {
+            PackId = selection.PackId,
+            Enabled = selection.Enabled,
+            Settings = new Dictionary<string, string?>(selection.Settings, StringComparer.OrdinalIgnoreCase)
+        };
+}
+
 public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
 {
     private readonly IScenarioTemplateRegistry _templateRegistry;
     private readonly IScenarioArchetypeRegistry _archetypeRegistry;
+    private readonly IScenarioPersonaPresetService _personaPresetService;
     private readonly IScenarioOverlayService _overlayService;
 
     public ScenarioDefaultsResolver()
-        : this(new ScenarioTemplateRegistry(), new ScenarioTemplateRegistry(), new ScenarioOverlayService())
+        : this(
+            new ScenarioTemplateRegistry(),
+            new ScenarioTemplateRegistry(),
+            new ScenarioPersonaPresetService(new ScenarioTemplateRegistry()),
+            new ScenarioOverlayService())
     {
     }
 
     public ScenarioDefaultsResolver(
         IScenarioTemplateRegistry templateRegistry,
         IScenarioArchetypeRegistry archetypeRegistry,
+        IScenarioPersonaPresetService personaPresetService,
         IScenarioOverlayService overlayService)
     {
         _templateRegistry = templateRegistry;
         _archetypeRegistry = archetypeRegistry;
+        _personaPresetService = personaPresetService;
         _overlayService = overlayService;
     }
 
@@ -531,6 +739,11 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             envelope = Merge(_templateRegistry.CreateTemplate(template), envelope);
         }
 
+        if (envelope.Personas.Count > 0)
+        {
+            envelope = _personaPresetService.ApplyPersonas(envelope, envelope.Personas).Scenario;
+        }
+
         if (envelope.Overlays.Count > 0)
         {
             envelope = _overlayService.ApplyOverlays(envelope, envelope.Overlays).Scenario;
@@ -541,6 +754,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             Name = envelope.Name,
             Description = envelope.Description,
             Archetype = envelope.Archetype ?? ResolveArchetypeFromTemplate(envelope.Template),
+            Personas = envelope.Personas.ToList(),
             CompanyCount = Math.Max(1, envelope.CompanyCount ?? envelope.Companies.Count),
             IndustryProfile = envelope.IndustryProfile ?? "General",
             GeographyProfile = envelope.GeographyProfile ?? "Regional-US",
@@ -572,6 +786,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             Description = overlay.Description != "Synthetic enterprise scenario" ? overlay.Description : template.Description,
             Archetype = overlay.Archetype ?? template.Archetype,
             Template = overlay.Template ?? template.Template,
+            Personas = overlay.Personas.Count > 0 ? overlay.Personas.ToList() : template.Personas.ToList(),
             Overlays = overlay.Overlays.Count > 0 ? overlay.Overlays.ToList() : template.Overlays.ToList(),
             CompanyCount = overlay.CompanyCount ?? template.CompanyCount,
             IndustryProfile = overlay.IndustryProfile ?? template.IndustryProfile,
@@ -1208,6 +1423,7 @@ file static class ScenarioEnvelopeExtensions
             Description = envelope.Description,
             Archetype = envelope.Archetype,
             Template = envelope.Template,
+            Personas = envelope.Personas.ToList(),
             Overlays = envelope.Overlays.ToList(),
             CompanyCount = companyCount ?? envelope.CompanyCount,
             IndustryProfile = envelope.IndustryProfile,

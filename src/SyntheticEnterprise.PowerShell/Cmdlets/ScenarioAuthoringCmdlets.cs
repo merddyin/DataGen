@@ -97,6 +97,22 @@ public sealed class GetSEScenarioArchetypeCommand : PSCmdlet
     }
 }
 
+[Cmdlet(VerbsCommon.Get, "SEScenarioPersonaPreset")]
+[OutputType(typeof(ScenarioPersonaDescriptor))]
+public sealed class GetSEScenarioPersonaPresetCommand : PSCmdlet
+{
+    protected override void ProcessRecord()
+    {
+        using var services = ScenarioCmdletInput.BuildServices();
+        var registry = services.GetRequiredService<IScenarioPersonaRegistry>();
+
+        foreach (var descriptor in registry.GetPersonas())
+        {
+            WriteObject(descriptor);
+        }
+    }
+}
+
 [Cmdlet(VerbsCommon.New, "SEScenarioFromTemplate")]
 [OutputType(typeof(ScenarioEnvelope))]
 public sealed class NewSEScenarioFromTemplateCommand : PSCmdlet
@@ -161,6 +177,22 @@ public sealed class NewSEScenarioFromArchetypeCommand : PSCmdlet
     }
 }
 
+[Cmdlet(VerbsCommon.New, "SEScenarioFromPersonaPreset")]
+[OutputType(typeof(ScenarioEnvelope))]
+public sealed class NewSEScenarioFromPersonaPresetCommand : PSCmdlet
+{
+    [Parameter(Mandatory = true, Position = 0)]
+    public ScenarioPersonaKind Persona { get; set; }
+
+    protected override void ProcessRecord()
+    {
+        using var services = ScenarioCmdletInput.BuildServices();
+        var registry = services.GetRequiredService<IScenarioPersonaRegistry>();
+
+        WriteObject(registry.CreatePersonaPreset(Persona));
+    }
+}
+
 [Cmdlet(VerbsData.Merge, "SEScenarioOverlay")]
 [OutputType(typeof(ScenarioMergeResult))]
 public sealed class MergeSEScenarioOverlayCommand : PSCmdlet
@@ -176,6 +208,24 @@ public sealed class MergeSEScenarioOverlayCommand : PSCmdlet
         using var services = ScenarioCmdletInput.BuildServices();
         var service = services.GetRequiredService<IScenarioOverlayService>();
         WriteObject(service.ApplyOverlays(ScenarioCmdletInput.Unwrap(Scenario), Overlay));
+    }
+}
+
+[Cmdlet(VerbsData.Merge, "SEScenarioPersonaPreset")]
+[OutputType(typeof(ScenarioMergeResult))]
+public sealed class MergeSEScenarioPersonaPresetCommand : PSCmdlet
+{
+    [Parameter(Mandatory = true, ValueFromPipeline = true)]
+    public object Scenario { get; set; } = default!;
+
+    [Parameter(Mandatory = true)]
+    public ScenarioPersonaKind[] Persona { get; set; } = Array.Empty<ScenarioPersonaKind>();
+
+    protected override void ProcessRecord()
+    {
+        using var services = ScenarioCmdletInput.BuildServices();
+        var service = services.GetRequiredService<IScenarioPersonaPresetService>();
+        WriteObject(service.ApplyPersonas(ScenarioCmdletInput.Unwrap(Scenario), Persona));
     }
 }
 
@@ -258,6 +308,7 @@ file static class ScenarioCmdletInput
             Description = envelope.Description,
             Archetype = envelope.Archetype,
             Template = envelope.Template,
+            Personas = envelope.Personas.ToList(),
             Overlays = envelope.Overlays.ToList(),
             CompanyCount = envelope.CompanyCount,
             IndustryProfile = envelope.IndustryProfile,
@@ -309,6 +360,7 @@ file static class ScenarioCmdletInput
             Name = definition.Name,
             Description = definition.Description,
             Archetype = definition.Archetype,
+            Personas = definition.Personas.ToList(),
             CompanyCount = definition.CompanyCount,
             IndustryProfile = definition.IndustryProfile,
             GeographyProfile = definition.GeographyProfile,

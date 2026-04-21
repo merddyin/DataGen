@@ -86,6 +86,31 @@ The guided flow does three things:
 
 If you keep the guided defaults, the wizard preserves the archetype's industry and geography settings. You can still opt into editing those details when needed.
 
+## Persona presets
+
+Persona presets are the highest-level authoring surface when you want to start from a use case instead of an industry shape.
+
+The current built-in personas are:
+
+- `SecurityLab`
+- `ItOperations`
+- `ComplianceAudit`
+- `EngineeringCollaboration`
+
+Each persona maps to a coherent archetype plus overlays and bundled pack recommendations.
+
+```powershell
+Get-SEScenarioPersonaPreset
+New-SEScenarioFromPersonaPreset -Persona SecurityLab
+```
+
+You can also apply a persona to an existing scenario:
+
+```powershell
+$scenario = New-SEScenarioFromArchetype -Archetype RegionalManufacturer
+$scenario = Merge-SEScenarioPersonaPreset -Scenario $scenario -Persona ItOperations
+```
+
 ## JSON authoring
 
 For repeatable workflows, JSON is often the best long-term format.

@@ -418,6 +418,7 @@ public sealed class ScenarioWizardService
             Description = _prompter.PromptText("Scenario description", scenario.Description),
             Archetype = scenario.Archetype ?? template.Archetype,
             Template = scenario.Template,
+            Personas = scenario.Personas.ToList(),
             Overlays = overlays,
             CompanyCount = _prompter.PromptInt("Company count", scenario.CompanyCount ?? template.CompanyCount ?? 1, 1),
             IndustryProfile = promptProfileDetails
@@ -664,6 +665,7 @@ public sealed class ScenarioWizardService
             Description = ChooseString(scenario.Description, "Synthetic enterprise scenario", template.Description),
             Archetype = scenario.Archetype ?? template.Archetype,
             Template = scenario.Template ?? template.Template,
+            Personas = scenario.Personas.Count > 0 ? scenario.Personas.ToList() : template.Personas.ToList(),
             Overlays = scenario.Overlays.Count > 0 ? scenario.Overlays.ToList() : template.Overlays.ToList(),
             CompanyCount = scenario.CompanyCount ?? template.CompanyCount,
             IndustryProfile = ChooseNullableString(scenario.IndustryProfile, template.IndustryProfile),
@@ -709,6 +711,7 @@ public sealed class ScenarioWizardService
             Description = scenario.Description,
             Archetype = scenario.Archetype,
             Template = scenario.Template,
+            Personas = scenario.Personas.ToList(),
             Overlays = scenario.Overlays.ToList(),
             CompanyCount = scenario.CompanyCount,
             IndustryProfile = scenario.IndustryProfile,

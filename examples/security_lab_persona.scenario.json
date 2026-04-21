@@ -1,0 +1,11 @@
+{
+  "name": "Security Lab Persona",
+  "personas": [
+    "SecurityLab"
+  ],
+  "timeline": {
+    "enabled": true,
+    "durationDays": 45,
+    "snapshotDays": [0, 15, 30, 45]
+  }
+}
