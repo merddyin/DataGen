@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWorldReferenceRepairService, WorldReferenceRepairService>();
         services.AddSingleton<IWorldInvariantValidator, WorldInvariantValidator>();
         services.AddSingleton<IWorldQualityAuditService, WorldQualityAuditService>();
+        services.AddSingleton<ITemporalSimulationService, TemporalSimulationService>();
 
         services.AddSingleton<IOrganizationGenerator, BasicOrganizationGenerator>();
         services.AddSingleton<IGeographyGenerator, BasicGeographyGenerator>();

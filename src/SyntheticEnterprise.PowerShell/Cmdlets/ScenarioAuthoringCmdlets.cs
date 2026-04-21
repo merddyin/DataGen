@@ -189,6 +189,7 @@ file static class ScenarioCmdletInput
             Repositories = envelope.Repositories,
             Cmdb = envelope.Cmdb,
             ObservedData = envelope.ObservedData,
+            Timeline = envelope.Timeline,
             Packs = envelope.Packs,
             ExternalPlugins = new ExternalPluginScenarioProfile
             {
@@ -229,6 +230,7 @@ file static class ScenarioCmdletInput
             Repositories = definition.Repositories,
             Cmdb = definition.Cmdb,
             ObservedData = definition.ObservedData,
+            Timeline = definition.Timeline,
             Packs = definition.Packs,
             ExternalPlugins = definition.ExternalPlugins,
             Anomalies = definition.Anomalies.ToList(),

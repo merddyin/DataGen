@@ -208,6 +208,38 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
         Assert.Equal("11", Assert.Single(result.ExternalPlugins.CapabilityConfigurations).Settings["TicketCount"]);
     }
 
+    [Fact]
+    public void ResolveSEScenario_Preserves_Timeline_Profile()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("Resolve-SEScenario")
+            .AddParameter("Scenario", new ScenarioEnvelope
+            {
+                Name = "Timeline Scenario",
+                Timeline = new TimelineProfile
+                {
+                    Enabled = true,
+                    StartAtUtc = "2026-02-01T00:00:00Z",
+                    DurationDays = 45,
+                    SnapshotDays = new() { 0, 20, 45 }
+                }
+            });
+
+        var result = Assert.Single(powershell.Invoke<ScenarioDefinition>());
+
+        Assert.False(powershell.HadErrors);
+        Assert.True(result.Timeline.Enabled);
+        Assert.Equal("2026-02-01T00:00:00Z", result.Timeline.StartAtUtc);
+        Assert.Equal(45, result.Timeline.DurationDays);
+        Assert.Equal(new[] { 0, 20, 45 }, result.Timeline.SnapshotDays);
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"datagen-scenario-cmdlet-tests-{Guid.NewGuid():N}");

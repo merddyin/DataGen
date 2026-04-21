@@ -76,7 +76,36 @@ public record GenerationResult
 {
     public required SyntheticEnterpriseWorld World { get; init; }
     public required GenerationStatistics Statistics { get; init; }
+    public TemporalSimulationResult Temporal { get; init; } = new();
     public CatalogSet Catalogs { get; init; } = new();
     public WorldMetadata? WorldMetadata { get; init; }
     public List<string> Warnings { get; init; } = new();
+}
+
+public record TemporalSimulationResult
+{
+    public TimelineProfile Timeline { get; init; } = new();
+    public List<TemporalEventRecord> Events { get; init; } = new();
+    public List<TemporalSnapshotDescriptor> Snapshots { get; init; } = new();
+}
+
+public record TemporalEventRecord
+{
+    public string Id { get; init; } = string.Empty;
+    public DateTimeOffset OccurredAt { get; init; }
+    public string EventType { get; init; } = string.Empty;
+    public string EntityType { get; init; } = string.Empty;
+    public string EntityId { get; init; } = string.Empty;
+    public string? RelatedEntityType { get; init; }
+    public string? RelatedEntityId { get; init; }
+    public Dictionary<string, string?> Properties { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+public record TemporalSnapshotDescriptor
+{
+    public string Id { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public DateTimeOffset SnapshotAt { get; init; }
+    public string SnapshotMode { get; init; } = "AsOfDate";
+    public int EventCountThroughSnapshot { get; init; }
 }

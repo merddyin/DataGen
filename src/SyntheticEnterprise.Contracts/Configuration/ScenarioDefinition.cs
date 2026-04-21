@@ -17,6 +17,7 @@ public record ScenarioDefinition
     public RepositoryProfile Repositories { get; init; } = new();
     public CmdbProfile Cmdb { get; init; } = new();
     public ObservedDataProfile ObservedData { get; init; } = new();
+    public TimelineProfile Timeline { get; init; } = new();
     public ScenarioPackProfile Packs { get; init; } = new();
     public ExternalPluginScenarioProfile ExternalPlugins { get; init; } = new();
     public List<ScenarioCompanyDefinition> Companies { get; init; } = new();
@@ -118,6 +119,15 @@ public record ObservedDataProfile
 {
     public bool IncludeObservedViews { get; init; } = true;
     public double CoverageRatio { get; init; } = 0.7;
+}
+
+public record TimelineProfile
+{
+    public bool Enabled { get; init; }
+    public string StartAtUtc { get; init; } = "2026-01-01T00:00:00Z";
+    public int DurationDays { get; init; } = 30;
+    public List<int> SnapshotDays { get; init; } = new() { 0, 15, 30 };
+    public string DefaultSnapshotMode { get; init; } = "AsOfDate";
 }
 
 public record AnomalyProfile

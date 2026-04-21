@@ -15,6 +15,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
     private readonly IWorldReferenceRepairService _worldReferenceRepairService;
     private readonly IWorldInvariantValidator _worldInvariantValidator;
     private readonly IWorldQualityAuditService _worldQualityAuditService;
+    private readonly ITemporalSimulationService _temporalSimulationService;
 
     public DefaultWorldGenerator(
         IEnumerable<IWorldGenerationPlugin> plugins,
@@ -24,7 +25,8 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         IWorldOwnershipReconciliationService worldOwnershipReconciliationService,
         IWorldReferenceRepairService worldReferenceRepairService,
         IWorldInvariantValidator worldInvariantValidator,
-        IWorldQualityAuditService worldQualityAuditService)
+        IWorldQualityAuditService worldQualityAuditService,
+        ITemporalSimulationService temporalSimulationService)
     {
         _plugins = plugins.ToDictionary(plugin => plugin.Manifest.Capability, StringComparer.OrdinalIgnoreCase);
         _planner = planner;
@@ -34,6 +36,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         _worldReferenceRepairService = worldReferenceRepairService;
         _worldInvariantValidator = worldInvariantValidator;
         _worldQualityAuditService = worldQualityAuditService;
+        _temporalSimulationService = temporalSimulationService;
     }
 
     public GenerationResult Generate(GenerationContext context, CatalogSet catalogs)
@@ -67,6 +70,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
 
         var qualityAuditResult = _worldQualityAuditService.Audit(world);
         warnings.AddRange(qualityAuditResult.Warnings);
+        var temporalResult = _temporalSimulationService.Generate(context, world);
 
         return new GenerationResult
         {
@@ -89,6 +93,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
                     + world.SitePages.Count
                     + world.DocumentFolders.Count
             },
+            Temporal = temporalResult,
             Catalogs = catalogs,
             WorldMetadata = new WorldMetadata
             {

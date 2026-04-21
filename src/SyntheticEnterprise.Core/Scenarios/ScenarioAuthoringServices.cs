@@ -97,6 +97,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
             Cmdb = new CmdbProfile(),
             ObservedData = new ObservedDataProfile(),
+            Timeline = new TimelineProfile(),
             Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
@@ -117,6 +118,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
             Cmdb = new CmdbProfile(),
             ObservedData = new ObservedDataProfile(),
+            Timeline = new TimelineProfile(),
             Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
@@ -137,6 +139,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
             Cmdb = new CmdbProfile(),
             ObservedData = new ObservedDataProfile(),
+            Timeline = new TimelineProfile(),
             Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         }
@@ -236,6 +239,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             Repositories = envelope.Repositories ?? new RepositoryProfile(),
             Cmdb = envelope.Cmdb ?? new CmdbProfile(),
             ObservedData = envelope.ObservedData ?? new ObservedDataProfile(),
+            Timeline = envelope.Timeline ?? new TimelineProfile(),
             Packs = envelope.Packs ?? new ScenarioPackProfile(),
             ExternalPlugins = envelope.ExternalPlugins ?? new ExternalPluginScenarioProfile(),
             Anomalies = NormalizeAnomalies(envelope.Anomalies),
@@ -266,6 +270,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             Repositories = overlay.Repositories ?? template.Repositories,
             Cmdb = overlay.Cmdb ?? template.Cmdb,
             ObservedData = overlay.ObservedData ?? template.ObservedData,
+            Timeline = overlay.Timeline ?? template.Timeline,
             Packs = overlay.Packs ?? template.Packs,
             ExternalPlugins = overlay.ExternalPlugins ?? template.ExternalPlugins,
             Anomalies = overlay.Anomalies.Count > 0 ? overlay.Anomalies.ToList() : template.Anomalies.ToList(),
@@ -836,6 +841,7 @@ internal static class ScenarioSerializationHelper
                 Repositories = definition.Repositories,
                 Cmdb = definition.Cmdb,
                 ObservedData = definition.ObservedData,
+                Timeline = definition.Timeline,
                 Packs = definition.Packs,
                 ExternalPlugins = definition.ExternalPlugins,
                 Anomalies = definition.Anomalies.ToList(),
@@ -882,6 +888,7 @@ file static class ScenarioEnvelopeExtensions
             Repositories = envelope.Repositories,
             Cmdb = envelope.Cmdb,
             ObservedData = envelope.ObservedData,
+            Timeline = envelope.Timeline,
             Packs = envelope.Packs,
             ExternalPlugins = envelope.ExternalPlugins,
             Anomalies = anomalies ?? envelope.Anomalies.ToList(),
