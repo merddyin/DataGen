@@ -4,6 +4,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Core.Abstractions;
 using SyntheticEnterprise.Core.DependencyInjection;
+using SyntheticEnterprise.Core.Scenarios;
 
 namespace SyntheticEnterprise.Core.Tests;
 
@@ -100,6 +101,96 @@ public sealed class TemporalSimulationTests
         Assert.False(result.Temporal.Timeline.Enabled);
         Assert.Empty(result.Temporal.Events);
         Assert.Empty(result.Temporal.Snapshots);
+    }
+
+    [Fact]
+    public void WorldGenerator_Adds_Temporal_History_For_FirstParty_Packs()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var hydrator = services.GetRequiredService<IScenarioPluginProfileHydrator>();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+
+        var scenario = hydrator.Hydrate(new ScenarioDefinition
+        {
+            Name = "Temporal Packs",
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Temporal Packs Co",
+                    Industry = "Technology",
+                    EmployeeCount = 18,
+                    OfficeCount = 2,
+                    Countries = new() { "United States" },
+                    DatabaseCount = 2,
+                    FileShareCount = 2,
+                    CollaborationSiteCount = 2,
+                    ServerCount = 4
+                }
+            },
+            Timeline = new TimelineProfile
+            {
+                Enabled = true,
+                StartAtUtc = "2026-01-01T00:00:00Z",
+                DurationDays = 20,
+                SnapshotDays = new() { 0, 10, 20 }
+            },
+            Packs = new()
+            {
+                IncludeBundledPacks = true,
+                EnabledPacks =
+                {
+                    new()
+                    {
+                        PackId = "FirstParty.ITSM",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["TicketCount"] = "4"
+                        }
+                    },
+                    new()
+                    {
+                        PackId = "FirstParty.SecOps",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["AlertCount"] = "3"
+                        }
+                    },
+                    new()
+                    {
+                        PackId = "FirstParty.BusinessOps",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["RequestCount"] = "2"
+                        }
+                    }
+                }
+            }
+        }).Scenario;
+
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = scenario,
+                Seed = 777,
+                ExternalPlugins = new()
+                {
+                    Enabled = true,
+                    PluginRootPaths = scenario.ExternalPlugins.PluginRootPaths.ToList(),
+                    EnabledCapabilities = scenario.ExternalPlugins.EnabledCapabilities.ToList(),
+                    CapabilityConfigurations = scenario.ExternalPlugins.CapabilityConfigurations.ToList(),
+                    MaxInputPayloadBytes = 64 * 1024 * 1024,
+                    MaxOutputPayloadBytes = 64 * 1024 * 1024
+                }
+            },
+            new CatalogSet());
+
+        Assert.NotEmpty(result.World.PluginRecords);
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("itsm.", StringComparison.Ordinal));
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("secops.", StringComparison.Ordinal));
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("businessops.", StringComparison.Ordinal));
     }
 
     private static ScenarioDefinition BuildScenario()

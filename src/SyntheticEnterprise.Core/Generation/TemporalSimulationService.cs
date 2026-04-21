@@ -43,6 +43,7 @@ public sealed class TemporalSimulationService : ITemporalSimulationService
         events.AddRange(BuildServerEvents(world, startAt, totalDays, random));
         events.AddRange(BuildApplicationEvents(world, startAt, totalDays, random));
         events.AddRange(BuildPolicyEvents(world, startAt, totalDays, random));
+        events.AddRange(BuildPackEvents(world, startAt, totalDays, random));
 
         var orderedEvents = events
             .OrderBy(record => record.OccurredAt)
@@ -641,6 +642,176 @@ public sealed class TemporalSimulationService : ITemporalSimulationService
             });
     }
 
+    private static IEnumerable<TemporalEventRecord> BuildPackEvents(
+        SyntheticEnterpriseWorld world,
+        DateTimeOffset startAt,
+        int totalDays,
+        Random random)
+    {
+        var orderedRecords = world.PluginRecords
+            .OrderBy(record => record.PluginCapability, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(record => record.RecordType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(record => record.AssociatedEntityId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        for (var index = 0; index < orderedRecords.Count; index++)
+        {
+            var record = orderedRecords[index];
+            foreach (var temporalRecord in BuildPackEvents(record, index, startAt, totalDays, random))
+            {
+                yield return temporalRecord;
+            }
+        }
+    }
+
+    private static IEnumerable<TemporalEventRecord> BuildPackEvents(
+        PluginGeneratedRecord record,
+        int index,
+        DateTimeOffset startAt,
+        int totalDays,
+        Random random)
+    {
+        var baseDay = ClampDay(random.Next(0, totalDays + 1), totalDays);
+        switch (record.RecordType)
+        {
+            case "ItsmQueue":
+                yield return new TemporalEventRecord
+                {
+                    EventType = "itsm.queue_created",
+                    EntityType = "ItsmQueue",
+                    EntityId = GetRecordEntityId(record, "QueueId"),
+                    RelatedEntityType = record.AssociatedEntityType,
+                    RelatedEntityId = record.AssociatedEntityId,
+                    OccurredAt = startAt.AddDays(baseDay).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+                yield break;
+
+            case "ItsmTicket":
+                var ticketId = GetRecordEntityId(record, "TicketId");
+                yield return new TemporalEventRecord
+                {
+                    EventType = "itsm.ticket_opened",
+                    EntityType = "ItsmTicket",
+                    EntityId = ticketId,
+                    RelatedEntityType = "Person",
+                    RelatedEntityId = GetProperty(record, "RequesterPersonId"),
+                    OccurredAt = startAt.AddDays(baseDay).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+
+                yield return new TemporalEventRecord
+                {
+                    EventType = "itsm.ticket_triaged",
+                    EntityType = "ItsmTicket",
+                    EntityId = ticketId,
+                    RelatedEntityType = "ItsmQueue",
+                    RelatedEntityId = GetProperty(record, "QueueId"),
+                    OccurredAt = startAt.AddDays(ClampDay(baseDay + random.Next(0, 3), totalDays)).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+
+                if (index % 3 == 0)
+                {
+                    yield return new TemporalEventRecord
+                    {
+                        EventType = "itsm.ticket_resolved",
+                        EntityType = "ItsmTicket",
+                        EntityId = ticketId,
+                        RelatedEntityType = "ApplicationRecord",
+                        RelatedEntityId = GetProperty(record, "ApplicationId"),
+                        OccurredAt = startAt.AddDays(ClampDay(baseDay + random.Next(2, 8), totalDays)).AddMinutes(random.Next(0, 1440)),
+                        Properties = CloneProperties(record.Properties)
+                    };
+                }
+
+                yield break;
+
+            case "SecurityAlert":
+                var alertId = GetRecordEntityId(record, "AlertId");
+                yield return new TemporalEventRecord
+                {
+                    EventType = "secops.alert_opened",
+                    EntityType = "SecurityAlert",
+                    EntityId = alertId,
+                    RelatedEntityType = "DirectoryAccount",
+                    RelatedEntityId = GetProperty(record, "AccountId"),
+                    OccurredAt = startAt.AddDays(baseDay).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+
+                yield return new TemporalEventRecord
+                {
+                    EventType = "secops.case_triaged",
+                    EntityType = "SecurityAlert",
+                    EntityId = alertId,
+                    RelatedEntityType = "Person",
+                    RelatedEntityId = GetProperty(record, "AnalystPersonId"),
+                    OccurredAt = startAt.AddDays(ClampDay(baseDay + random.Next(0, 2), totalDays)).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+
+                if (index % 2 == 0)
+                {
+                    yield return new TemporalEventRecord
+                    {
+                        EventType = "secops.alert_contained",
+                        EntityType = "SecurityAlert",
+                        EntityId = alertId,
+                        RelatedEntityType = "ManagedDevice",
+                        RelatedEntityId = GetProperty(record, "DeviceId"),
+                        OccurredAt = startAt.AddDays(ClampDay(baseDay + random.Next(1, 5), totalDays)).AddMinutes(random.Next(0, 1440)),
+                        Properties = CloneProperties(record.Properties)
+                    };
+                }
+
+                yield break;
+
+            case "Vendor":
+                yield return new TemporalEventRecord
+                {
+                    EventType = "businessops.vendor_onboarded",
+                    EntityType = "Vendor",
+                    EntityId = GetRecordEntityId(record, "VendorId"),
+                    RelatedEntityType = record.AssociatedEntityType,
+                    RelatedEntityId = record.AssociatedEntityId,
+                    OccurredAt = startAt.AddDays(baseDay).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+                yield break;
+
+            case "PurchaseRequest":
+                var requestId = GetRecordEntityId(record, "RequestId");
+                yield return new TemporalEventRecord
+                {
+                    EventType = "businessops.purchase_request_submitted",
+                    EntityType = "PurchaseRequest",
+                    EntityId = requestId,
+                    RelatedEntityType = "Department",
+                    RelatedEntityId = GetProperty(record, "DepartmentId"),
+                    OccurredAt = startAt.AddDays(baseDay).AddMinutes(random.Next(0, 1440)),
+                    Properties = CloneProperties(record.Properties)
+                };
+
+                if (string.Equals(GetProperty(record, "Status"), "Approved", StringComparison.OrdinalIgnoreCase)
+                    || index % 2 == 0)
+                {
+                    yield return new TemporalEventRecord
+                    {
+                        EventType = "businessops.purchase_request_approved",
+                        EntityType = "PurchaseRequest",
+                        EntityId = requestId,
+                        RelatedEntityType = "Vendor",
+                        RelatedEntityId = GetProperty(record, "VendorId"),
+                        OccurredAt = startAt.AddDays(ClampDay(baseDay + random.Next(1, 6), totalDays)).AddMinutes(random.Next(0, 1440)),
+                        Properties = CloneProperties(record.Properties)
+                    };
+                }
+
+                yield break;
+        }
+    }
+
     private static bool ShouldTransfer(Person person, int index, int totalDays)
         => totalDays >= 5
             && person.PersonType.Equals("Internal", StringComparison.OrdinalIgnoreCase)
@@ -750,6 +921,17 @@ public sealed class TemporalSimulationService : ITemporalSimulationService
             || title.Contains("VP", StringComparison.OrdinalIgnoreCase)
             || title.Contains("Vice President", StringComparison.OrdinalIgnoreCase)
             || title.Contains("Director", StringComparison.OrdinalIgnoreCase);
+
+    private static string GetRecordEntityId(PluginGeneratedRecord record, string propertyName)
+        => GetProperty(record, propertyName) ?? record.Id;
+
+    private static string? GetProperty(PluginGeneratedRecord record, string propertyName)
+        => record.Properties.TryGetValue(propertyName, out var value)
+            ? value
+            : null;
+
+    private static Dictionary<string, string?> CloneProperties(IReadOnlyDictionary<string, string?> properties)
+        => new(properties, StringComparer.OrdinalIgnoreCase);
 
     private static int ClampDay(int day, int totalDays)
         => Math.Clamp(day, 0, totalDays);
