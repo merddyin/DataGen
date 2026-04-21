@@ -39,8 +39,10 @@ public sealed class TemporalSimulationService : ITemporalSimulationService
         events.AddRange(BuildPersonEvents(personPlans, startAt, random));
         events.AddRange(BuildAccountEvents(world, personPlans, startAt, totalDays, random));
         events.AddRange(BuildDeviceEvents(world, personPlans, startAt, totalDays, random));
+        events.AddRange(BuildInfrastructureChangeEvents(world, personPlans, startAt, totalDays, random));
         events.AddRange(BuildServerEvents(world, startAt, totalDays, random));
         events.AddRange(BuildApplicationEvents(world, startAt, totalDays, random));
+        events.AddRange(BuildPolicyEvents(world, startAt, totalDays, random));
 
         var orderedEvents = events
             .OrderBy(record => record.OccurredAt)
@@ -405,6 +407,209 @@ public sealed class TemporalSimulationService : ITemporalSimulationService
                     }
                 };
             });
+    }
+
+    private static IEnumerable<TemporalEventRecord> BuildInfrastructureChangeEvents(
+        SyntheticEnterpriseWorld world,
+        IReadOnlyDictionary<string, PersonLifecyclePlan> personPlans,
+        DateTimeOffset startAt,
+        int totalDays,
+        Random random)
+    {
+        var orderedDevices = world.Devices.OrderBy(device => device.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedDevices.Count; index++)
+        {
+            var device = orderedDevices[index];
+            personPlans.TryGetValue(device.AssignedPersonId ?? string.Empty, out var plan);
+
+            if (plan?.TransferDay is int transferDay)
+            {
+                yield return new TemporalEventRecord
+                {
+                    EventType = "infrastructure.device_reassigned",
+                    EntityType = "ManagedDevice",
+                    EntityId = device.Id,
+                    RelatedEntityType = "Person",
+                    RelatedEntityId = device.AssignedPersonId,
+                    OccurredAt = startAt.AddDays(ClampDay(transferDay + random.Next(0, 3), totalDays)).AddMinutes(random.Next(0, 1440)),
+                    Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["hostname"] = device.Hostname,
+                        ["assigned_person_id"] = device.AssignedPersonId,
+                        ["assigned_office_id"] = device.AssignedOfficeId
+                    }
+                };
+            }
+
+            if (index > 0 && index % 6 == 0)
+            {
+                yield return new TemporalEventRecord
+                {
+                    EventType = "infrastructure.device_reimaged",
+                    EntityType = "ManagedDevice",
+                    EntityId = device.Id,
+                    RelatedEntityType = "Person",
+                    RelatedEntityId = device.AssignedPersonId,
+                    OccurredAt = startAt.AddDays(ClampDay(random.Next(5, totalDays + 1), totalDays)).AddMinutes(random.Next(0, 1440)),
+                    Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["operating_system"] = device.OperatingSystem,
+                        ["compliance_state"] = device.ComplianceState
+                    }
+                };
+            }
+        }
+
+        var orderedServers = world.Servers.OrderBy(server => server.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedServers.Count; index++)
+        {
+            var server = orderedServers[index];
+            if (index % 3 == 0)
+            {
+                yield return new TemporalEventRecord
+                {
+                    EventType = "infrastructure.server_patched",
+                    EntityType = "ServerAsset",
+                    EntityId = server.Id,
+                    RelatedEntityType = "Office",
+                    RelatedEntityId = server.OfficeId,
+                    OccurredAt = startAt.AddDays(ClampDay(random.Next(6, totalDays + 1), totalDays)).AddMinutes(random.Next(0, 1440)),
+                    Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["hostname"] = server.Hostname,
+                        ["server_role"] = server.ServerRole,
+                        ["environment"] = server.Environment
+                    }
+                };
+            }
+        }
+
+        var orderedNetworkAssets = world.NetworkAssets.OrderBy(asset => asset.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedNetworkAssets.Count; index++)
+        {
+            if (index % 4 != 0)
+            {
+                continue;
+            }
+
+            var asset = orderedNetworkAssets[index];
+            yield return new TemporalEventRecord
+            {
+                EventType = "infrastructure.network_refreshed",
+                EntityType = "NetworkAsset",
+                EntityId = asset.Id,
+                RelatedEntityType = "Office",
+                RelatedEntityId = asset.OfficeId,
+                OccurredAt = startAt.AddDays(ClampDay(random.Next(8, totalDays + 1), totalDays)).AddMinutes(random.Next(0, 1440)),
+                Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["asset_type"] = asset.AssetType,
+                    ["vendor"] = asset.Vendor,
+                    ["model"] = asset.Model
+                }
+            };
+        }
+    }
+
+    private static IEnumerable<TemporalEventRecord> BuildPolicyEvents(
+        SyntheticEnterpriseWorld world,
+        DateTimeOffset startAt,
+        int totalDays,
+        Random random)
+    {
+        var orderedPolicies = world.Policies.OrderBy(policy => policy.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedPolicies.Count; index++)
+        {
+            var policy = orderedPolicies[index];
+            var createdDay = ClampDay(random.Next(0, Math.Max(2, totalDays / 4) + 1), totalDays);
+
+            yield return new TemporalEventRecord
+            {
+                EventType = "policy.created",
+                EntityType = "PolicyRecord",
+                EntityId = policy.Id,
+                RelatedEntityType = policy.SourceEntityType,
+                RelatedEntityId = policy.SourceEntityId,
+                OccurredAt = startAt.AddDays(createdDay).AddMinutes(random.Next(0, 1440)),
+                Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["policy_type"] = policy.PolicyType,
+                    ["platform"] = policy.Platform,
+                    ["category"] = policy.Category
+                }
+            };
+
+            if (index % 3 == 0)
+            {
+                yield return new TemporalEventRecord
+                {
+                    EventType = "policy.updated",
+                    EntityType = "PolicyRecord",
+                    EntityId = policy.Id,
+                    RelatedEntityType = policy.SourceEntityType,
+                    RelatedEntityId = policy.SourceEntityId,
+                    OccurredAt = startAt.AddDays(ClampDay(createdDay + random.Next(5, totalDays + 1), totalDays)).AddMinutes(random.Next(0, 1440)),
+                    Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["status"] = policy.Status,
+                        ["environment"] = policy.Environment
+                    }
+                };
+            }
+        }
+
+        var orderedTargetLinks = world.PolicyTargetLinks.OrderBy(link => link.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedTargetLinks.Count; index++)
+        {
+            if (index % 4 != 0)
+            {
+                continue;
+            }
+
+            var link = orderedTargetLinks[index];
+            yield return new TemporalEventRecord
+            {
+                EventType = "policy.assignment_changed",
+                EntityType = "PolicyTargetLink",
+                EntityId = link.Id,
+                RelatedEntityType = link.TargetType,
+                RelatedEntityId = link.TargetId,
+                OccurredAt = startAt.AddDays(ClampDay(random.Next(4, totalDays + 1), totalDays)).AddMinutes(random.Next(0, 1440)),
+                Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["assignment_mode"] = link.AssignmentMode,
+                    ["filter_type"] = link.FilterType,
+                    ["filter_value"] = link.FilterValue
+                }
+            };
+        }
+
+        var orderedBaselines = world.EndpointPolicyBaselines.OrderBy(baseline => baseline.Id, StringComparer.OrdinalIgnoreCase).ToList();
+        for (var index = 0; index < orderedBaselines.Count; index++)
+        {
+            var baseline = orderedBaselines[index];
+            if (index % 5 != 0
+                && baseline.CurrentState.Equals(baseline.DesiredState, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            yield return new TemporalEventRecord
+            {
+                EventType = "policy.baseline_drift_detected",
+                EntityType = "EndpointPolicyBaseline",
+                EntityId = baseline.Id,
+                RelatedEntityType = baseline.EndpointType,
+                RelatedEntityId = baseline.EndpointId,
+                OccurredAt = startAt.AddDays(ClampDay(random.Next(6, totalDays + 1), totalDays)).AddMinutes(random.Next(0, 1440)),
+                Properties = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["policy_name"] = baseline.PolicyName,
+                    ["desired_state"] = baseline.DesiredState,
+                    ["current_state"] = baseline.CurrentState
+                }
+            };
+        }
     }
 
     private static IEnumerable<TemporalEventRecord> BuildApplicationEvents(
