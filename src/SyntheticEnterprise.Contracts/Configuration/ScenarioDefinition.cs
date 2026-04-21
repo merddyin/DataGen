@@ -1,11 +1,13 @@
 namespace SyntheticEnterprise.Contracts.Configuration;
 
 using SyntheticEnterprise.Contracts.Plugins;
+using SyntheticEnterprise.Contracts.Scenarios;
 
 public record ScenarioDefinition
 {
     public string Name { get; init; } = "Default";
     public string Description { get; init; } = "Synthetic enterprise scenario";
+    public ScenarioArchetypeKind? Archetype { get; init; }
     public int CompanyCount { get; init; } = 1;
     public string IndustryProfile { get; init; } = "General";
     public string GeographyProfile { get; init; } = "Regional";

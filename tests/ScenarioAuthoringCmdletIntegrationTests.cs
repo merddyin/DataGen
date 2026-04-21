@@ -118,6 +118,48 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
     }
 
     [Fact]
+    public void GetSEScenarioArchetype_Returns_Expanded_Archetype_Catalog()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("Get-SEScenarioArchetype");
+
+        var results = powershell.Invoke<ScenarioArchetypeDescriptor>();
+
+        Assert.False(powershell.HadErrors);
+        Assert.Contains(results, item => item.Kind == ScenarioArchetypeKind.PublicSectorAgency);
+        Assert.Contains(results, item => item.Kind == ScenarioArchetypeKind.RetailDistribution);
+    }
+
+    [Fact]
+    public void NewSEScenarioFromArchetype_Creates_Archetype_First_Envelope()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("New-SEScenarioFromArchetype")
+            .AddParameter("Archetype", ScenarioArchetypeKind.PublicSectorAgency);
+
+        var result = Assert.Single(powershell.Invoke<ScenarioEnvelope>());
+
+        Assert.False(powershell.HadErrors);
+        Assert.Equal(ScenarioArchetypeKind.PublicSectorAgency, result.Archetype);
+        Assert.Equal("Public Sector", result.IndustryProfile);
+        Assert.Equal("Regional-US", result.GeographyProfile);
+        Assert.NotNull(result.Cmdb);
+        Assert.True(result.Cmdb.IncludeConfigurationManagement);
+    }
+
+    [Fact]
     public void ResolveSEScenario_Preserves_Expanded_Generation_Profiles()
     {
         using var powershell = System.Management.Automation.PowerShell.Create();
@@ -206,6 +248,31 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
             path => path.EndsWith(Path.Combine("packs", "first-party"), StringComparison.OrdinalIgnoreCase));
         Assert.Contains("FirstParty.ITSM", result.ExternalPlugins.EnabledCapabilities);
         Assert.Equal("11", Assert.Single(result.ExternalPlugins.CapabilityConfigurations).Settings["TicketCount"]);
+    }
+
+    [Fact]
+    public void ResolveSEScenario_Preserves_Archetype_Profile()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("Resolve-SEScenario")
+            .AddParameter("Scenario", new ScenarioEnvelope
+            {
+                Name = "Archetype Scenario",
+                Archetype = ScenarioArchetypeKind.RetailDistribution
+            });
+
+        var result = Assert.Single(powershell.Invoke<ScenarioDefinition>());
+
+        Assert.False(powershell.HadErrors);
+        Assert.Equal(ScenarioArchetypeKind.RetailDistribution, result.Archetype);
+        Assert.Equal("Retail", result.IndustryProfile);
+        Assert.Equal("North-America", result.GeographyProfile);
     }
 
     [Fact]

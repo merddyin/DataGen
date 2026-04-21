@@ -10,7 +10,7 @@ This is the fastest end-to-end workflow for proving the module is healthy.
 ## 1. Create a starter scenario
 
 ```powershell
-$scenario = New-SEScenarioFromTemplate -Template RegionalManufacturer
+$scenario = New-SEScenarioFromArchetype -Archetype RegionalManufacturer
 $scenario = Resolve-SEScenario -Scenario $scenario
 $validation = Test-SEScenario -Scenario $scenario
 $validation

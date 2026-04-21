@@ -142,4 +142,21 @@ public sealed class ExternalPluginScenarioBindingTests
             item => item.Capability == "FirstParty.ITSM");
         Assert.Equal("14", configuration.Settings["TicketCount"]);
     }
+
+    [Fact]
+    public void ScenarioDefaultsResolver_Uses_Archetype_As_First_Class_Default_Source()
+    {
+        var resolver = new ScenarioDefaultsResolver();
+
+        var scenario = resolver.Resolve(new ScenarioEnvelope
+        {
+            Name = "Archetype Envelope",
+            Archetype = ScenarioArchetypeKind.PublicSectorAgency
+        });
+
+        Assert.Equal(ScenarioArchetypeKind.PublicSectorAgency, scenario.Archetype);
+        Assert.Equal("Public Sector", scenario.IndustryProfile);
+        Assert.Equal("Regional-US", scenario.GeographyProfile);
+        Assert.True(scenario.Cmdb.IncludeConfigurationManagement);
+    }
 }

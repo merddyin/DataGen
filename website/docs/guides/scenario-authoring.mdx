@@ -7,14 +7,34 @@ description: Author DataGen scenarios with templates, overlays, JSON, and valida
 
 DataGen scenarios can be authored in several ways:
 
+- archetype-first with `New-SEScenarioFromArchetype`
 - template-first with `New-SEScenarioFromTemplate`
 - interactive authoring with `New-SEScenarioWizard`
 - JSON files checked into source control
 - pipeline object editing and validation
 
+## Archetypes
+
+Archetypes are the first-class product-facing scenario catalog.
+
+The current built-in archetype surface includes:
+
+- `RegionalManufacturer`
+- `GlobalSaaS`
+- `HealthcareNetwork`
+- `PublicSectorAgency`
+- `RetailDistribution`
+
+Use archetypes when you want a market-facing starting point that is meant to pair naturally with overlays and persona presets over time.
+
+```powershell
+Get-SEScenarioArchetype
+New-SEScenarioFromArchetype -Archetype PublicSectorAgency
+```
+
 ## Templates
 
-The current built-in template surface includes scenario kinds such as:
+Templates remain available as a compatibility-oriented alias for the legacy starter set:
 
 - `RegionalManufacturer`
 - `GlobalSaaS`
@@ -53,7 +73,7 @@ A compact example:
 ```json
 {
   "name": "Validation Tenant",
-  "template": "GlobalSaaS",
+  "archetype": "GlobalSaaS",
   "deviationProfile": "Realistic",
   "industryProfile": "Software",
   "geographyProfile": "Global",

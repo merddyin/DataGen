@@ -1,0 +1,13 @@
+{
+  "name": "Public Sector Agency Demo",
+  "archetype": "PublicSectorAgency",
+  "deviationProfile": "Realistic",
+  "overlays": [
+    "LegacyInfrastructure"
+  ],
+  "timeline": {
+    "enabled": true,
+    "durationDays": 30,
+    "snapshotDays": [0, 15, 30]
+  }
+}

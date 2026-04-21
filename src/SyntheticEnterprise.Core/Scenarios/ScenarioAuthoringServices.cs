@@ -13,6 +13,12 @@ public interface IScenarioTemplateRegistry
     ScenarioEnvelope CreateTemplate(ScenarioTemplateKind kind);
 }
 
+public interface IScenarioArchetypeRegistry
+{
+    IReadOnlyCollection<ScenarioArchetypeDescriptor> GetArchetypes();
+    ScenarioEnvelope CreateArchetype(ScenarioArchetypeKind kind);
+}
+
 public interface IScenarioOverlayService
 {
     ScenarioMergeResult ApplyOverlays(object baseScenario, IReadOnlyCollection<ScenarioOverlayKind> overlays);
@@ -51,7 +57,7 @@ public sealed class ScenarioPluginHydrationResult
     public List<ScenarioValidationMessage> Messages { get; init; } = new();
 }
 
-public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
+public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScenarioArchetypeRegistry
 {
     public IReadOnlyCollection<ScenarioTemplateDescriptor> GetTemplates() => new[]
     {
@@ -78,13 +84,98 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
         }
     };
 
-    public ScenarioEnvelope CreateTemplate(ScenarioTemplateKind kind) => kind switch
+    public IReadOnlyCollection<ScenarioArchetypeDescriptor> GetArchetypes() => new[]
     {
-        ScenarioTemplateKind.GlobalSaaS => new ScenarioEnvelope
+        new ScenarioArchetypeDescriptor
+        {
+            Kind = ScenarioArchetypeKind.RegionalManufacturer,
+            Name = "Regional Manufacturer",
+            Description = "A balanced regional operating company with hybrid identity, on-prem infrastructure, and shared repositories.",
+            IndustryProfile = "Manufacturing",
+            GeographyProfile = "Regional-US",
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+        },
+        new ScenarioArchetypeDescriptor
+        {
+            Kind = ScenarioArchetypeKind.GlobalSaaS,
+            Name = "Global SaaS",
+            Description = "A collaboration-heavy, identity-forward software company with global offices and cloud bias.",
+            IndustryProfile = "Software",
+            GeographyProfile = "Global",
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.IdentityHeavy, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+        },
+        new ScenarioArchetypeDescriptor
+        {
+            Kind = ScenarioArchetypeKind.HealthcareNetwork,
+            Name = "Healthcare Network",
+            Description = "A regulated enterprise with distributed sites, mixed device populations, and sensitive repositories.",
+            IndustryProfile = "Healthcare",
+            GeographyProfile = "Regional-US",
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+        },
+        new ScenarioArchetypeDescriptor
+        {
+            Kind = ScenarioArchetypeKind.PublicSectorAgency,
+            Name = "Public Sector Agency",
+            Description = "A policy-heavy public service organization with regulated workflows, broad device coverage, and audit-sensitive operations.",
+            IndustryProfile = "Public Sector",
+            GeographyProfile = "Regional-US",
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+        },
+        new ScenarioArchetypeDescriptor
+        {
+            Kind = ScenarioArchetypeKind.RetailDistribution,
+            Name = "Retail and Distribution",
+            Description = "A distributed retail and distribution operator with branch locations, frontline devices, and supply-chain application dependencies.",
+            IndustryProfile = "Retail",
+            GeographyProfile = "North-America",
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+        }
+    };
+
+    public ScenarioEnvelope CreateTemplate(ScenarioTemplateKind kind)
+    {
+        var archetype = kind switch
+        {
+            ScenarioTemplateKind.GlobalSaaS => CreateArchetype(ScenarioArchetypeKind.GlobalSaaS),
+            ScenarioTemplateKind.HealthcareNetwork => CreateArchetype(ScenarioArchetypeKind.HealthcareNetwork),
+            _ => CreateArchetype(ScenarioArchetypeKind.RegionalManufacturer)
+        };
+
+        return new ScenarioEnvelope
+        {
+            Name = archetype.Name,
+            Description = archetype.Description,
+            Archetype = archetype.Archetype,
+            Template = kind,
+            Overlays = archetype.Overlays.ToList(),
+            CompanyCount = archetype.CompanyCount,
+            IndustryProfile = archetype.IndustryProfile,
+            GeographyProfile = archetype.GeographyProfile,
+            DeviationProfile = archetype.DeviationProfile,
+            EmployeeSize = archetype.EmployeeSize,
+            Identity = archetype.Identity,
+            Applications = archetype.Applications,
+            Infrastructure = archetype.Infrastructure,
+            Repositories = archetype.Repositories,
+            Cmdb = archetype.Cmdb,
+            ObservedData = archetype.ObservedData,
+            Timeline = archetype.Timeline,
+            Packs = archetype.Packs,
+            ExternalPlugins = archetype.ExternalPlugins,
+            Anomalies = archetype.Anomalies.ToList(),
+            Companies = archetype.Companies.ToList(),
+            OfficeCount = archetype.OfficeCount
+        };
+    }
+
+    public ScenarioEnvelope CreateArchetype(ScenarioArchetypeKind kind) => kind switch
+    {
+        ScenarioArchetypeKind.GlobalSaaS => new ScenarioEnvelope
         {
             Name = "Global SaaS",
             Description = "A multi-region SaaS operator.",
-            Template = kind,
+            Archetype = kind,
             DeviationProfile = ScenarioDeviationProfiles.Realistic,
             CompanyCount = 2,
             IndustryProfile = "Software",
@@ -101,11 +192,11 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
-        ScenarioTemplateKind.HealthcareNetwork => new ScenarioEnvelope
+        ScenarioArchetypeKind.HealthcareNetwork => new ScenarioEnvelope
         {
             Name = "Healthcare Network",
             Description = "A distributed healthcare organization.",
-            Template = kind,
+            Archetype = kind,
             DeviationProfile = ScenarioDeviationProfiles.Realistic,
             CompanyCount = 1,
             IndustryProfile = "Healthcare",
@@ -122,11 +213,53 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
+        ScenarioArchetypeKind.PublicSectorAgency => new ScenarioEnvelope
+        {
+            Name = "Public Sector Agency",
+            Description = "A policy-heavy public sector organization.",
+            Archetype = kind,
+            DeviationProfile = ScenarioDeviationProfiles.Realistic,
+            CompanyCount = 1,
+            IndustryProfile = "Public Sector",
+            GeographyProfile = "Regional-US",
+            EmployeeSize = new SizeBand { Minimum = 1400, Maximum = 2600 },
+            OfficeCount = 5,
+            Identity = new IdentityProfile { IncludeHybridDirectory = true, IncludeM365StyleGroups = true, StaleAccountRate = 0.03, IncludeB2BGuests = false },
+            Applications = new ApplicationProfile { IncludeApplications = true, BaseApplicationCount = 7, IncludeLineOfBusinessApplications = true, IncludeSaaSApplications = true },
+            Infrastructure = new InfrastructureProfile { IncludeServers = true, IncludeWorkstations = true, IncludeNetworkAssets = true, IncludeTelephony = true },
+            Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
+            Cmdb = new CmdbProfile { IncludeConfigurationManagement = true, IncludeBusinessServices = true, IncludeCloudServices = true },
+            ObservedData = new ObservedDataProfile(),
+            Timeline = new TimelineProfile(),
+            Packs = new ScenarioPackProfile(),
+            ExternalPlugins = new ExternalPluginScenarioProfile()
+        },
+        ScenarioArchetypeKind.RetailDistribution => new ScenarioEnvelope
+        {
+            Name = "Retail and Distribution",
+            Description = "A distributed retail and distribution operator.",
+            Archetype = kind,
+            DeviationProfile = ScenarioDeviationProfiles.Realistic,
+            CompanyCount = 1,
+            IndustryProfile = "Retail",
+            GeographyProfile = "North-America",
+            EmployeeSize = new SizeBand { Minimum = 2200, Maximum = 5200 },
+            OfficeCount = 10,
+            Identity = new IdentityProfile { IncludeHybridDirectory = true, IncludeM365StyleGroups = true, IncludeExternalWorkforce = true, StaleAccountRate = 0.04 },
+            Applications = new ApplicationProfile { IncludeApplications = true, BaseApplicationCount = 9, IncludeLineOfBusinessApplications = true, IncludeSaaSApplications = true },
+            Infrastructure = new InfrastructureProfile { IncludeServers = true, IncludeWorkstations = true, IncludeNetworkAssets = true, IncludeTelephony = true },
+            Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
+            Cmdb = new CmdbProfile(),
+            ObservedData = new ObservedDataProfile(),
+            Timeline = new TimelineProfile(),
+            Packs = new ScenarioPackProfile(),
+            ExternalPlugins = new ExternalPluginScenarioProfile()
+        },
         _ => new ScenarioEnvelope
         {
             Name = "Regional Manufacturer",
             Description = "A regionally focused manufacturer with conventional enterprise layers.",
-            Template = kind,
+            Archetype = kind,
             DeviationProfile = ScenarioDeviationProfiles.Realistic,
             CompanyCount = 1,
             IndustryProfile = "Manufacturing",
@@ -195,18 +328,21 @@ public sealed class ScenarioOverlayService : IScenarioOverlayService
 public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
 {
     private readonly IScenarioTemplateRegistry _templateRegistry;
+    private readonly IScenarioArchetypeRegistry _archetypeRegistry;
     private readonly IScenarioOverlayService _overlayService;
 
     public ScenarioDefaultsResolver()
-        : this(new ScenarioTemplateRegistry(), new ScenarioOverlayService())
+        : this(new ScenarioTemplateRegistry(), new ScenarioTemplateRegistry(), new ScenarioOverlayService())
     {
     }
 
     public ScenarioDefaultsResolver(
         IScenarioTemplateRegistry templateRegistry,
+        IScenarioArchetypeRegistry archetypeRegistry,
         IScenarioOverlayService overlayService)
     {
         _templateRegistry = templateRegistry;
+        _archetypeRegistry = archetypeRegistry;
         _overlayService = overlayService;
     }
 
@@ -214,7 +350,11 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
     {
         var envelope = ScenarioSerializationHelper.ToEnvelope(authoredScenario);
 
-        if (envelope.Template is { } template)
+        if (envelope.Archetype is { } archetype)
+        {
+            envelope = Merge(_archetypeRegistry.CreateArchetype(archetype), envelope);
+        }
+        else if (envelope.Template is { } template)
         {
             envelope = Merge(_templateRegistry.CreateTemplate(template), envelope);
         }
@@ -228,6 +368,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
         {
             Name = envelope.Name,
             Description = envelope.Description,
+            Archetype = envelope.Archetype ?? ResolveArchetypeFromTemplate(envelope.Template),
             CompanyCount = Math.Max(1, envelope.CompanyCount ?? envelope.Companies.Count),
             IndustryProfile = envelope.IndustryProfile ?? "General",
             GeographyProfile = envelope.GeographyProfile ?? "Regional-US",
@@ -257,6 +398,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
         {
             Name = overlay.Name != "Default" ? overlay.Name : template.Name,
             Description = overlay.Description != "Synthetic enterprise scenario" ? overlay.Description : template.Description,
+            Archetype = overlay.Archetype ?? template.Archetype,
             Template = overlay.Template ?? template.Template,
             Overlays = overlay.Overlays.Count > 0 ? overlay.Overlays.ToList() : template.Overlays.ToList(),
             CompanyCount = overlay.CompanyCount ?? template.CompanyCount,
@@ -327,6 +469,15 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
         => string.IsNullOrWhiteSpace(deviationProfile)
             ? ScenarioDeviationProfiles.Realistic
             : deviationProfile;
+
+    private static ScenarioArchetypeKind? ResolveArchetypeFromTemplate(ScenarioTemplateKind? template)
+        => template switch
+        {
+            ScenarioTemplateKind.GlobalSaaS => ScenarioArchetypeKind.GlobalSaaS,
+            ScenarioTemplateKind.HealthcareNetwork => ScenarioArchetypeKind.HealthcareNetwork,
+            ScenarioTemplateKind.RegionalManufacturer => ScenarioArchetypeKind.RegionalManufacturer,
+            _ => null
+        };
 
     private static int ResolveEmployeeCount(SizeBand? sizeBand)
     {
@@ -830,6 +981,7 @@ internal static class ScenarioSerializationHelper
             {
                 Name = definition.Name,
                 Description = definition.Description,
+                Archetype = definition.Archetype,
                 CompanyCount = definition.CompanyCount > 0 ? definition.CompanyCount : definition.Companies.Count,
                 IndustryProfile = definition.IndustryProfile,
                 GeographyProfile = definition.GeographyProfile,
@@ -875,6 +1027,7 @@ file static class ScenarioEnvelopeExtensions
         {
             Name = envelope.Name,
             Description = envelope.Description,
+            Archetype = envelope.Archetype,
             Template = envelope.Template,
             Overlays = envelope.Overlays.ToList(),
             CompanyCount = envelope.CompanyCount,

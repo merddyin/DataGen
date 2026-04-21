@@ -49,6 +49,48 @@ public sealed class GetSEScenarioTemplateCommand : PSCmdlet
     }
 }
 
+[Cmdlet(VerbsCommon.Get, "SEScenarioArchetype")]
+[OutputType(typeof(ScenarioArchetypeDescriptor))]
+public sealed class GetSEScenarioArchetypeCommand : PSCmdlet
+{
+    [Parameter(Mandatory = false)]
+    public string[]? PluginRootPath { get; set; }
+
+    [Parameter(Mandatory = false)]
+    public string[]? EnablePluginCapability { get; set; }
+
+    protected override void ProcessRecord()
+    {
+        using var services = ScenarioCmdletInput.BuildServices();
+        var registry = services.GetRequiredService<IScenarioArchetypeRegistry>();
+        var validator = services.GetRequiredService<IScenarioValidator>();
+
+        foreach (var descriptor in registry.GetArchetypes())
+        {
+            if (PluginRootPath is null || PluginRootPath.Length == 0 || EnablePluginCapability is null || EnablePluginCapability.Length == 0)
+            {
+                WriteObject(descriptor);
+                continue;
+            }
+
+            var archetype = ScenarioCmdletInput.ApplyExternalPlugins(registry.CreateArchetype(descriptor.Kind), PluginRootPath, EnablePluginCapability);
+            var validation = validator.Validate(archetype);
+
+            WriteObject(new ScenarioArchetypeDescriptor
+            {
+                Kind = descriptor.Kind,
+                Name = descriptor.Name,
+                Description = descriptor.Description,
+                IndustryProfile = descriptor.IndustryProfile,
+                GeographyProfile = descriptor.GeographyProfile,
+                RecommendedOverlays = descriptor.RecommendedOverlays.ToList(),
+                PluginContributions = validation.Contributions,
+                PluginAuthoringHints = validation.AuthoringHints
+            });
+        }
+    }
+}
+
 [Cmdlet(VerbsCommon.New, "SEScenarioFromTemplate")]
 [OutputType(typeof(ScenarioEnvelope))]
 public sealed class NewSEScenarioFromTemplateCommand : PSCmdlet
@@ -78,6 +120,38 @@ public sealed class NewSEScenarioFromTemplateCommand : PSCmdlet
         }
 
         WriteObject(template);
+    }
+}
+
+[Cmdlet(VerbsCommon.New, "SEScenarioFromArchetype")]
+[OutputType(typeof(ScenarioEnvelope))]
+public sealed class NewSEScenarioFromArchetypeCommand : PSCmdlet
+{
+    [Parameter(Mandatory = true, Position = 0)]
+    public ScenarioArchetypeKind Archetype { get; set; }
+
+    [Parameter(Mandatory = false)]
+    public string[]? PluginRootPath { get; set; }
+
+    [Parameter(Mandatory = false)]
+    public string[]? EnablePluginCapability { get; set; }
+
+    protected override void ProcessRecord()
+    {
+        using var services = ScenarioCmdletInput.BuildServices();
+        var registry = services.GetRequiredService<IScenarioArchetypeRegistry>();
+        var resolver = services.GetRequiredService<IScenarioDefaultsResolver>();
+        var hydrator = services.GetRequiredService<IScenarioPluginProfileHydrator>();
+
+        var archetype = registry.CreateArchetype(Archetype);
+        if (PluginRootPath is not null && PluginRootPath.Length > 0 && EnablePluginCapability is not null && EnablePluginCapability.Length > 0)
+        {
+            archetype = ScenarioCmdletInput.ApplyExternalPlugins(archetype, PluginRootPath, EnablePluginCapability);
+            var hydrated = hydrator.Hydrate(resolver.Resolve(archetype)).Scenario;
+            archetype = ScenarioCmdletInput.ToEnvelope(hydrated);
+        }
+
+        WriteObject(archetype);
     }
 }
 
@@ -176,6 +250,7 @@ file static class ScenarioCmdletInput
         {
             Name = envelope.Name,
             Description = envelope.Description,
+            Archetype = envelope.Archetype,
             Template = envelope.Template,
             Overlays = envelope.Overlays.ToList(),
             CompanyCount = envelope.CompanyCount,
@@ -219,6 +294,7 @@ file static class ScenarioCmdletInput
         {
             Name = definition.Name,
             Description = definition.Description,
+            Archetype = definition.Archetype,
             CompanyCount = definition.CompanyCount,
             IndustryProfile = definition.IndustryProfile,
             GeographyProfile = definition.GeographyProfile,

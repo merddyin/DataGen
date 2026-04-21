@@ -24,6 +24,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICatalogLoader, FileSystemCatalogLoader>();
         services.AddSingleton<IScenarioLoader, JsonScenarioLoader>();
         services.AddSingleton<IScenarioTemplateRegistry, ScenarioTemplateRegistry>();
+        services.AddSingleton<IScenarioArchetypeRegistry, ScenarioTemplateRegistry>();
         services.AddSingleton<IScenarioOverlayService, ScenarioOverlayService>();
         services.AddSingleton<IScenarioDefaultsResolver, ScenarioDefaultsResolver>();
         services.AddSingleton<IFirstPartyPackPathResolver, FirstPartyPackPathResolver>();

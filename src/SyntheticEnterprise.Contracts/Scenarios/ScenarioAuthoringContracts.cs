@@ -12,6 +12,15 @@ public enum ScenarioTemplateKind
     HigherEducation
 }
 
+public enum ScenarioArchetypeKind
+{
+    RegionalManufacturer,
+    GlobalSaaS,
+    HealthcareNetwork,
+    PublicSectorAgency,
+    RetailDistribution
+}
+
 public enum ScenarioOverlayKind
 {
     IdentityHeavy,
@@ -62,6 +71,18 @@ public sealed class ScenarioTemplateDescriptor
     public List<ScenarioPluginAuthoringHint> PluginAuthoringHints { get; init; } = new();
 }
 
+public sealed class ScenarioArchetypeDescriptor
+{
+    public required ScenarioArchetypeKind Kind { get; init; }
+    public required string Name { get; init; }
+    public required string Description { get; init; }
+    public string IndustryProfile { get; init; } = string.Empty;
+    public string GeographyProfile { get; init; } = string.Empty;
+    public List<ScenarioOverlayKind> RecommendedOverlays { get; init; } = new();
+    public List<GenerationPluginCapabilityContribution> PluginContributions { get; init; } = new();
+    public List<ScenarioPluginAuthoringHint> PluginAuthoringHints { get; init; } = new();
+}
+
 public sealed class ScenarioMergeResult
 {
     public ScenarioEnvelope Scenario { get; init; } = new();
@@ -73,6 +94,7 @@ public sealed class ScenarioEnvelope
 {
     public string Name { get; init; } = "Default";
     public string Description { get; init; } = "Synthetic enterprise scenario";
+    public ScenarioArchetypeKind? Archetype { get; init; }
     public ScenarioTemplateKind? Template { get; init; }
     public List<ScenarioOverlayKind> Overlays { get; init; } = new();
     public int? CompanyCount { get; init; }
