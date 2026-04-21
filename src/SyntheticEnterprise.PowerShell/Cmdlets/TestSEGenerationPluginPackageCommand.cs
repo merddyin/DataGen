@@ -22,6 +22,9 @@ public sealed class TestSEGenerationPluginPackageCommand : PSCmdlet
     [Parameter(Mandatory = false)]
     public string[]? PluginAllowedContentHash { get; set; }
 
+    [Parameter(Mandatory = false)]
+    public SwitchParameter ValidatePackContract { get; set; }
+
     protected override void ProcessRecord()
     {
         var services = new ServiceCollection()
@@ -38,7 +41,7 @@ public sealed class TestSEGenerationPluginPackageCommand : PSCmdlet
             AllowedContentHashes = PluginAllowedContentHash?.ToList() ?? new()
         };
 
-        foreach (var report in validator.Validate(PluginRootPath, settings))
+        foreach (var report in validator.Validate(PluginRootPath, settings, ValidatePackContract.IsPresent))
         {
             WriteObject(report);
         }

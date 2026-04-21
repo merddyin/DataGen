@@ -58,4 +58,64 @@ public sealed class PluginPackageScaffolderTests
             }
         }
     }
+
+    [Fact]
+    public void Validator_Flags_Invalid_Pack_Contract_Metadata_When_Requested()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"datagen-plugin-pack-contract-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(tempRoot, "riskops.generator.json"), """
+                {
+                  "capability": "Contoso.RiskOps",
+                  "displayName": "Contoso RiskOps",
+                  "pluginKind": "SdkExample",
+                  "executionMode": "PowerShellScript",
+                  "entryPoint": "riskops.pack.ps1",
+                  "security": {
+                    "dataOnly": true,
+                    "requestedCapabilities": [ "EmitDiagnostics" ]
+                  },
+                  "metadata": {
+                    "packId": "Contoso.Mismatch",
+                    "packPhase": "Preflight"
+                  }
+                }
+                """);
+            File.WriteAllText(Path.Combine(tempRoot, "riskops.pack.ps1"), "New-PluginResult -Records @() -Warnings @()");
+
+            var securityPolicy = new DataOnlyGenerationPluginSecurityPolicy();
+            var catalog = new FileSystemExternalGenerationPluginCatalog(
+                new GenerationPluginManifestValidator(securityPolicy),
+                securityPolicy,
+                new AllowListExternalPluginTrustPolicy());
+            var validator = new GenerationPluginPackageValidator(catalog);
+            var report = Assert.Single(validator.Validate(
+                new[] { tempRoot },
+                new ExternalPluginExecutionSettings
+                {
+                    Enabled = true,
+                    PluginRootPaths = new() { tempRoot },
+                    RequireAssemblyHashApproval = false
+                },
+                validatePackContract: true));
+
+            Assert.True(report.PackContractChecked);
+            Assert.True(report.HasErrors);
+            Assert.True(report.PackContractErrorCount >= 3);
+            Assert.Contains(report.PackContractIssues, issue => issue.RuleId == "pack-kind");
+            Assert.Contains(report.PackContractIssues, issue => issue.RuleId == "pack-id-mismatch");
+            Assert.Contains(report.PackContractIssues, issue => issue.RuleId == "pack-generate-data-missing");
+            Assert.Contains(report.PackContractIssues, issue => issue.RuleId == "pack-phase-nonstandard" && !issue.IsError);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
 }

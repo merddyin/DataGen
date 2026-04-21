@@ -266,6 +266,18 @@ public sealed class GenerationPluginPackageValidationReport
     public bool HasErrors { get; init; }
     public List<string> Messages { get; init; } = new();
     public List<GenerationPluginInspectionRecord> Plugins { get; init; } = new();
+    public bool PackContractChecked { get; init; }
+    public int PackContractErrorCount { get; init; }
+    public int PackContractWarningCount { get; init; }
+    public List<GenerationPluginContractIssue> PackContractIssues { get; init; } = new();
+}
+
+public sealed class GenerationPluginContractIssue
+{
+    public required string Capability { get; init; }
+    public required string RuleId { get; init; }
+    public required string Message { get; init; }
+    public bool IsError { get; init; }
 }
 
 public sealed class GenerationPluginRegistration

@@ -15,6 +15,7 @@ This SDK is the starting point for writing external DataGen plugins without havi
    - `Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
 3. Validate a plugin package:
    - `Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
+   - pack-focused validation: `Test-SEGenerationPluginPackage -PluginRootPath 'E:\work\plugins\Contoso.RiskOps' -ValidatePackContract`
 4. Install and register an approved plugin into the managed plugin store:
    - `Install-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
 5. Register an approved plugin directly from its source root when install is not needed:

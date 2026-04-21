@@ -184,6 +184,14 @@ Validate a package root:
 Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
 ```
 
+Validate the stricter pack contract when authoring a scenario pack:
+
+```powershell
+Test-SEGenerationPluginPackage `
+  -PluginRootPath 'E:\work\plugins\Contoso.RiskOps' `
+  -ValidatePackContract
+```
+
 For binary plugins, inspect or validate with trust settings:
 
 ```powershell
