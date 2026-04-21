@@ -97,6 +97,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
             Cmdb = new CmdbProfile(),
             ObservedData = new ObservedDataProfile(),
+            Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
         ScenarioTemplateKind.HealthcareNetwork => new ScenarioEnvelope
@@ -116,6 +117,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
             Cmdb = new CmdbProfile(),
             ObservedData = new ObservedDataProfile(),
+            Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         },
         _ => new ScenarioEnvelope
@@ -135,6 +137,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry
             Repositories = new RepositoryProfile { IncludeDatabases = true, IncludeFileShares = true, IncludeCollaborationSites = true },
             Cmdb = new CmdbProfile(),
             ObservedData = new ObservedDataProfile(),
+            Packs = new ScenarioPackProfile(),
             ExternalPlugins = new ExternalPluginScenarioProfile()
         }
     };
@@ -233,6 +236,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             Repositories = envelope.Repositories ?? new RepositoryProfile(),
             Cmdb = envelope.Cmdb ?? new CmdbProfile(),
             ObservedData = envelope.ObservedData ?? new ObservedDataProfile(),
+            Packs = envelope.Packs ?? new ScenarioPackProfile(),
             ExternalPlugins = envelope.ExternalPlugins ?? new ExternalPluginScenarioProfile(),
             Anomalies = NormalizeAnomalies(envelope.Anomalies),
             Companies = envelope.Companies.Count > 0
@@ -262,6 +266,7 @@ public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
             Repositories = overlay.Repositories ?? template.Repositories,
             Cmdb = overlay.Cmdb ?? template.Cmdb,
             ObservedData = overlay.ObservedData ?? template.ObservedData,
+            Packs = overlay.Packs ?? template.Packs,
             ExternalPlugins = overlay.ExternalPlugins ?? template.ExternalPlugins,
             Anomalies = overlay.Anomalies.Count > 0 ? overlay.Anomalies.ToList() : template.Anomalies.ToList(),
             Companies = overlay.Companies.Count > 0 ? overlay.Companies.ToList() : template.Companies.ToList(),
@@ -363,6 +368,7 @@ public sealed class ScenarioValidator : IScenarioValidator
         : this(
             new ScenarioDefaultsResolver(),
             new ScenarioPluginProfileHydrator(
+                new ScenarioPackProfileResolver(new FirstPartyPackPathResolver()),
                 new ExternalPluginScenarioBindingService(),
                 new ExternalPluginCapabilityResolver(
                     new GenerationPluginRegistry(
@@ -372,6 +378,7 @@ public sealed class ScenarioValidator : IScenarioValidator
                             new DataOnlyGenerationPluginSecurityPolicy(),
                             new AllowListExternalPluginTrustPolicy())))),
             new ScenarioPluginContributionResolver(
+                new ScenarioPackProfileResolver(new FirstPartyPackPathResolver()),
                 new ExternalPluginScenarioBindingService(),
                 new ExternalPluginCapabilityResolver(
                     new GenerationPluginRegistry(
@@ -463,20 +470,23 @@ public sealed class ScenarioValidator : IScenarioValidator
 
 public sealed class ScenarioPluginProfileHydrator : IScenarioPluginProfileHydrator
 {
+    private readonly IScenarioPackProfileResolver _packProfileResolver;
     private readonly IExternalPluginScenarioBindingService _bindingService;
     private readonly IExternalPluginCapabilityResolver _capabilityResolver;
 
     public ScenarioPluginProfileHydrator(
+        IScenarioPackProfileResolver packProfileResolver,
         IExternalPluginScenarioBindingService bindingService,
         IExternalPluginCapabilityResolver capabilityResolver)
     {
+        _packProfileResolver = packProfileResolver;
         _bindingService = bindingService;
         _capabilityResolver = capabilityResolver;
     }
 
     public ScenarioPluginHydrationResult Hydrate(ScenarioDefinition scenario)
     {
-        var profile = scenario.ExternalPlugins;
+        var profile = _packProfileResolver.Resolve(scenario);
         if (profile.PluginRootPaths.Count == 0 || profile.EnabledCapabilities.Count == 0)
         {
             return new ScenarioPluginHydrationResult
@@ -611,20 +621,23 @@ public sealed class ScenarioPluginProfileHydrator : IScenarioPluginProfileHydrat
 
 public sealed class ScenarioPluginContributionResolver : IScenarioPluginContributionResolver
 {
+    private readonly IScenarioPackProfileResolver _packProfileResolver;
     private readonly IExternalPluginScenarioBindingService _bindingService;
     private readonly IExternalPluginCapabilityResolver _capabilityResolver;
 
     public ScenarioPluginContributionResolver(
+        IScenarioPackProfileResolver packProfileResolver,
         IExternalPluginScenarioBindingService bindingService,
         IExternalPluginCapabilityResolver capabilityResolver)
     {
+        _packProfileResolver = packProfileResolver;
         _bindingService = bindingService;
         _capabilityResolver = capabilityResolver;
     }
 
     public ScenarioPluginContributionResolution Resolve(ScenarioDefinition scenario)
     {
-        var profile = scenario.ExternalPlugins;
+        var profile = _packProfileResolver.Resolve(scenario);
         if (profile.PluginRootPaths.Count == 0 || profile.EnabledCapabilities.Count == 0)
         {
             return new ScenarioPluginContributionResolution();
@@ -823,6 +836,7 @@ internal static class ScenarioSerializationHelper
                 Repositories = definition.Repositories,
                 Cmdb = definition.Cmdb,
                 ObservedData = definition.ObservedData,
+                Packs = definition.Packs,
                 ExternalPlugins = definition.ExternalPlugins,
                 Anomalies = definition.Anomalies.ToList(),
                 Companies = definition.Companies.ToList()
@@ -868,6 +882,7 @@ file static class ScenarioEnvelopeExtensions
             Repositories = envelope.Repositories,
             Cmdb = envelope.Cmdb,
             ObservedData = envelope.ObservedData,
+            Packs = envelope.Packs,
             ExternalPlugins = envelope.ExternalPlugins,
             Anomalies = anomalies ?? envelope.Anomalies.ToList(),
             Companies = envelope.Companies.ToList(),

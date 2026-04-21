@@ -1,0 +1,25 @@
+{
+  "capability": "FirstParty.SecOps",
+  "displayName": "First-Party SecOps Pack",
+  "description": "Adds security alerts, triage cases, and analyst ownership relationships.",
+  "pluginKind": "FirstPartyPack",
+  "executionMode": "PowerShellScript",
+  "entryPoint": "secops.pack.ps1",
+  "parameters": [
+    {
+      "name": "AlertCount",
+      "typeName": "System.Int32",
+      "required": false,
+      "defaultValue": 8
+    }
+  ],
+  "security": {
+    "dataOnly": true,
+    "requestedCapabilities": [ "GenerateData" ]
+  },
+  "metadata": {
+    "packId": "FirstParty.SecOps",
+    "packPhase": "PostWorldGeneration",
+    "category": "Security"
+  }
+}

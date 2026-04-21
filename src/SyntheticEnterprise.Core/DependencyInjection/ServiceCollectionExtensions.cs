@@ -26,6 +26,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IScenarioTemplateRegistry, ScenarioTemplateRegistry>();
         services.AddSingleton<IScenarioOverlayService, ScenarioOverlayService>();
         services.AddSingleton<IScenarioDefaultsResolver, ScenarioDefaultsResolver>();
+        services.AddSingleton<IFirstPartyPackPathResolver, FirstPartyPackPathResolver>();
+        services.AddSingleton<IScenarioPackProfileResolver, ScenarioPackProfileResolver>();
         services.AddSingleton<IScenarioPluginProfileHydrator, ScenarioPluginProfileHydrator>();
         services.AddSingleton<IScenarioPluginContributionResolver, ScenarioPluginContributionResolver>();
         services.AddSingleton<IScenarioValidator, ScenarioValidator>();

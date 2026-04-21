@@ -269,6 +269,38 @@ public sealed class ScenarioValidationTests
         }
     }
 
+    [Fact]
+    public void Validator_Exposes_Bundled_FirstParty_Pack_Contributions()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var validator = services.GetRequiredService<IScenarioValidator>();
+
+        var result = validator.Validate(new ScenarioEnvelope
+        {
+            Name = "Bundled Pack Validation",
+            Packs = new ScenarioPackProfile
+            {
+                IncludeBundledPacks = true,
+                EnabledPacks =
+                {
+                    new ScenarioPackSelection
+                    {
+                        PackId = "FirstParty.ITSM"
+                    }
+                }
+            }
+        });
+
+        Assert.True(result.IsValid);
+        var contribution = Assert.Single(result.Contributions, item => item.Capability == "FirstParty.ITSM");
+        Assert.Equal("First-Party ITSM Pack", contribution.DisplayName);
+        Assert.Contains(contribution.Parameters, parameter => parameter.Name == "TicketCount");
+        var hint = Assert.Single(result.AuthoringHints, item => item.Capability == "FirstParty.ITSM");
+        Assert.Equal("12", hint.SuggestedSettings["TicketCount"]);
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"datagen-scenario-tests-{Guid.NewGuid():N}");

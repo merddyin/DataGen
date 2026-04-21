@@ -1,0 +1,25 @@
+{
+  "capability": "FirstParty.BusinessOps",
+  "displayName": "First-Party BusinessOps Pack",
+  "description": "Adds vendors, procurement requests, and business ownership relationships.",
+  "pluginKind": "FirstPartyPack",
+  "executionMode": "PowerShellScript",
+  "entryPoint": "businessops.pack.ps1",
+  "parameters": [
+    {
+      "name": "RequestCount",
+      "typeName": "System.Int32",
+      "required": false,
+      "defaultValue": 6
+    }
+  ],
+  "security": {
+    "dataOnly": true,
+    "requestedCapabilities": [ "GenerateData" ]
+  },
+  "metadata": {
+    "packId": "FirstParty.BusinessOps",
+    "packPhase": "PostWorldGeneration",
+    "category": "BusinessOperations"
+  }
+}

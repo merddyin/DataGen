@@ -109,6 +109,21 @@ public sealed class ExternalPluginCapabilityConfiguration
     public Dictionary<string, string?> Settings { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
+public sealed class ScenarioPackSelection
+{
+    public required string PackId { get; init; }
+    public bool Enabled { get; init; } = true;
+    public Dictionary<string, string?> Settings { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+}
+
+public sealed class ScenarioPackProfile
+{
+    public string DiscoveryMode { get; init; } = "Bundled";
+    public bool IncludeBundledPacks { get; init; } = true;
+    public List<string> PackRootPaths { get; init; } = new();
+    public List<ScenarioPackSelection> EnabledPacks { get; init; } = new();
+}
+
 public sealed class ExternalPluginScenarioProfile
 {
     public List<string> PluginRootPaths { get; init; } = new();
@@ -157,8 +172,8 @@ public sealed class ExternalPluginExecutionSettings
     public int MaxWarningCount { get; init; } = 100;
     public int MaxDiagnosticEntries { get; init; } = 32;
     public int MaxDiagnosticCharacters { get; init; } = 4096;
-    public int MaxInputPayloadBytes { get; init; } = 2 * 1024 * 1024;
-    public int MaxOutputPayloadBytes { get; init; } = 2 * 1024 * 1024;
+    public int MaxInputPayloadBytes { get; init; } = 64 * 1024 * 1024;
+    public int MaxOutputPayloadBytes { get; init; } = 64 * 1024 * 1024;
     public bool RequireContentHashAllowList { get; init; }
     public bool RequireAssemblyHashApproval { get; init; } = true;
     public List<string> AllowedContentHashes { get; init; } = new();

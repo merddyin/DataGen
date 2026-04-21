@@ -25,6 +25,7 @@ Current product capabilities include:
 - configurable realism through deviation profiles such as `Clean`, `Realistic`, and `Aggressive`
 - normalized export surfaces for downstream tooling
 - a plugin model for extending the synthetic dataset safely
+- bundled first-party domain packs for ITSM, SecOps, and BusinessOps using the native scenario `packs` shape
 
 ## What DataGen is not
 
@@ -150,6 +151,22 @@ The docs site includes:
 - SDK and plugin architecture guidance
 - contribution guidance
 - integration and export patterns
+
+## First-Party Packs
+
+DataGen now includes bundled first-party packs under `packs/first-party/`.
+
+These packs use the existing external plugin runtime and can be enabled directly from scenario JSON through the `packs` section. The current bundled set includes:
+
+- `FirstParty.NoOp`
+- `FirstParty.ITSM`
+- `FirstParty.SecOps`
+- `FirstParty.BusinessOps`
+
+For a concrete example, see:
+
+- `examples/regional_manufacturer_packs.scenario.json`
+- `docs/FirstParty_Packs_Walkthrough.md`
 
 ## Walkthrough assets
 

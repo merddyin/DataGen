@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Exporting.Contracts;
@@ -514,6 +515,41 @@ public sealed class NormalizedLinkTableProvider : ILinkTableProvider, IExportReq
                     ["child_folder_id"] = folder.Id
                 },
                 SortKeySelector = folder => folder.Id
+            },
+            new LinkTableDescriptor<PluginGeneratedRecord>
+            {
+                LogicalName = "plugin_generated_relationships",
+                RelativePathStem = "links/plugin_generated_relationships",
+                Columns =
+                [
+                    "id",
+                    "plugin_capability",
+                    "record_type",
+                    "relationship_type",
+                    "source_entity_type",
+                    "source_entity_id",
+                    "target_entity_type",
+                    "target_entity_id",
+                    "properties_json",
+                    "json_payload"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.PluginRecords
+                    .Where(IsRelationshipRecord)
+                    .ToList(),
+                RowProjector = record => new Dictionary<string, object?>
+                {
+                    ["id"] = record.Id,
+                    ["plugin_capability"] = record.PluginCapability,
+                    ["record_type"] = record.RecordType,
+                    ["relationship_type"] = GetProperty(record, "relationship_type"),
+                    ["source_entity_type"] = GetProperty(record, "source_entity_type"),
+                    ["source_entity_id"] = GetProperty(record, "source_entity_id"),
+                    ["target_entity_type"] = GetProperty(record, "target_entity_type"),
+                    ["target_entity_id"] = GetProperty(record, "target_entity_id"),
+                    ["properties_json"] = SerializeProperties(record.Properties),
+                    ["json_payload"] = record.JsonPayload
+                },
+                SortKeySelector = record => record.Id
             }
         };
     }
@@ -539,4 +575,17 @@ public sealed class NormalizedLinkTableProvider : ILinkTableProvider, IExportReq
 
         return input;
     }
+
+    private static bool IsRelationshipRecord(PluginGeneratedRecord record)
+        => record.Properties.ContainsKey("relationship_type")
+           && record.Properties.ContainsKey("source_entity_id")
+           && record.Properties.ContainsKey("target_entity_id");
+
+    private static string? GetProperty(PluginGeneratedRecord record, string key)
+        => record.Properties.TryGetValue(key, out var value) ? value : null;
+
+    private static string SerializeProperties(IReadOnlyDictionary<string, string?> properties)
+        => JsonSerializer.Serialize(
+            properties.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(entry => entry.Key, entry => entry.Value, StringComparer.OrdinalIgnoreCase));
 }

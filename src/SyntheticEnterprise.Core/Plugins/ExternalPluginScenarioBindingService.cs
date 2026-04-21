@@ -38,8 +38,8 @@ public sealed class ExternalPluginScenarioBindingService : IExternalPluginScenar
             MaxWarningCount = overrides.MaxWarningCount ?? scenarioProfile.MaxWarningCount ?? 100,
             MaxDiagnosticEntries = overrides.MaxDiagnosticEntries ?? scenarioProfile.MaxDiagnosticEntries ?? 32,
             MaxDiagnosticCharacters = overrides.MaxDiagnosticCharacters ?? scenarioProfile.MaxDiagnosticCharacters ?? 4096,
-            MaxInputPayloadBytes = overrides.MaxInputPayloadBytes ?? scenarioProfile.MaxInputPayloadBytes ?? 2 * 1024 * 1024,
-            MaxOutputPayloadBytes = overrides.MaxOutputPayloadBytes ?? scenarioProfile.MaxOutputPayloadBytes ?? 2 * 1024 * 1024,
+            MaxInputPayloadBytes = overrides.MaxInputPayloadBytes ?? scenarioProfile.MaxInputPayloadBytes ?? 64 * 1024 * 1024,
+            MaxOutputPayloadBytes = overrides.MaxOutputPayloadBytes ?? scenarioProfile.MaxOutputPayloadBytes ?? 64 * 1024 * 1024,
             RequireContentHashAllowList = overrides.RequireContentHashAllowList ?? scenarioProfile.RequireContentHashAllowList ?? false,
             RequireAssemblyHashApproval = overrides.RequireAssemblyHashApproval ?? scenarioProfile.RequireAssemblyHashApproval ?? true,
             AllowedContentHashes = allowedContentHashes

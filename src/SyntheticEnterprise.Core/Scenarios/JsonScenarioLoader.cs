@@ -19,6 +19,7 @@ public sealed class JsonScenarioLoader : IScenarioLoader
 
     public JsonScenarioLoader()
         : this(new ScenarioDefaultsResolver(), new ScenarioPluginProfileHydrator(
+            new ScenarioPackProfileResolver(new FirstPartyPackPathResolver()),
             new ExternalPluginScenarioBindingService(),
             new ExternalPluginCapabilityResolver(
                 new GenerationPluginRegistry(

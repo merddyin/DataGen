@@ -1,5 +1,6 @@
 using System.Management.Automation;
 using SyntheticEnterprise.Contracts.Configuration;
+using SyntheticEnterprise.Contracts.Plugins;
 using SyntheticEnterprise.Contracts.Scenarios;
 using SyntheticEnterprise.PowerShell.Cmdlets;
 
@@ -164,6 +165,47 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
         Assert.Equal(ScenarioDeviationProfiles.Clean, result.Cmdb.DeviationProfile);
         Assert.True(result.ObservedData.IncludeObservedViews);
         Assert.Equal(0.91, result.ObservedData.CoverageRatio);
+    }
+
+    [Fact]
+    public void ResolveSEScenario_Maps_Bundled_Packs_Into_Resolved_Plugin_Profile()
+    {
+        using var powershell = System.Management.Automation.PowerShell.Create();
+        powershell.AddCommand("Import-Module")
+            .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
+        powershell.Invoke();
+        Assert.False(powershell.HadErrors);
+
+        powershell.Commands.Clear();
+        powershell.AddCommand("Resolve-SEScenario")
+            .AddParameter("Scenario", new ScenarioEnvelope
+            {
+                Name = "Pack Scenario",
+                Packs = new ScenarioPackProfile
+                {
+                    IncludeBundledPacks = true,
+                    EnabledPacks =
+                    {
+                        new ScenarioPackSelection
+                        {
+                            PackId = "FirstParty.ITSM",
+                            Settings = new(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["TicketCount"] = "11"
+                            }
+                        }
+                    }
+                }
+            });
+
+        var result = Assert.Single(powershell.Invoke<ScenarioDefinition>());
+
+        Assert.False(powershell.HadErrors);
+        Assert.Contains(
+            result.ExternalPlugins.PluginRootPaths,
+            path => path.EndsWith(Path.Combine("packs", "first-party"), StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("FirstParty.ITSM", result.ExternalPlugins.EnabledCapabilities);
+        Assert.Equal("11", Assert.Single(result.ExternalPlugins.CapabilityConfigurations).Settings["TicketCount"]);
     }
 
     private static string CreateTempDirectory()

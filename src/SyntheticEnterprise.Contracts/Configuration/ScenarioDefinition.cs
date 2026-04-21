@@ -17,6 +17,7 @@ public record ScenarioDefinition
     public RepositoryProfile Repositories { get; init; } = new();
     public CmdbProfile Cmdb { get; init; } = new();
     public ObservedDataProfile ObservedData { get; init; } = new();
+    public ScenarioPackProfile Packs { get; init; } = new();
     public ExternalPluginScenarioProfile ExternalPlugins { get; init; } = new();
     public List<ScenarioCompanyDefinition> Companies { get; init; } = new();
     public List<AnomalyProfile> Anomalies { get; init; } = new();

@@ -1,0 +1,37 @@
+{
+  "name": "Regional Manufacturer With Packs",
+  "description": "Regional manufacturer scenario that enables bundled first-party packs for ITSM, SecOps, and BusinessOps.",
+  "template": "RegionalManufacturer",
+  "industryProfile": "Manufacturing",
+  "geographyProfile": "Regional-US",
+  "deviationProfile": "Realistic",
+  "companyCount": 1,
+  "packs": {
+    "discoveryMode": "Bundled",
+    "includeBundledPacks": true,
+    "enabledPacks": [
+      {
+        "packId": "FirstParty.ITSM",
+        "enabled": true,
+        "settings": {
+          "TicketCount": "14",
+          "QueueName": "Regional Manufacturing Service Desk"
+        }
+      },
+      {
+        "packId": "FirstParty.SecOps",
+        "enabled": true,
+        "settings": {
+          "AlertCount": "9"
+        }
+      },
+      {
+        "packId": "FirstParty.BusinessOps",
+        "enabled": true,
+        "settings": {
+          "RequestCount": "7"
+        }
+      }
+    ]
+  }
+}

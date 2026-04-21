@@ -389,6 +389,92 @@ public sealed class ExternalPluginRuntimeTests
     }
 
     [Fact]
+    public void WorldGenerator_Executes_Bundled_FirstParty_Packs_From_Scenario_Profile()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var hydrator = services.GetRequiredService<IScenarioPluginProfileHydrator>();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+
+        var scenario = hydrator.Hydrate(new ScenarioDefinition
+        {
+            Name = "Bundled First-Party Packs",
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Pack Test Co",
+                    Industry = "Technology",
+                    EmployeeCount = 18,
+                    OfficeCount = 2,
+                    Countries = new() { "United States" },
+                    DatabaseCount = 2,
+                    FileShareCount = 2,
+                    CollaborationSiteCount = 3
+                }
+            },
+            Packs = new ScenarioPackProfile
+            {
+                IncludeBundledPacks = true,
+                EnabledPacks =
+                {
+                    new ScenarioPackSelection
+                    {
+                        PackId = "FirstParty.ITSM",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["TicketCount"] = "4"
+                        }
+                    },
+                    new ScenarioPackSelection
+                    {
+                        PackId = "FirstParty.SecOps",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["AlertCount"] = "3"
+                        }
+                    },
+                    new ScenarioPackSelection
+                    {
+                        PackId = "FirstParty.BusinessOps",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["RequestCount"] = "2"
+                        }
+                    }
+                }
+            }
+        }).Scenario;
+
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = scenario,
+                ExternalPlugins = new ExternalPluginExecutionSettings
+                {
+                    Enabled = true,
+                    PluginRootPaths = scenario.ExternalPlugins.PluginRootPaths.ToList(),
+                    EnabledCapabilities = scenario.ExternalPlugins.EnabledCapabilities.ToList(),
+                    CapabilityConfigurations = scenario.ExternalPlugins.CapabilityConfigurations.ToList(),
+                    MaxInputPayloadBytes = 64 * 1024 * 1024,
+                    MaxOutputPayloadBytes = 64 * 1024 * 1024
+                }
+            },
+            new CatalogSet());
+
+        Assert.Contains(result.World.PluginRecords, record => record.PluginCapability == "FirstParty.ITSM" && record.RecordType == "ItsmTicket");
+        Assert.Contains(result.World.PluginRecords, record => record.PluginCapability == "FirstParty.SecOps" && record.RecordType == "SecurityAlert");
+        Assert.Contains(result.World.PluginRecords, record => record.PluginCapability == "FirstParty.BusinessOps" && record.RecordType == "Vendor");
+        Assert.Contains(result.World.PluginRecords, record => record.RecordType == "ItsmQueueOwnership");
+        Assert.Contains(result.World.PluginRecords, record => record.RecordType == "SecurityAlertOwnership");
+        Assert.Contains(result.World.PluginRecords, record => record.RecordType == "VendorOwnership");
+        Assert.Contains("FirstParty.ITSM", result.WorldMetadata!.AppliedLayers);
+        Assert.Contains("FirstParty.SecOps", result.WorldMetadata.AppliedLayers);
+        Assert.Contains("FirstParty.BusinessOps", result.WorldMetadata.AppliedLayers);
+    }
+
+    [Fact]
     public void WorldGenerator_Executes_Assembly_Plugin_In_Isolated_Host()
     {
         var tempRoot = CreateTempDirectory();

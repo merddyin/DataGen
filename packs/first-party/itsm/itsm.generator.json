@@ -1,0 +1,31 @@
+{
+  "capability": "FirstParty.ITSM",
+  "displayName": "First-Party ITSM Pack",
+  "description": "Adds service desk queues, tickets, and ownership links derived from the generated enterprise.",
+  "pluginKind": "FirstPartyPack",
+  "executionMode": "PowerShellScript",
+  "entryPoint": "itsm.pack.ps1",
+  "parameters": [
+    {
+      "name": "TicketCount",
+      "typeName": "System.Int32",
+      "required": false,
+      "defaultValue": 12
+    },
+    {
+      "name": "QueueName",
+      "typeName": "System.String",
+      "required": false,
+      "defaultValue": "Corporate IT Service Desk"
+    }
+  ],
+  "security": {
+    "dataOnly": true,
+    "requestedCapabilities": [ "GenerateData" ]
+  },
+  "metadata": {
+    "packId": "FirstParty.ITSM",
+    "packPhase": "PostWorldGeneration",
+    "category": "Operations"
+  }
+}

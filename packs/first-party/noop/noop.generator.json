@@ -1,0 +1,25 @@
+{
+  "capability": "FirstParty.NoOp",
+  "displayName": "First-Party No-Op Pack",
+  "description": "Reference pack used to validate bundled pack discovery and registration.",
+  "pluginKind": "FirstPartyPack",
+  "executionMode": "PowerShellScript",
+  "entryPoint": "noop.pack.ps1",
+  "parameters": [
+    {
+      "name": "StatusMessage",
+      "typeName": "System.String",
+      "required": false,
+      "defaultValue": "first-party-noop-ready"
+    }
+  ],
+  "security": {
+    "dataOnly": true,
+    "requestedCapabilities": [ "GenerateData", "EmitDiagnostics" ]
+  },
+  "metadata": {
+    "packId": "FirstParty.NoOp",
+    "packPhase": "PostWorldGeneration",
+    "category": "Foundation"
+  }
+}

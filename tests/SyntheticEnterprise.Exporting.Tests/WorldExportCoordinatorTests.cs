@@ -1261,6 +1261,87 @@ public sealed class WorldExportCoordinatorTests
         }
     }
 
+    [Fact]
+    public void Export_Writes_Plugin_Generated_Record_And_Relationship_Artifacts()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        PluginRecords =
+                        {
+                            new PluginGeneratedRecord
+                            {
+                                Id = "PLUGIN-001",
+                                PluginCapability = "FirstParty.ITSM",
+                                RecordType = "ItsmTicket",
+                                AssociatedEntityType = "Company",
+                                AssociatedEntityId = "CO-001",
+                                Properties = new(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    ["TicketNumber"] = "INC1001",
+                                    ["QueueName"] = "Corporate IT Service Desk"
+                                },
+                                JsonPayload = "{\"ticket\":true}"
+                            },
+                            new PluginGeneratedRecord
+                            {
+                                Id = "PLUGIN-002",
+                                PluginCapability = "FirstParty.ITSM",
+                                RecordType = "ItsmQueueOwnership",
+                                AssociatedEntityType = "Team",
+                                AssociatedEntityId = "TEAM-001",
+                                Properties = new(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    ["relationship_type"] = "queue_owned_by_team",
+                                    ["source_entity_type"] = "ItsmQueue",
+                                    ["source_entity_id"] = "ITSM-QUEUE-CO-001",
+                                    ["target_entity_type"] = "Team",
+                                    ["target_entity_id"] = "TEAM-001"
+                                },
+                                JsonPayload = "{\"relationship\":true}"
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "plugin_generated_records");
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "plugin_generated_relationships");
+
+            var recordsJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "plugin_generated_records.json"));
+            var relationshipsJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "links", "plugin_generated_relationships.json"));
+
+            Assert.Contains("INC1001", recordsJson);
+            Assert.Contains("FirstParty.ITSM", recordsJson);
+            Assert.Contains("queue_owned_by_team", relationshipsJson);
+            Assert.Contains("ITSM-QUEUE-CO-001", relationshipsJson);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
     private sealed class EmptyEntityTableProvider : IEntityTableProvider
     {
         public IReadOnlyList<object> GetDescriptors() => [];

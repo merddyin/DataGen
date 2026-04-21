@@ -58,10 +58,10 @@ public sealed class NewSEEnterpriseWorldCommand : PSCmdlet
     public int PluginMaxDiagnosticCharacters { get; set; } = 4096;
 
     [Parameter(Mandatory = false)]
-    public int PluginMaxInputPayloadBytes { get; set; } = 2 * 1024 * 1024;
+    public int PluginMaxInputPayloadBytes { get; set; } = 64 * 1024 * 1024;
 
     [Parameter(Mandatory = false)]
-    public int PluginMaxOutputPayloadBytes { get; set; } = 2 * 1024 * 1024;
+    public int PluginMaxOutputPayloadBytes { get; set; } = 64 * 1024 * 1024;
 
     [Parameter(Mandatory = false)]
     public string[]? PluginAllowedContentHash { get; set; }

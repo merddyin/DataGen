@@ -86,6 +86,7 @@ public sealed class ScenarioEnvelope
     public RepositoryProfile? Repositories { get; init; }
     public CmdbProfile? Cmdb { get; init; }
     public ObservedDataProfile? ObservedData { get; init; }
+    public ScenarioPackProfile? Packs { get; init; }
     public ExternalPluginScenarioProfile? ExternalPlugins { get; init; }
     public List<AnomalyProfile> Anomalies { get; init; } = new();
     public List<ScenarioCompanyDefinition> Companies { get; init; } = new();

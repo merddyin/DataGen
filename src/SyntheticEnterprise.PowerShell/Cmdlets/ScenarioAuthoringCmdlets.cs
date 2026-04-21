@@ -189,6 +189,7 @@ file static class ScenarioCmdletInput
             Repositories = envelope.Repositories,
             Cmdb = envelope.Cmdb,
             ObservedData = envelope.ObservedData,
+            Packs = envelope.Packs,
             ExternalPlugins = new ExternalPluginScenarioProfile
             {
                 PluginRootPaths = existingProfile.PluginRootPaths.Concat(pluginRootPaths).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
@@ -228,6 +229,7 @@ file static class ScenarioCmdletInput
             Repositories = definition.Repositories,
             Cmdb = definition.Cmdb,
             ObservedData = definition.ObservedData,
+            Packs = definition.Packs,
             ExternalPlugins = definition.ExternalPlugins,
             Anomalies = definition.Anomalies.ToList(),
             Companies = definition.Companies.ToList(),

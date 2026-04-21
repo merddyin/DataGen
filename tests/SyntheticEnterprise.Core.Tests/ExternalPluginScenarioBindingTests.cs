@@ -103,4 +103,43 @@ public sealed class ExternalPluginScenarioBindingTests
         Assert.Equal("Override", configuration.Settings["Mode"]);
         Assert.Equal("US", configuration.Settings["Region"]);
     }
+
+    [Fact]
+    public void ScenarioPackResolver_Maps_Bundled_Packs_Into_External_Plugin_Profile()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var resolver = services.GetRequiredService<IScenarioDefaultsResolver>();
+        var hydrator = services.GetRequiredService<IScenarioPluginProfileHydrator>();
+
+        var scenario = hydrator.Hydrate(resolver.Resolve(new ScenarioEnvelope
+        {
+            Name = "Bundled Packs",
+            Packs = new ScenarioPackProfile
+            {
+                IncludeBundledPacks = true,
+                EnabledPacks =
+                {
+                    new ScenarioPackSelection
+                    {
+                        PackId = "FirstParty.ITSM",
+                        Settings = new(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["TicketCount"] = "14"
+                        }
+                    }
+                }
+            }
+        })).Scenario;
+
+        Assert.Contains(
+            scenario.ExternalPlugins.PluginRootPaths,
+            path => path.EndsWith(Path.Combine("packs", "first-party"), StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("FirstParty.ITSM", scenario.ExternalPlugins.EnabledCapabilities);
+        var configuration = Assert.Single(
+            scenario.ExternalPlugins.CapabilityConfigurations,
+            item => item.Capability == "FirstParty.ITSM");
+        Assert.Equal("14", configuration.Settings["TicketCount"]);
+    }
 }
