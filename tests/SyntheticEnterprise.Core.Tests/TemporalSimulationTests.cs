@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
+using SyntheticEnterprise.Contracts.Plugins;
 using SyntheticEnterprise.Core.Abstractions;
 using SyntheticEnterprise.Core.DependencyInjection;
 using SyntheticEnterprise.Core.Scenarios;
@@ -111,8 +112,90 @@ public sealed class TemporalSimulationTests
             .BuildServiceProvider();
         var hydrator = services.GetRequiredService<IScenarioPluginProfileHydrator>();
         var generator = services.GetRequiredService<IWorldGenerator>();
+        var scenario = BuildPackScenario(hydrator);
 
-        var scenario = hydrator.Hydrate(new ScenarioDefinition
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = scenario,
+                Seed = 777,
+                ExternalPlugins = BuildExternalPluginSettings(scenario)
+            },
+            new CatalogSet());
+
+        Assert.NotEmpty(result.World.PluginRecords);
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("itsm.", StringComparison.Ordinal));
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("secops.", StringComparison.Ordinal));
+        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("businessops.", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void WorldGenerator_Produces_Deterministic_Timeline_For_Same_Seed_With_FirstParty_Packs()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var hydrator = services.GetRequiredService<IScenarioPluginProfileHydrator>();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var scenario = BuildPackScenario(hydrator);
+
+        var first = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = scenario,
+                Seed = 777,
+                ExternalPlugins = BuildExternalPluginSettings(scenario)
+            },
+            new CatalogSet());
+
+        var second = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = scenario,
+                Seed = 777,
+                ExternalPlugins = BuildExternalPluginSettings(scenario)
+            },
+            new CatalogSet());
+
+        var options = new JsonSerializerOptions { WriteIndented = false };
+        Assert.Equal(
+            JsonSerializer.Serialize(ProjectEvents(first.Temporal.Events), options),
+            JsonSerializer.Serialize(ProjectEvents(second.Temporal.Events), options));
+        Assert.Equal(
+            JsonSerializer.Serialize(first.Temporal.Snapshots, options),
+            JsonSerializer.Serialize(second.Temporal.Snapshots, options));
+    }
+
+    private static ScenarioDefinition BuildScenario()
+        => new()
+        {
+            Name = "Temporal Test",
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Temporal Test Co",
+                    Industry = "Technology",
+                    EmployeeCount = 18,
+                    OfficeCount = 2,
+                    Countries = new() { "United States" },
+                    DatabaseCount = 2,
+                    FileShareCount = 2,
+                    CollaborationSiteCount = 2,
+                    ServerCount = 4
+                }
+            },
+            Timeline = new TimelineProfile
+            {
+                Enabled = true,
+                StartAtUtc = "2026-01-01T00:00:00Z",
+                DurationDays = 20,
+                SnapshotDays = new() { 0, 10, 20 }
+            }
+        };
+
+    private static ScenarioDefinition BuildPackScenario(IScenarioPluginProfileHydrator hydrator)
+        => hydrator.Hydrate(new ScenarioDefinition
         {
             Name = "Temporal Packs",
             Companies = new()
@@ -170,55 +253,15 @@ public sealed class TemporalSimulationTests
             }
         }).Scenario;
 
-        var result = generator.Generate(
-            new GenerationContext
-            {
-                Scenario = scenario,
-                Seed = 777,
-                ExternalPlugins = new()
-                {
-                    Enabled = true,
-                    PluginRootPaths = scenario.ExternalPlugins.PluginRootPaths.ToList(),
-                    EnabledCapabilities = scenario.ExternalPlugins.EnabledCapabilities.ToList(),
-                    CapabilityConfigurations = scenario.ExternalPlugins.CapabilityConfigurations.ToList(),
-                    MaxInputPayloadBytes = 64 * 1024 * 1024,
-                    MaxOutputPayloadBytes = 64 * 1024 * 1024
-                }
-            },
-            new CatalogSet());
-
-        Assert.NotEmpty(result.World.PluginRecords);
-        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("itsm.", StringComparison.Ordinal));
-        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("secops.", StringComparison.Ordinal));
-        Assert.Contains(result.Temporal.Events, record => record.EventType.StartsWith("businessops.", StringComparison.Ordinal));
-    }
-
-    private static ScenarioDefinition BuildScenario()
+    private static ExternalPluginExecutionSettings BuildExternalPluginSettings(ScenarioDefinition scenario)
         => new()
         {
-            Name = "Temporal Test",
-            Companies = new()
-            {
-                new ScenarioCompanyDefinition
-                {
-                    Name = "Temporal Test Co",
-                    Industry = "Technology",
-                    EmployeeCount = 18,
-                    OfficeCount = 2,
-                    Countries = new() { "United States" },
-                    DatabaseCount = 2,
-                    FileShareCount = 2,
-                    CollaborationSiteCount = 2,
-                    ServerCount = 4
-                }
-            },
-            Timeline = new TimelineProfile
-            {
-                Enabled = true,
-                StartAtUtc = "2026-01-01T00:00:00Z",
-                DurationDays = 20,
-                SnapshotDays = new() { 0, 10, 20 }
-            }
+            Enabled = true,
+            PluginRootPaths = scenario.ExternalPlugins.PluginRootPaths.ToList(),
+            EnabledCapabilities = scenario.ExternalPlugins.EnabledCapabilities.ToList(),
+            CapabilityConfigurations = scenario.ExternalPlugins.CapabilityConfigurations.ToList(),
+            MaxInputPayloadBytes = 64 * 1024 * 1024,
+            MaxOutputPayloadBytes = 64 * 1024 * 1024
         };
 
     private static object ProjectEvents(IReadOnlyList<TemporalEventRecord> events)

@@ -121,7 +121,9 @@ public sealed class CmdbGenerationTests
         Assert.Contains(result.World.CmdbSourceRecords, record => record.SourceSystem == "SpreadsheetImport");
         Assert.Contains(result.World.CmdbSourceRecords, record => record.MatchStatus == "CatalogOnly");
         Assert.Contains(result.World.CmdbSourceRecords, record => record.MatchStatus == "Orphaned");
-        Assert.Contains(result.World.CmdbSourceRecords, record => record.CiType == "Platform" && record.CiClass == "BusinessApplication");
+        Assert.Contains(
+            result.World.CmdbSourceRecords,
+            record => record.CiClass is "BusinessApplication" or "BusinessProcessService");
         Assert.Contains(result.World.CmdbSourceLinks, link => !string.IsNullOrWhiteSpace(link.ConfigurationItemId));
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "InstalledOn");
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "HostedOn");

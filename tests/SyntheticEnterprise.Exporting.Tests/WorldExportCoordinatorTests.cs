@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
+using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Exporting.Profiles;
 using SyntheticEnterprise.Exporting.Contracts;
@@ -1335,6 +1336,98 @@ public sealed class WorldExportCoordinatorTests
             Assert.Contains("FirstParty.ITSM", recordsJson);
             Assert.Contains("queue_owned_by_team", relationshipsJson);
             Assert.Contains("ITSM-QUEUE-CO-001", relationshipsJson);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_Writes_Temporal_Event_And_Snapshot_Artifacts()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld(),
+                    Temporal = new TemporalSimulationResult
+                    {
+                        Timeline = new TimelineProfile
+                        {
+                            Enabled = true,
+                            StartAtUtc = "2026-01-01T00:00:00Z",
+                            DurationDays = 30,
+                            SnapshotDays = new() { 0, 15, 30 }
+                        },
+                        Events =
+                        {
+                            new TemporalEventRecord
+                            {
+                                Id = "EVT-000001",
+                                EventType = "person.hired",
+                                EntityType = "Person",
+                                EntityId = "PERS-001",
+                                RelatedEntityType = "Department",
+                                RelatedEntityId = "DEPT-001",
+                                OccurredAt = DateTimeOffset.Parse("2026-01-02T09:30:00Z"),
+                                Properties = new(StringComparer.OrdinalIgnoreCase)
+                                {
+                                    ["employment_type"] = "Employee",
+                                    ["title"] = "Engineer"
+                                }
+                            }
+                        },
+                        Snapshots =
+                        {
+                            new TemporalSnapshotDescriptor
+                            {
+                                Id = "SNP-001",
+                                Name = "Initial",
+                                SnapshotAt = DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+                                SnapshotMode = "AsOfDate",
+                                EventCountThroughSnapshot = 0
+                            },
+                            new TemporalSnapshotDescriptor
+                            {
+                                Id = "SNP-002",
+                                Name = "Current",
+                                SnapshotAt = DateTimeOffset.Parse("2026-01-31T00:00:00Z"),
+                                SnapshotMode = "AsOfDate",
+                                EventCountThroughSnapshot = 1
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "temporal_events");
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "temporal_snapshots");
+
+            var eventsJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "temporal_events.json"));
+            var snapshotsJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "temporal_snapshots.json"));
+
+            Assert.Contains("person.hired", eventsJson);
+            Assert.Contains("EVT-000001", eventsJson);
+            Assert.Contains("Initial", snapshotsJson);
+            Assert.Contains("event_count_through_snapshot", snapshotsJson);
         }
         finally
         {

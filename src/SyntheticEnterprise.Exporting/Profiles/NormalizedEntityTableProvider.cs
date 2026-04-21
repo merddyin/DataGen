@@ -1505,6 +1505,58 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["json_payload"] = record.JsonPayload
                 },
                 SortKeySelector = record => record.Id
+            },
+            new EntityTableDescriptor<TemporalEventRecord>
+            {
+                LogicalName = "temporal_events",
+                RelativePathStem = "entities/temporal_events",
+                Columns =
+                [
+                    "id",
+                    "event_type",
+                    "entity_type",
+                    "entity_id",
+                    "related_entity_type",
+                    "related_entity_id",
+                    "occurred_at",
+                    "properties_json"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).Temporal.Events,
+                RowProjector = record => new Dictionary<string, object?>
+                {
+                    ["id"] = record.Id,
+                    ["event_type"] = record.EventType,
+                    ["entity_type"] = record.EntityType,
+                    ["entity_id"] = record.EntityId,
+                    ["related_entity_type"] = record.RelatedEntityType,
+                    ["related_entity_id"] = record.RelatedEntityId,
+                    ["occurred_at"] = record.OccurredAt,
+                    ["properties_json"] = SerializeProperties(record.Properties)
+                },
+                SortKeySelector = record => record.Id
+            },
+            new EntityTableDescriptor<TemporalSnapshotDescriptor>
+            {
+                LogicalName = "temporal_snapshots",
+                RelativePathStem = "entities/temporal_snapshots",
+                Columns =
+                [
+                    "id",
+                    "name",
+                    "snapshot_at",
+                    "snapshot_mode",
+                    "event_count_through_snapshot"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).Temporal.Snapshots,
+                RowProjector = snapshot => new Dictionary<string, object?>
+                {
+                    ["id"] = snapshot.Id,
+                    ["name"] = snapshot.Name,
+                    ["snapshot_at"] = snapshot.SnapshotAt,
+                    ["snapshot_mode"] = snapshot.SnapshotMode,
+                    ["event_count_through_snapshot"] = snapshot.EventCountThroughSnapshot
+                },
+                SortKeySelector = snapshot => snapshot.Id
             }
         };
     }
