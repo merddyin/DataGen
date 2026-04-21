@@ -66,21 +66,21 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Kind = ScenarioTemplateKind.RegionalManufacturer,
             Name = "Regional Manufacturer",
             Description = "A balanced regional operating company with hybrid identity, on-prem infrastructure, and shared repositories.",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization }
         },
         new ScenarioTemplateDescriptor
         {
             Kind = ScenarioTemplateKind.GlobalSaaS,
             Name = "Global SaaS",
             Description = "A collaboration-heavy, identity-forward software company with global offices and cloud bias.",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.IdentityHeavy, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
         },
         new ScenarioTemplateDescriptor
         {
             Kind = ScenarioTemplateKind.HealthcareNetwork,
             Name = "Healthcare Network",
             Description = "A regulated enterprise with distributed sites, mixed device populations, and sensitive repositories.",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.LegacyInfrastructure }
         }
     };
 
@@ -93,7 +93,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A balanced regional operating company with hybrid identity, on-prem infrastructure, and shared repositories.",
             IndustryProfile = "Manufacturing",
             GeographyProfile = "Regional-US",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.Modernization }
         },
         new ScenarioArchetypeDescriptor
         {
@@ -102,7 +102,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A collaboration-heavy, identity-forward software company with global offices and cloud bias.",
             IndustryProfile = "Software",
             GeographyProfile = "Global",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.IdentityHeavy, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
         },
         new ScenarioArchetypeDescriptor
         {
@@ -111,7 +111,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A regulated enterprise with distributed sites, mixed device populations, and sensitive repositories.",
             IndustryProfile = "Healthcare",
             GeographyProfile = "Regional-US",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.LegacyInfrastructure }
         },
         new ScenarioArchetypeDescriptor
         {
@@ -120,7 +120,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A policy-heavy public service organization with regulated workflows, broad device coverage, and audit-sensitive operations.",
             IndustryProfile = "Public Sector",
             GeographyProfile = "Regional-US",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.LegacyInfrastructure, ScenarioOverlayKind.HighAnomalyDensity }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.ComplianceHeavy, ScenarioOverlayKind.UnderGoverned }
         },
         new ScenarioArchetypeDescriptor
         {
@@ -129,7 +129,7 @@ public sealed class ScenarioTemplateRegistry : IScenarioTemplateRegistry, IScena
             Description = "A distributed retail and distribution operator with branch locations, frontline devices, and supply-chain application dependencies.",
             IndustryProfile = "Retail",
             GeographyProfile = "North-America",
-            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.RemoteWorkforce, ScenarioOverlayKind.MultiRegionExpansion }
+            RecommendedOverlays = new List<ScenarioOverlayKind> { ScenarioOverlayKind.FastGrowth, ScenarioOverlayKind.PostMerger }
         }
     };
 
@@ -289,8 +289,81 @@ public sealed class ScenarioOverlayService : IScenarioOverlayService
 
         foreach (var overlay in overlays)
         {
-            current = overlay switch
+            current = NormalizeOverlay(overlay) switch
             {
+                ScenarioOverlayKind.FastGrowth => current.WithOverlay(
+                    geographyProfile: "Global",
+                    officeCount: Math.Max(current.OfficeCount ?? 3, 8),
+                    companyCount: Math.Max(current.CompanyCount ?? 1, 2),
+                    employeeSize: IncreaseEmployeeSize(current.EmployeeSize, 1.6),
+                    anomalies: InflateAnomalies(current.Anomalies, 1.2)),
+                ScenarioOverlayKind.PostMerger => current.WithOverlay(
+                    companyCount: Math.Max(current.CompanyCount ?? 1, 2),
+                    geographyProfile: "North-America",
+                    identity: (current.Identity ?? new IdentityProfile()) with
+                    {
+                        IncludeExternalWorkforce = true,
+                        IncludeB2BGuests = true,
+                        StaleAccountRate = Math.Max((current.Identity ?? new IdentityProfile()).StaleAccountRate, 0.06)
+                    },
+                    anomalies: AddAnomalies(current.Anomalies,
+                    [
+                        new AnomalyProfile { Name = "DuplicateIdentities", Category = "Identity", Intensity = 1.5, Weight = 1.5 },
+                        new AnomalyProfile { Name = "UnownedApplications", Category = "Application", Intensity = 1.2, Weight = 1.2 }
+                    ])),
+                ScenarioOverlayKind.ComplianceHeavy => current.WithOverlay(
+                    cmdb: (current.Cmdb ?? new CmdbProfile()) with
+                    {
+                        IncludeConfigurationManagement = true,
+                        IncludeBusinessServices = true
+                    },
+                    observedData: (current.ObservedData ?? new ObservedDataProfile()) with
+                    {
+                        IncludeObservedViews = true,
+                        CoverageRatio = Math.Max((current.ObservedData ?? new ObservedDataProfile()).CoverageRatio, 0.9)
+                    },
+                    deviationProfile: ScenarioDeviationProfiles.Clean,
+                    anomalies: DeflateAnomalies(current.Anomalies, 0.7)),
+                ScenarioOverlayKind.UnderGoverned => current.WithOverlay(
+                    identity: (current.Identity ?? new IdentityProfile()) with
+                    {
+                        IncludeAdministrativeTiers = false,
+                        StaleAccountRate = Math.Max((current.Identity ?? new IdentityProfile()).StaleAccountRate, 0.08)
+                    },
+                    observedData: (current.ObservedData ?? new ObservedDataProfile()) with
+                    {
+                        IncludeObservedViews = true,
+                        CoverageRatio = Math.Min((current.ObservedData ?? new ObservedDataProfile()).CoverageRatio, 0.55)
+                    },
+                    anomalies: InflateAnomalies(AddAnomalies(current.Anomalies,
+                    [
+                        new AnomalyProfile { Name = "OrphanedAdmins", Category = "Identity", Intensity = 1.4, Weight = 1.4 },
+                        new AnomalyProfile { Name = "PolicyExceptions", Category = "Infrastructure", Intensity = 1.3, Weight = 1.3 }
+                    ]), 1.6)),
+                ScenarioOverlayKind.Modernization => current.WithOverlay(
+                    identity: (current.Identity ?? new IdentityProfile()) with
+                    {
+                        IncludeHybridDirectory = true,
+                        IncludeM365StyleGroups = true,
+                        IncludeB2BGuests = true
+                    },
+                    infrastructure: (current.Infrastructure ?? new InfrastructureProfile()) with
+                    {
+                        IncludeTelephony = false,
+                        IncludeServers = true,
+                        IncludeNetworkAssets = true
+                    },
+                    repositories: (current.Repositories ?? new RepositoryProfile()) with
+                    {
+                        IncludeCollaborationSites = true,
+                        IncludeDatabases = true,
+                        IncludeFileShares = true
+                    },
+                    cmdb: (current.Cmdb ?? new CmdbProfile()) with
+                    {
+                        IncludeConfigurationManagement = true,
+                        IncludeCloudServices = true
+                    }),
                 ScenarioOverlayKind.IdentityHeavy => current.WithOverlay(identity: current.Identity ?? new IdentityProfile { StaleAccountRate = 0.05 }),
                 ScenarioOverlayKind.RemoteWorkforce => current.WithOverlay(infrastructure: (current.Infrastructure ?? new InfrastructureProfile()) with { IncludeTelephony = false }),
                 ScenarioOverlayKind.LegacyInfrastructure => current.WithOverlay(infrastructure: (current.Infrastructure ?? new InfrastructureProfile()) with { IncludeTelephony = true, IncludeServers = true }),
@@ -323,6 +396,53 @@ public sealed class ScenarioOverlayService : IScenarioOverlayService
             .Select(a => a with { Intensity = a.Intensity * factor, Weight = a.Weight * factor })
             .ToList();
     }
+
+    private static List<AnomalyProfile> DeflateAnomalies(IReadOnlyCollection<AnomalyProfile> anomalies, double factor)
+    {
+        return anomalies
+            .Select(a => a with
+            {
+                Intensity = Math.Max(0.1, a.Intensity * factor),
+                Weight = Math.Max(0.1, a.Weight * factor)
+            })
+            .ToList();
+    }
+
+    private static List<AnomalyProfile> AddAnomalies(IReadOnlyCollection<AnomalyProfile> anomalies, IReadOnlyCollection<AnomalyProfile> additions)
+    {
+        var results = anomalies.ToList();
+        foreach (var addition in additions)
+        {
+            if (results.Any(existing => existing.Name.Equals(addition.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            results.Add(addition);
+        }
+
+        return results;
+    }
+
+    private static SizeBand IncreaseEmployeeSize(SizeBand? existing, double factor)
+    {
+        var size = existing ?? new SizeBand();
+        var minimum = Math.Max(1, (int)Math.Round(size.Minimum * factor));
+        var maximum = Math.Max(minimum, (int)Math.Round(size.Maximum * factor));
+        return new SizeBand
+        {
+            Minimum = minimum,
+            Maximum = maximum
+        };
+    }
+
+    private static ScenarioOverlayKind NormalizeOverlay(ScenarioOverlayKind overlay)
+        => overlay switch
+        {
+            ScenarioOverlayKind.IdentityHeavy => ScenarioOverlayKind.ComplianceHeavy,
+            ScenarioOverlayKind.HighAnomalyDensity => ScenarioOverlayKind.UnderGoverned,
+            _ => overlay
+        };
 }
 
 public sealed class ScenarioDefaultsResolver : IScenarioDefaultsResolver
@@ -1017,9 +1137,16 @@ file static class ScenarioEnvelopeExtensions
 {
     public static ScenarioEnvelope WithOverlay(
         this ScenarioEnvelope envelope,
+        int? companyCount = null,
+        SizeBand? employeeSize = null,
         IdentityProfile? identity = null,
+        ApplicationProfile? applications = null,
         InfrastructureProfile? infrastructure = null,
+        RepositoryProfile? repositories = null,
+        CmdbProfile? cmdb = null,
+        ObservedDataProfile? observedData = null,
         string? geographyProfile = null,
+        string? deviationProfile = null,
         int? officeCount = null,
         List<AnomalyProfile>? anomalies = null)
     {
@@ -1030,17 +1157,17 @@ file static class ScenarioEnvelopeExtensions
             Archetype = envelope.Archetype,
             Template = envelope.Template,
             Overlays = envelope.Overlays.ToList(),
-            CompanyCount = envelope.CompanyCount,
+            CompanyCount = companyCount ?? envelope.CompanyCount,
             IndustryProfile = envelope.IndustryProfile,
             GeographyProfile = geographyProfile ?? envelope.GeographyProfile,
-            DeviationProfile = envelope.DeviationProfile,
-            EmployeeSize = envelope.EmployeeSize,
+            DeviationProfile = deviationProfile ?? envelope.DeviationProfile,
+            EmployeeSize = employeeSize ?? envelope.EmployeeSize,
             Identity = identity ?? envelope.Identity,
-            Applications = envelope.Applications,
+            Applications = applications ?? envelope.Applications,
             Infrastructure = infrastructure ?? envelope.Infrastructure,
-            Repositories = envelope.Repositories,
-            Cmdb = envelope.Cmdb,
-            ObservedData = envelope.ObservedData,
+            Repositories = repositories ?? envelope.Repositories,
+            Cmdb = cmdb ?? envelope.Cmdb,
+            ObservedData = observedData ?? envelope.ObservedData,
             Timeline = envelope.Timeline,
             Packs = envelope.Packs,
             ExternalPlugins = envelope.ExternalPlugins,

@@ -51,17 +51,25 @@ New-SEScenarioFromTemplate -Template RegionalManufacturer
 
 Overlays let you bias a scenario without rebuilding it from scratch.
 
-The current overlay set includes options such as:
+The current overlay set includes product-facing operating overlays such as:
+
+- `FastGrowth`
+- `PostMerger`
+- `ComplianceHeavy`
+- `UnderGoverned`
+- `Modernization`
+
+Compatibility overlays are still accepted for existing scenarios:
 
 - `IdentityHeavy`
-- `RemoteWorkforce`
 - `LegacyInfrastructure`
 - `HighAnomalyDensity`
+- `RemoteWorkforce`
 - `MultiRegionExpansion`
 
 ```powershell
-$scenario = New-SEScenarioFromTemplate -Template GlobalSaaS
-$merged = Merge-SEScenarioOverlay -Scenario $scenario -Overlay RemoteWorkforce,MultiRegionExpansion
+$scenario = New-SEScenarioFromArchetype -Archetype GlobalSaaS
+$merged = Merge-SEScenarioOverlay -Scenario $scenario -Overlay FastGrowth,PostMerger
 ```
 
 ## JSON authoring

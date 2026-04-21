@@ -3,7 +3,8 @@
   "archetype": "PublicSectorAgency",
   "deviationProfile": "Realistic",
   "overlays": [
-    "LegacyInfrastructure"
+    "ComplianceHeavy",
+    "Modernization"
   ],
   "timeline": {
     "enabled": true,

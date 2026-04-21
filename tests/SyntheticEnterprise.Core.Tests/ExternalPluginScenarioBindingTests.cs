@@ -159,4 +159,88 @@ public sealed class ExternalPluginScenarioBindingTests
         Assert.Equal("Regional-US", scenario.GeographyProfile);
         Assert.True(scenario.Cmdb.IncludeConfigurationManagement);
     }
+
+    [Fact]
+    public void ScenarioOverlayService_Applies_Productized_Overlays_Coherently()
+    {
+        var service = new ScenarioOverlayService();
+
+        var result = service.ApplyOverlays(
+            new ScenarioEnvelope
+            {
+                Name = "Overlay Scenario",
+                Archetype = ScenarioArchetypeKind.GlobalSaaS,
+                CompanyCount = 1,
+                GeographyProfile = "Regional-US",
+                EmployeeSize = new SizeBand
+                {
+                    Minimum = 1000,
+                    Maximum = 2000
+                },
+                Identity = new IdentityProfile
+                {
+                    StaleAccountRate = 0.03,
+                    IncludeAdministrativeTiers = true
+                },
+                ObservedData = new ObservedDataProfile
+                {
+                    IncludeObservedViews = true,
+                    CoverageRatio = 0.7
+                },
+                Cmdb = new CmdbProfile
+                {
+                    IncludeConfigurationManagement = false
+                }
+            },
+            new[]
+            {
+                ScenarioOverlayKind.FastGrowth,
+                ScenarioOverlayKind.ComplianceHeavy
+            });
+
+        Assert.Equal("Global", result.Scenario.GeographyProfile);
+        Assert.Equal(2, result.Scenario.CompanyCount);
+        Assert.True(result.Scenario.EmployeeSize!.Minimum > 1000);
+        Assert.Equal(ScenarioDeviationProfiles.Clean, result.Scenario.DeviationProfile);
+        Assert.True(result.Scenario.Cmdb!.IncludeConfigurationManagement);
+        Assert.True(result.Scenario.ObservedData!.CoverageRatio >= 0.9);
+        Assert.Contains("Overlay:FastGrowth", result.AppliedSources);
+        Assert.Contains("Overlay:ComplianceHeavy", result.AppliedSources);
+    }
+
+    [Fact]
+    public void ScenarioOverlayService_Maps_Legacy_Overlay_Aliases_To_Productized_Overlays()
+    {
+        var service = new ScenarioOverlayService();
+
+        var result = service.ApplyOverlays(
+            new ScenarioEnvelope
+            {
+                Name = "Legacy Overlay Scenario",
+                Identity = new IdentityProfile
+                {
+                    StaleAccountRate = 0.03,
+                    IncludeAdministrativeTiers = true
+                },
+                ObservedData = new ObservedDataProfile
+                {
+                    IncludeObservedViews = true,
+                    CoverageRatio = 0.7
+                },
+                Cmdb = new CmdbProfile
+                {
+                    IncludeConfigurationManagement = false
+                }
+            },
+            new[]
+            {
+                ScenarioOverlayKind.IdentityHeavy,
+                ScenarioOverlayKind.HighAnomalyDensity
+            });
+
+        Assert.Equal(ScenarioDeviationProfiles.Clean, result.Scenario.DeviationProfile);
+        Assert.True(result.Scenario.Cmdb!.IncludeConfigurationManagement);
+        Assert.False(result.Scenario.Identity!.IncludeAdministrativeTiers);
+        Assert.True(result.Scenario.Identity.StaleAccountRate >= 0.08);
+    }
 }

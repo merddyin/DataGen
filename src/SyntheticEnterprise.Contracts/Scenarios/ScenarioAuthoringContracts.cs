@@ -23,6 +23,11 @@ public enum ScenarioArchetypeKind
 
 public enum ScenarioOverlayKind
 {
+    FastGrowth,
+    PostMerger,
+    ComplianceHeavy,
+    UnderGoverned,
+    Modernization,
     IdentityHeavy,
     RemoteWorkforce,
     LegacyInfrastructure,
