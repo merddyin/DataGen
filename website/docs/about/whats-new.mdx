@@ -7,6 +7,17 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.4.4
+
+This patch release corrects the release-tag lineage so GitHub Actions runs the intended fixed revision.
+
+### Highlights
+
+- **Clean release tag**
+  The `v0.4.4` tag points at the corrected release commit, so the release workflow uses the fixed flagship acceptance test and portability guardrail changes.
+- **No functional regression**
+  This release carries forward the same runtime fixes from `v0.4.3`; the primary change is publishing them under an unambiguous release tag.
+
 ## v0.4.3
 
 This patch release focuses on release reliability and test portability.

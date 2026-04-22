@@ -4,6 +4,11 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.4.4
+
+- corrected the release tag lineage so the GitHub release workflow runs from the fixed flagship acceptance test revision
+- preserves the `v0.4.3` portability and release-test fixes, but publishes them under a clean new release tag
+
 ### v0.4.3
 
 - fixed the flagship realism acceptance test so release builds no longer depend on a local `artifacts\duckburg-subset.scenario.json` file
