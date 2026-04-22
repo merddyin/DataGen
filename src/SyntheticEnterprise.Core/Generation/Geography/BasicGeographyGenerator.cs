@@ -37,7 +37,7 @@ public sealed class BasicGeographyGenerator : IGeographyGenerator
             }
 
             var officeCount = Math.Max(1, companyDefinition.OfficeCount);
-            var selectedCities = SelectCities(cityRows, officeCount);
+            var selectedCities = SelectCities(cityRows, officeCount, company.PrimaryCountry);
             var streetSuffixes = ReadCatalogValues(catalogs, "street_suffixes", "Value", new[] { "Blvd", "Way", "Drive", "Street" });
             var countryDialCodes = ReadCountryDialCodes(catalogs);
             var countryIdentityRules = ReadCountryIdentityRules(catalogs);
@@ -84,28 +84,37 @@ public sealed class BasicGeographyGenerator : IGeographyGenerator
             return;
         }
 
-        for (var i = 0; i < world.People.Count; i++)
+        var companyPeople = world.People
+            .Select((person, index) => new { Person = person, Index = index })
+            .Where(entry => string.Equals(entry.Person.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (companyPeople.Count == 0)
         {
-            var person = world.People[i];
-            if (!string.Equals(person.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            return;
+        }
+
+        var departmentsById = world.Departments
+            .Where(department => string.Equals(department.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(department => department.Id, department => department.Name, StringComparer.OrdinalIgnoreCase);
+        var officeTargets = BuildOfficePopulationTargets(offices, companyPeople.Count);
+        var assignedCounts = offices.ToDictionary(office => office.Id, _ => 0, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in companyPeople.GroupBy(entry => entry.Person.DepartmentId, StringComparer.OrdinalIgnoreCase))
+        {
+            var departmentName = departmentsById.TryGetValue(group.Key, out var resolvedName)
+                ? resolvedName
+                : string.Empty;
+
+            foreach (var entry in group)
             {
-                continue;
+                var office = SelectOfficeForPersonAssignment(offices, officeTargets, assignedCounts, departmentName);
+                assignedCounts[office.Id] = assignedCounts[office.Id] + 1;
+                world.People[entry.Index] = entry.Person with
+                {
+                    OfficeId = office.Id,
+                    Country = office.Country
+                };
             }
-
-            Office? office = null;
-
-            if (!string.IsNullOrWhiteSpace(person.Country))
-            {
-                office = offices.FirstOrDefault(o => string.Equals(o.Country, person.Country, StringComparison.OrdinalIgnoreCase));
-            }
-
-            office ??= offices[i % offices.Count];
-
-            world.People[i] = person with
-            {
-                OfficeId = office.Id,
-                Country = string.IsNullOrWhiteSpace(person.Country) ? office.Country : person.Country
-            };
         }
     }
 
@@ -113,6 +122,122 @@ public sealed class BasicGeographyGenerator : IGeographyGenerator
     {
         if (index == 0) return $"{city} Headquarters";
         return $"{city} Office";
+    }
+
+    private Dictionary<string, int> BuildOfficePopulationTargets(IReadOnlyList<Office> offices, int peopleCount)
+    {
+        var weights = offices
+            .Select(office =>
+            {
+                var weight = office.IsHeadquarters ? 5.5 : 1.0;
+                if (!office.IsHeadquarters && string.Equals(office.Country, offices[0].Country, StringComparison.OrdinalIgnoreCase))
+                {
+                    weight += 1.5;
+                }
+
+                var rank = GetPreferredOfficeCityRank(new CityRow
+                {
+                    Country = office.Country,
+                    City = office.City
+                });
+                weight += Math.Min(2.0, rank / 60.0);
+                return (office.Id, Weight: weight);
+            })
+            .ToList();
+
+        var totalWeight = weights.Sum(item => item.Weight);
+        var targets = offices.ToDictionary(office => office.Id, _ => 1, StringComparer.OrdinalIgnoreCase);
+        var remaining = Math.Max(0, peopleCount - offices.Count);
+
+        foreach (var item in weights)
+        {
+            var allocation = totalWeight <= 0.0
+                ? 0
+                : (int)Math.Floor((item.Weight / totalWeight) * remaining);
+            targets[item.Id] = targets[item.Id] + allocation;
+        }
+
+        var assigned = targets.Values.Sum();
+        var officeIndex = 0;
+        while (assigned < peopleCount)
+        {
+            var officeId = weights[officeIndex % weights.Count].Id;
+            targets[officeId] = targets[officeId] + 1;
+            assigned++;
+            officeIndex++;
+        }
+
+        return targets;
+    }
+
+    private Office SelectOfficeForPersonAssignment(
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, int> officeTargets,
+        IReadOnlyDictionary<string, int> assignedCounts,
+        string departmentName)
+    {
+        var preferredOffices = GetPreferredOfficesForDepartment(offices, departmentName);
+        var candidates = preferredOffices.Count > 0 ? preferredOffices : offices.ToList();
+
+        return candidates
+            .OrderByDescending(office => RemainingOfficeCapacity(office, officeTargets, assignedCounts))
+            .ThenByDescending(office => office.IsHeadquarters)
+            .ThenByDescending(office => GetPreferredOfficeCityRank(new CityRow { Country = office.Country, City = office.City }))
+            .ThenBy(office => assignedCounts.TryGetValue(office.Id, out var count) ? count : 0)
+            .First();
+    }
+
+    private static double RemainingOfficeCapacity(
+        Office office,
+        IReadOnlyDictionary<string, int> officeTargets,
+        IReadOnlyDictionary<string, int> assignedCounts)
+    {
+        var target = officeTargets.TryGetValue(office.Id, out var resolvedTarget) ? resolvedTarget : 1;
+        var assigned = assignedCounts.TryGetValue(office.Id, out var resolvedAssigned) ? resolvedAssigned : 0;
+        return target - assigned;
+    }
+
+    private static List<Office> GetPreferredOfficesForDepartment(IReadOnlyList<Office> offices, string departmentName)
+    {
+        if (offices.Count == 0)
+        {
+            return new();
+        }
+
+        var normalized = NormalizeDepartmentKey(departmentName);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return offices.ToList();
+        }
+
+        if (normalized is "information technology" or "security" or "enterprise applications" or "data and analytics" or "finance" or "human resources" or "legal" or "product engineering" or "engineering" or "product management")
+        {
+            return offices
+                .Where(office => office.IsHeadquarters || string.Equals(office.Country, offices[0].Country, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (normalized is "production operations" or "manufacturing engineering" or "procurement" or "logistics and planning" or "supplier quality" or "quality assurance")
+        {
+            return offices
+                .Where(office => !office.IsHeadquarters)
+                .OrderByDescending(office => string.Equals(office.Country, "Mexico", StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(office => string.Equals(office.Country, "Canada", StringComparison.OrdinalIgnoreCase))
+                .ThenBy(office => office.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        return offices.ToList();
+    }
+
+    private static string NormalizeDepartmentKey(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return value.Trim().ToLowerInvariant();
     }
 
     private string BuildStreetName(string country, string city, IReadOnlyList<string> suffixes)
@@ -546,7 +671,7 @@ public sealed class BasicGeographyGenerator : IGeographyGenerator
         world.Companies[companyIndex] = updated;
     }
 
-    private static List<CityRow> SelectCities(IReadOnlyList<CityRow> rows, int officeCount)
+    private static List<CityRow> SelectCities(IReadOnlyList<CityRow> rows, int officeCount, string primaryCountry)
     {
         if (rows.Count == 0 || officeCount <= 0)
         {
@@ -608,7 +733,33 @@ public sealed class BasicGeographyGenerator : IGeographyGenerator
             selected.Add(rows[selected.Count % rows.Count]);
         }
 
-        return selected;
+        return OrderSelectedCitiesForCompany(selected, primaryCountry);
+    }
+
+    private static List<CityRow> OrderSelectedCitiesForCompany(IReadOnlyList<CityRow> rows, string primaryCountry)
+    {
+        if (rows.Count == 0)
+        {
+            return new();
+        }
+
+        var headquarters = rows
+            .OrderByDescending(row => string.Equals(row.Country, primaryCountry, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(GetPreferredOfficeCityRank)
+            .ThenByDescending(row => row.HasPostalDetails)
+            .ThenByDescending(row => row.Population)
+            .ThenByDescending(row => row.Accuracy)
+            .First();
+
+        return rows
+            .Where(row => !ReferenceEquals(row, headquarters))
+            .OrderByDescending(row => string.Equals(row.Country, primaryCountry, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(GetPreferredOfficeCityRank)
+            .ThenByDescending(row => row.Population)
+            .ThenBy(row => row.Country, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(row => row.City, StringComparer.OrdinalIgnoreCase)
+            .Prepend(headquarters)
+            .ToList();
     }
 
     private static bool IsAmbiguousLocality(CityRow row, IReadOnlyDictionary<string, int> duplicateCityCounts)

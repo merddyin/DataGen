@@ -28,7 +28,9 @@ Current focused documents include:
 
 - `User_Acceptance_Test_Catalog.md`
 - `DataGen_Control_Surface_and_Invariants_Improvement_Plan.md`
+- `DataGen_Realism_Hardening_Plan.md`
 - `FirstParty_Packs_Walkthrough.md`
+- `PowerShell_Command_Surface_Audit.md`
 - `Product_Roadmap_PRD.md`
 - `Product_Roadmap_Engineering_Plan.md`
 

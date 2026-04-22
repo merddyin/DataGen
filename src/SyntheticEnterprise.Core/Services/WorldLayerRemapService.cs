@@ -56,6 +56,8 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
 
             changed |= TryMapOptional(device.AssignedPersonId, personMap, value => updated = updated with { AssignedPersonId = value });
             changed |= TryMapOptional(device.DirectoryAccountId, accountMap, value => updated = updated with { DirectoryAccountId = value });
+            changed |= TryMapOptional(device.OnPremDirectoryAccountId, accountMap, value => updated = updated with { OnPremDirectoryAccountId = value });
+            changed |= TryMapOptional(device.CloudDirectoryAccountId, accountMap, value => updated = updated with { CloudDirectoryAccountId = value });
             changed |= TryMapOptional(device.OuId, ouMap, value =>
             {
                 currentOrganizationalUnitsById.TryGetValue(value, out var targetOu);
@@ -74,6 +76,9 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
             var updated = server;
             var changed = false;
 
+            changed |= TryMapOptional(server.DirectoryAccountId, accountMap, value => updated = updated with { DirectoryAccountId = value });
+            changed |= TryMapOptional(server.OnPremDirectoryAccountId, accountMap, value => updated = updated with { OnPremDirectoryAccountId = value });
+            changed |= TryMapOptional(server.CloudDirectoryAccountId, accountMap, value => updated = updated with { CloudDirectoryAccountId = value });
             changed |= TryMapOptional(server.OuId, ouMap, value =>
             {
                 currentOrganizationalUnitsById.TryGetValue(value, out var targetOu);
@@ -489,6 +494,17 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
             {
                 var updated = device;
                 var changed = TryMapOptional(device.DirectoryAccountId, accountMergeMap, value => updated = updated with { DirectoryAccountId = value });
+                changed |= TryMapOptional(device.OnPremDirectoryAccountId, accountMergeMap, value => updated = updated with { OnPremDirectoryAccountId = value });
+                changed |= TryMapOptional(device.CloudDirectoryAccountId, accountMergeMap, value => updated = updated with { CloudDirectoryAccountId = value });
+                return (changed, updated);
+            });
+
+            updatedCount += UpdateRecords(currentWorld.Servers, server =>
+            {
+                var updated = server;
+                var changed = TryMapOptional(server.DirectoryAccountId, accountMergeMap, value => updated = updated with { DirectoryAccountId = value });
+                changed |= TryMapOptional(server.OnPremDirectoryAccountId, accountMergeMap, value => updated = updated with { OnPremDirectoryAccountId = value });
+                changed |= TryMapOptional(server.CloudDirectoryAccountId, accountMergeMap, value => updated = updated with { CloudDirectoryAccountId = value });
                 return (changed, updated);
             });
 

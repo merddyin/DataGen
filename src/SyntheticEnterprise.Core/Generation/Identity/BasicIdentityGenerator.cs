@@ -45,6 +45,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var companyPeople = world.People.Where(p => p.CompanyId == company.Id).ToList();
             var companyDepartments = world.Departments.Where(d => d.CompanyId == company.Id).ToList();
             var companyTeams = world.Teams.Where(team => team.CompanyId == company.Id).ToList();
+            var companyOffices = world.Offices.Where(office => office.CompanyId == company.Id).ToList();
             var rootDomain = BuildRootDomain(company);
             var issuedPasswords = new HashSet<string>(StringComparer.Ordinal);
             var issuedAccountUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -53,7 +54,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var identityStores = CreateIdentityStores(company, rootDomain, context.Scenario.Identity);
             world.IdentityStores.AddRange(identityStores);
 
-            var ous = CreateOus(company, companyDepartments, rootDomain, includeAdministrativeTiers);
+            var ous = CreateOus(company, companyDepartments, companyOffices, rootDomain, includeAdministrativeTiers);
             world.OrganizationalUnits.AddRange(ous);
             world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous));
 
@@ -80,10 +81,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 world.Accounts.AddRange(privileged);
             }
 
-            var groups = CreateGroups(company, companyDepartments, ous, includeAdministrativeTiers);
+            var groups = CreateGroups(company, companyDepartments, companyTeams, world.Accounts, ous, includeAdministrativeTiers);
             world.Groups.AddRange(groups);
 
-            var memberships = CreateMemberships(company, companyDepartments, companyPeople, groups, world.Accounts, includeAdministrativeTiers);
+            var memberships = CreateMemberships(company, companyDepartments, companyTeams, companyPeople, groups, world.Accounts, includeAdministrativeTiers);
             world.GroupMemberships.AddRange(memberships);
 
             if (context.Scenario.Identity.IncludeExternalWorkforce || context.Scenario.Identity.IncludeB2BGuests)
@@ -238,11 +239,22 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var workstationContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Workstations");
         var serverContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Servers");
         var pawContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Privileged Access Workstations");
-        var allEmployeesGroup = FindGroup(world.Groups, company.Id, "SG-AllEmployees");
-        var guestGroup = FindGroup(world.Groups, company.Id, "SG-B2BGuests");
-        var workstationAdmins = FindGroup(world.Groups, company.Id, "SG-Tier1-WorkstationAdmins");
-        var serverAdmins = FindGroup(world.Groups, company.Id, "SG-Tier1-ServerAdmins");
-        var pawUsers = FindGroup(world.Groups, company.Id, "SG-Tier0-PAW-Users");
+        var allEmployeesGroup = FindGroup(world.Groups, company.Id, AllEmployeesSecurityGroupName());
+        var guestGroup = FindGroup(world.Groups, company.Id, B2BGuestsGroupName());
+        var workstationAdmins = FindGroup(world.Groups, company.Id, Tier1WorkstationAdminsGroupName());
+        var serverAdmins = FindGroup(world.Groups, company.Id, Tier1ServerAdminsGroupName());
+        var pawUsers = FindGroup(world.Groups, company.Id, Tier0PawUsersGroupName());
+        var allManagersGroup = FindGroup(world.Groups, company.Id, AllManagersDistributionGroupName());
+        var gpoEditors = FindGroup(world.Groups, company.Id, GroupPolicyEditorsGroupName());
+        var lapsReaders = FindGroup(world.Groups, company.Id, LapsReadersGroupName());
+        var passwordResetOperators = FindGroup(world.Groups, company.Id, PasswordResetOperatorsGroupName());
+        var workstationJoiners = FindGroup(world.Groups, company.Id, WorkstationJoinOperatorsGroupName());
+        var remoteSupportOperators = FindGroup(world.Groups, company.Id, RemoteSupportOperatorsGroupName());
+        var officeUsers = FindGroup(world.Groups, company.Id, OfficeUsersGroupName());
+        var officeAdmins = FindGroup(world.Groups, company.Id, OfficeAdminsGroupName());
+        var browserPilotUsers = FindGroup(world.Groups, company.Id, BrowserPilotUsersGroupName());
+        var vpnUsers = FindGroup(world.Groups, company.Id, VpnUsersGroupName());
+        var serverRdpUsers = FindGroup(world.Groups, company.Id, ServerRemoteDesktopUsersGroupName());
 
         var defaultDomainPolicy = EnsurePolicy(
             world,
@@ -257,9 +269,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "MinimumPasswordLength", "PasswordPolicy", "Integer", "14");
         AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "PasswordHistoryCount", "PasswordPolicy", "Integer", "24");
         AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "AccountLockoutThreshold", "PasswordPolicy", "Integer", "10");
+        AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "MaximumPasswordAgeDays", "PasswordPolicy", "Integer", "90");
+        AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "MinimumPasswordAgeDays", "PasswordPolicy", "Integer", "1");
+        AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "KerberosMaxTicketAgeHours", "Authentication", "Integer", "10");
+        AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "KerberosMaxServiceTicketAgeMinutes", "Authentication", "Integer", "600");
+        AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "AuditDirectoryServiceChanges", "AuditPolicy", "String", "Success,Failure");
         AddPolicySetting(world, company.Id, defaultDomainPolicy.Id, "LanManCompatibilityLevel", "LegacyAuthentication", "String", "NTLMv2Only", isLegacy: true, sourceReference: "Commonly retained legacy hardening knob");
         AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "Container", domainContainer?.Id, "Linked", true, 1, true);
         AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "IdentityStore", activeDirectoryStore.Id, "Scope", false, 1);
+        AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "Group", gpoEditors?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
 
         var workstationPolicy = EnsurePolicy(
             world,
@@ -274,6 +292,12 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicySetting(world, company.Id, workstationPolicy.Id, "WindowsFirewallEnabled", "NetworkSecurity", "Boolean", "true");
         AddPolicySetting(world, company.Id, workstationPolicy.Id, "Smb1Enabled", "LegacyProtocols", "Boolean", "false");
         AddPolicySetting(world, company.Id, workstationPolicy.Id, "ScreenLockTimeoutMinutes", "UserExperience", "Integer", "15", sourceReference: "Overlaps with Intune device controls");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "MicrosoftDefenderRealtimeMonitoring", "EndpointProtection", "Boolean", "true");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "CredentialGuardEnabled", "CredentialProtection", "Boolean", "true");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "LapsManagedLocalAdministrator", "CredentialProtection", "Boolean", "true");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "BitLockerStartupMode", "DiskEncryption", "String", "TpmOnly");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "AllowLocalAdminRemoteUacExemption", "AdministrativeAccess", "Boolean", "false");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "UsbStorageAccess", "DeviceControl", "String", "ReadWriteApprovedOnly");
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 1, true);
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Group", allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Group", guestGroup?.Id, "SecurityFilterExclude", false, 2);
@@ -299,8 +323,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicySetting(world, company.Id, serverPolicy.Id, "WindowsFirewallEnabled", "NetworkSecurity", "Boolean", "true");
         AddPolicySetting(world, company.Id, serverPolicy.Id, "RemotePowerShellEnabled", "RemoteManagement", "Boolean", "true");
         AddPolicySetting(world, company.Id, serverPolicy.Id, "SmbSigningRequired", "LegacyProtocols", "Boolean", "true");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "WindowsDefenderAntivirusEnabled", "EndpointProtection", "Boolean", "true");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "RdpNlaRequired", "RemoteAccess", "Boolean", "true");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "DisableAnonymousShares", "NetworkSecurity", "Boolean", "true");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "AuditProcessCreation", "AuditPolicy", "String", "Success");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "PowerShellTranscription", "AuditPolicy", "Boolean", "true");
         AddPolicyTarget(world, company.Id, serverPolicy.Id, "Container", serverContainer?.Id, "Linked", true, 1, true);
         AddPolicyTarget(world, company.Id, serverPolicy.Id, "Group", serverAdmins?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        AddPolicyTarget(world, company.Id, serverPolicy.Id, "Group", serverRdpUsers?.Id, "SecurityFilterInclude", false, 2);
         AddAccessControlEvidence(world, company.Id, serverAdmins?.Id, "Group", "Policy", serverPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
         AddAccessControlEvidence(world, company.Id, serverAdmins?.Id, "Group", "Container", serverContainer?.Id, "LinkGpo", "Allow", false, "ActiveDirectory");
         AddAccessControlEvidence(world, company.Id, serverAdmins?.Id, "Group", "Container", serverContainer?.Id, "CreateChild", "Allow", false, "ActiveDirectory", notes: "Delegated server OU lifecycle management");
@@ -325,6 +355,185 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddAccessControlEvidence(world, company.Id, workstationAdmins?.Id, "Group", "Policy", legacyBrowserPolicy.Id, "EditPermissions", "Allow", false, "ActiveDirectory");
         AddAccessControlEvidence(world, company.Id, workstationAdmins?.Id, "Group", "Policy", legacyBrowserPolicy.Id, "ReadPolicy", "Allow", false, "ActiveDirectory");
 
+        var desktopExperiencePolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Corporate Desktop Experience",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "UserExperience",
+            "User environment branding, lock screen, and shell behavior.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, desktopExperiencePolicy.Id, "DesktopWallpaperPath", "Branding", "String", $"\\\\files.{company.PrimaryDomain}\\corp\\branding\\wallpaper.jpg");
+        AddPolicySetting(world, company.Id, desktopExperiencePolicy.Id, "LockScreenImagePath", "Branding", "String", $"\\\\files.{company.PrimaryDomain}\\corp\\branding\\lockscreen.jpg");
+        AddPolicySetting(world, company.Id, desktopExperiencePolicy.Id, "StartMenuLayout", "Shell", "String", "CorpStandardProductivity");
+        AddPolicySetting(world, company.Id, desktopExperiencePolicy.Id, "TaskbarPinnedApps", "Shell", "String", "Outlook;Teams;Edge;ERP Portal");
+        AddPolicySetting(world, company.Id, desktopExperiencePolicy.Id, "HideConsumerExperience", "Shell", "Boolean", "true");
+        AddPolicyTarget(world, company.Id, desktopExperiencePolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 3, true);
+        AddPolicyTarget(world, company.Id, desktopExperiencePolicy.Id, "Group", allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, desktopExperiencePolicy.Id, "Group", gpoEditors?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var browserPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Enterprise Browser Controls",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "BrowserSecurity",
+            "Enterprise browser hardening, proxy, and compatibility controls.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, browserPolicy.Id, "BrowserHomepage", "BrowserConfiguration", "String", $"https://intranet.{company.PrimaryDomain}");
+        AddPolicySetting(world, company.Id, browserPolicy.Id, "BrowserProxyMode", "BrowserConfiguration", "String", "AutoDetect");
+        AddPolicySetting(world, company.Id, browserPolicy.Id, "BrowserPasswordManagerAllowed", "BrowserSecurity", "Boolean", "false");
+        AddPolicySetting(world, company.Id, browserPolicy.Id, "BrowserExtensionAllowList", "BrowserSecurity", "String", "CorpPasswordManager;SSOHelper;EndpointIsolation");
+        AddPolicySetting(world, company.Id, browserPolicy.Id, "SmartScreenEnforced", "BrowserSecurity", "Boolean", "true");
+        AddPolicyTarget(world, company.Id, browserPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 4, true);
+        AddPolicyTarget(world, company.Id, browserPolicy.Id, "Group", allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, browserPolicy.Id, "Group", browserPilotUsers?.Id, "SecurityFilterInclude", false, 2);
+        AddPolicyTarget(world, company.Id, browserPolicy.Id, "Group", gpoEditors?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var logonPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "User Logon and Drive Mapping",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "UserEnvironment",
+            "Maps drives, printers, and logon scripts for employee productivity.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, logonPolicy.Id, "PrimaryLogonScript", "LogonScripts", "String", "\\\\netlogon\\corp\\logon.cmd");
+        AddPolicySetting(world, company.Id, logonPolicy.Id, "MapHomeDrive", "DriveMappings", "String", "H:=\\\\files\\home\\%USERNAME%");
+        AddPolicySetting(world, company.Id, logonPolicy.Id, "MapDepartmentDrive", "DriveMappings", "String", "S:=\\\\files\\shares\\department");
+        AddPolicySetting(world, company.Id, logonPolicy.Id, "DeployFollowMePrinters", "Printers", "Boolean", "true");
+        AddPolicySetting(world, company.Id, logonPolicy.Id, "MapCorpAppsShortcut", "Shortcuts", "String", "\\\\files\\corp\\links\\Business Apps.lnk");
+        AddPolicyTarget(world, company.Id, logonPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 5, true);
+        AddPolicyTarget(world, company.Id, logonPolicy.Id, "Group", allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, logonPolicy.Id, "Group", guestGroup?.Id, "SecurityFilterExclude", false, 2);
+        AddPolicyTarget(world, company.Id, logonPolicy.Id, "Group", remoteSupportOperators?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var officePolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Office Productivity Controls",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "ApplicationSecurity",
+            "Standardized Microsoft Office hardening and collaboration defaults.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, officePolicy.Id, "OfficeMacroPolicy", "OfficeSecurity", "String", "BlockInternetMacros");
+        AddPolicySetting(world, company.Id, officePolicy.Id, "OfficeTrustedLocations", "OfficeSecurity", "String", "\\\\files\\templates;\\\\files\\finance\\models");
+        AddPolicySetting(world, company.Id, officePolicy.Id, "OfficeDefaultSaveFormat", "OfficeConfiguration", "String", "OpenXml");
+        AddPolicySetting(world, company.Id, officePolicy.Id, "OfficeConnectedExperiences", "OfficePrivacy", "String", "Limited");
+        AddPolicySetting(world, company.Id, officePolicy.Id, "OfficeTelemetryLevel", "OfficeConfiguration", "String", "Required");
+        AddPolicyTarget(world, company.Id, officePolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 6, true);
+        AddPolicyTarget(world, company.Id, officePolicy.Id, "Group", officeUsers?.Id ?? allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, officePolicy.Id, "Group", officeAdmins?.Id ?? gpoEditors?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var updatePolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Update Enterprise Ring",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "PatchManagement",
+            "Enterprise update cadence for managed Windows endpoints.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, updatePolicy.Id, "WindowsUpdateDeferralDays", "PatchManagement", "Integer", "7");
+        AddPolicySetting(world, company.Id, updatePolicy.Id, "FeatureUpdateDeferralDays", "PatchManagement", "Integer", "30");
+        AddPolicySetting(world, company.Id, updatePolicy.Id, "AutoRestartOutsideActiveHours", "PatchManagement", "Boolean", "true");
+        AddPolicySetting(world, company.Id, updatePolicy.Id, "ActiveHoursWindow", "PatchManagement", "String", "07:00-19:00");
+        AddPolicySetting(world, company.Id, updatePolicy.Id, "WsusServer", "PatchManagement", "String", $"https://wsus.{company.PrimaryDomain}");
+        AddPolicyTarget(world, company.Id, updatePolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 7, true);
+        AddPolicyTarget(world, company.Id, updatePolicy.Id, "Container", serverContainer?.Id, "Linked", false, 8, true);
+        AddPolicyTarget(world, company.Id, updatePolicy.Id, "Group", workstationAdmins?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var remoteAccessPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Remote Access and VPN Controls",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "RemoteAccess",
+            "VPN, remote support, and remote desktop controls for managed systems.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, remoteAccessPolicy.Id, "AlwaysOnVpnProfile", "RemoteAccess", "String", "Corp-Production");
+        AddPolicySetting(world, company.Id, remoteAccessPolicy.Id, "VpnTunnelRequiresMfa", "RemoteAccess", "Boolean", "true");
+        AddPolicySetting(world, company.Id, remoteAccessPolicy.Id, "RemoteAssistanceEnabled", "RemoteSupport", "Boolean", "true");
+        AddPolicySetting(world, company.Id, remoteAccessPolicy.Id, "RemoteDesktopUserModePromptForCreds", "RemoteAccess", "Boolean", "true");
+        AddPolicySetting(world, company.Id, remoteAccessPolicy.Id, "RemoteDesktopIdleTimeoutMinutes", "RemoteAccess", "Integer", "60");
+        AddPolicyTarget(world, company.Id, remoteAccessPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 9, true);
+        AddPolicyTarget(world, company.Id, remoteAccessPolicy.Id, "Group", vpnUsers?.Id ?? allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, remoteAccessPolicy.Id, "Group", remoteSupportOperators?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var securityAuditPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Security Audit and Logging Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "AuditPolicy",
+            "Security telemetry and audit policy defaults across managed systems.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, securityAuditPolicy.Id, "AuditLogonEvents", "AuditPolicy", "String", "Success,Failure");
+        AddPolicySetting(world, company.Id, securityAuditPolicy.Id, "AuditAccountManagement", "AuditPolicy", "String", "Success,Failure");
+        AddPolicySetting(world, company.Id, securityAuditPolicy.Id, "AuditPolicyChange", "AuditPolicy", "String", "Success,Failure");
+        AddPolicySetting(world, company.Id, securityAuditPolicy.Id, "AuditObjectAccess", "AuditPolicy", "String", "Success");
+        AddPolicySetting(world, company.Id, securityAuditPolicy.Id, "SecurityEventLogMaxSizeMb", "Logging", "Integer", "1024");
+        AddPolicyTarget(world, company.Id, securityAuditPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 10, true);
+        AddPolicyTarget(world, company.Id, securityAuditPolicy.Id, "Container", serverContainer?.Id, "Linked", false, 11, true);
+        AddPolicyTarget(world, company.Id, securityAuditPolicy.Id, "Group", serverAdmins?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var deviceControlPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Removable Media and Device Control",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "DeviceControl",
+            "Controls removable storage, printer redirection, and peripheral trust.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, deviceControlPolicy.Id, "UsbStorageReadPolicy", "DeviceControl", "String", "ApprovedOnly");
+        AddPolicySetting(world, company.Id, deviceControlPolicy.Id, "PrinterRedirectionAllowed", "DeviceControl", "Boolean", "false");
+        AddPolicySetting(world, company.Id, deviceControlPolicy.Id, "BluetoothPeripheralPairing", "DeviceControl", "String", "UserApproved");
+        AddPolicySetting(world, company.Id, deviceControlPolicy.Id, "CameraAccess", "DeviceControl", "String", "AllowedWithConsent");
+        AddPolicySetting(world, company.Id, deviceControlPolicy.Id, "ClipboardRedirectionForRemoteSessions", "DeviceControl", "Boolean", "false");
+        AddPolicyTarget(world, company.Id, deviceControlPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 12, true);
+        AddPolicyTarget(world, company.Id, deviceControlPolicy.Id, "Group", allEmployeesGroup?.Id, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, deviceControlPolicy.Id, "Group", guestGroup?.Id, "SecurityFilterExclude", false, 2);
+
+        var privilegedOpsPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Delegated Administration Controls",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "PrivilegedAccess",
+            "Delegation and privileged endpoint operations baseline.",
+            activeDirectoryStore.Id,
+            null);
+        AddPolicySetting(world, company.Id, privilegedOpsPolicy.Id, "AllowWorkstationJoinDelegation", "Delegation", "Boolean", "true");
+        AddPolicySetting(world, company.Id, privilegedOpsPolicy.Id, "LapsPasswordReadScope", "Delegation", "String", "Tier1AndHelpdesk");
+        AddPolicySetting(world, company.Id, privilegedOpsPolicy.Id, "PasswordResetWorkflow", "Delegation", "String", "HelpdeskWithApproval");
+        AddPolicySetting(world, company.Id, privilegedOpsPolicy.Id, "RestrictedAdminMode", "PrivilegedAccess", "Boolean", "true");
+        AddPolicySetting(world, company.Id, privilegedOpsPolicy.Id, "PrivilegedSessionBanner", "PrivilegedAccess", "String", "Authorized administrative use only");
+        AddPolicyTarget(world, company.Id, privilegedOpsPolicy.Id, "Container", workstationContainer?.Id, "Linked", true, 13, true);
+        AddPolicyTarget(world, company.Id, privilegedOpsPolicy.Id, "Container", serverContainer?.Id, "Linked", true, 14, true);
+        AddPolicyTarget(world, company.Id, privilegedOpsPolicy.Id, "Group", gpoEditors?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        AddAccessControlEvidence(world, company.Id, gpoEditors?.Id, "Group", "Policy", privilegedOpsPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
+        AddAccessControlEvidence(world, company.Id, lapsReaders?.Id, "Group", "Container", workstationContainer?.Id, "ReadLapsPassword", "Allow", false, "ActiveDirectory");
+        AddAccessControlEvidence(world, company.Id, passwordResetOperators?.Id, "Group", "Container", workstationContainer?.Id, "ResetPassword", "Allow", false, "ActiveDirectory");
+        AddAccessControlEvidence(world, company.Id, workstationJoiners?.Id, "Group", "Container", workstationContainer?.Id, "CreateComputerObject", "Allow", false, "ActiveDirectory");
+        AddAccessControlEvidence(world, company.Id, remoteSupportOperators?.Id, "Group", "Container", workstationContainer?.Id, "RemoteAssist", "Allow", false, "ActiveDirectory");
+        AddAccessControlEvidence(world, company.Id, gpoEditors?.Id, "Group", "Policy", defaultDomainPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
+
         if (includeAdministrativeTiers && pawContainer is not null)
         {
             var pawPolicy = EnsurePolicy(
@@ -342,12 +551,19 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             AddPolicySetting(world, company.Id, pawPolicy.Id, "PowerShellScriptExecution", "AdministrativeTooling", "String", "Restricted");
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Container", pawContainer.Id, "Linked", true, 1, true);
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Group", pawUsers?.Id, "SecurityFilterInclude", false, 1);
-            var tier0Admins = FindGroup(world.Groups, company.Id, "SG-Tier0-IdentityAdmins");
+        var tier0Admins = FindGroup(world.Groups, company.Id, Tier0IdentityAdminsGroupName());
             AddAccessControlEvidence(world, company.Id, pawUsers?.Id, "Group", "Container", pawContainer.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Policy", pawPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "BlockInheritance", "Allow", false, "ActiveDirectory", notes: "Privileged access OU with explicit inheritance block");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "ResetPassword", "Allow", false, "ActiveDirectory", notes: "Tier-0 delegated recovery on privileged workstation accounts");
         }
+
+        CreateLocationScopedPolicies(world, company, activeDirectoryStore.Id, gpoEditors?.Id);
+        CreateDepartmentScopedPolicies(world, company, activeDirectoryStore.Id, gpoEditors?.Id);
+        CreateServerRolePolicies(world, company, activeDirectoryStore.Id, serverAdmins?.Id);
+        CreateModernManagementPolicies(world, company, activeDirectoryStore, allEmployeesGroup?.Id, guestGroup?.Id, officeUsers?.Id, workstationAdmins?.Id);
+        CreateWindowsBenchmarkPolicies(world, company, activeDirectoryStore.Id, workstationContainer?.Id, serverContainer?.Id, gpoEditors?.Id, workstationAdmins?.Id, serverAdmins?.Id);
+        CreateBrowserAndOfficeBenchmarkPolicies(world, company, activeDirectoryStore.Id, workstationContainer?.Id, allEmployeesGroup?.Id, browserPilotUsers?.Id, officeUsers?.Id, officeAdmins?.Id ?? gpoEditors?.Id);
     }
 
     private void CreateCrossTenantPolicyObjects(SyntheticEnterpriseWorld world, Company company)
@@ -355,8 +571,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var entraStore = world.IdentityStores.FirstOrDefault(store =>
             store.CompanyId == company.Id
             && string.Equals(store.StoreType, "EntraTenant", StringComparison.OrdinalIgnoreCase));
-        var guestGroup = FindGroup(world.Groups, company.Id, "SG-B2BGuests");
-        var guestCollaborationGroup = FindGroup(world.Groups, company.Id, "M365-GuestCollaboration");
+        var guestGroup = FindGroup(world.Groups, company.Id, B2BGuestsGroupName());
+        var guestCollaborationGroup = FindGroup(world.Groups, company.Id, "M365 Guest Collaboration");
 
         foreach (var crossTenantPolicy in world.CrossTenantAccessPolicies.Where(policy => policy.CompanyId == company.Id))
         {
@@ -389,6 +605,1086 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
     }
 
+    private void CreateLocationScopedPolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string activeDirectoryStoreId,
+        string? gpoEditorsGroupId)
+    {
+        foreach (var office in world.Offices.Where(office => office.CompanyId == company.Id))
+        {
+            var locationWorkstationContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStoreId, office.City);
+            var locationUserContainer = world.Containers.FirstOrDefault(container =>
+                container.CompanyId == company.Id
+                && string.Equals(container.ContainerType, "OrganizationalUnit", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(container.Name, office.City, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(container.Purpose, "Location Users", StringComparison.OrdinalIgnoreCase));
+            if (locationWorkstationContainer is null && locationUserContainer is null)
+            {
+                continue;
+            }
+
+            var desktopPolicy = EnsurePolicy(
+                world,
+                company.Id,
+                $"Desktop Experience - {office.City}",
+                "GroupPolicyObject",
+                "ActiveDirectory",
+                "UserExperience",
+                $"Location-specific desktop experience and shell defaults for {office.City}.",
+                activeDirectoryStoreId,
+                null);
+            AddSettingSet(world, company.Id, desktopPolicy.Id,
+            [
+                ("DesktopWallpaperPath", "Branding", "String", $"\\\\files.{company.PrimaryDomain}\\branding\\{Slug(office.City)}\\wallpaper.jpg"),
+                ("LockScreenImagePath", "Branding", "String", $"\\\\files.{company.PrimaryDomain}\\branding\\{Slug(office.City)}\\lockscreen.jpg"),
+                ("DefaultTimeZone", "Regionalization", "String", office.TimeZone),
+                ("RegionalLocale", "Regionalization", "String", ResolveRegionalLocale(office)),
+                ("DefaultOfficeTemplateLibrary", "Productivity", "String", $"\\\\files.{company.PrimaryDomain}\\templates\\{Slug(office.City)}"),
+                ("DefaultPrinterSearchScope", "Printing", "String", office.City),
+                ("IntranetLandingPage", "BrowserConfiguration", "String", $"https://intranet.{company.PrimaryDomain}/{Slug(office.City)}"),
+                ("SupportContactBanner", "Supportability", "String", $"{office.City} IT Service Desk"),
+                ("LocalEmergencyNoticeUrl", "Communications", "String", $"https://intranet.{company.PrimaryDomain}/sites/{Slug(office.City)}-operations"),
+                ("CorporateSsoRegionHint", "Authentication", "String", office.Country)
+            ]);
+            AddPolicyTarget(world, company.Id, desktopPolicy.Id, "Container", locationWorkstationContainer?.Id, "Linked", true, 20, true);
+            AddPolicyTarget(world, company.Id, desktopPolicy.Id, "Container", locationUserContainer?.Id, "Linked", false, 21, true);
+            AddPolicyTarget(world, company.Id, desktopPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+            var accessPolicy = EnsurePolicy(
+                world,
+                company.Id,
+                $"Branch Access and Drives - {office.City}",
+                "GroupPolicyObject",
+                "ActiveDirectory",
+                "UserEnvironment",
+                $"Drive mapping, printer, and branch access defaults for {office.City}.",
+                activeDirectoryStoreId,
+                null);
+            AddSettingSet(world, company.Id, accessPolicy.Id,
+            [
+                ("PrimaryHomeDrive", "DriveMappings", "String", $"H:=\\\\files.{company.PrimaryDomain}\\home\\%USERNAME%"),
+                ("SharedLocationDrive", "DriveMappings", "String", $"L:=\\\\files.{company.PrimaryDomain}\\sites\\{Slug(office.City)}"),
+                ("DepartmentLandingShortcut", "Shortcuts", "String", $"\\\\files.{company.PrimaryDomain}\\links\\{Slug(office.City)} Business Apps.lnk"),
+                ("DefaultFollowMeQueue", "Printers", "String", $"{office.City}-FollowMe"),
+                ("DefaultColorQueue", "Printers", "String", $"{office.City}-Color"),
+                ("TrustedWifiProfile", "NetworkAccess", "String", $"{office.City}-CorpWiFi"),
+                ("PreferredVpnExitRegion", "RemoteAccess", "String", office.Country),
+                ("PeerCacheGroup", "DeliveryOptimization", "String", $"{office.City}-Office"),
+                ("OnsiteSupportPhone", "Supportability", "String", $"{office.City} Support Line"),
+                ("OfficePresenceCalendar", "Collaboration", "String", $"{office.City} Occupancy Calendar")
+            ]);
+            AddPolicyTarget(world, company.Id, accessPolicy.Id, "Container", locationWorkstationContainer?.Id, "Linked", true, 22, true);
+            AddPolicyTarget(world, company.Id, accessPolicy.Id, "Container", locationUserContainer?.Id, "Linked", false, 23, true);
+            AddPolicyTarget(world, company.Id, accessPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        }
+    }
+
+    private void CreateDepartmentScopedPolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string activeDirectoryStoreId,
+        string? gpoEditorsGroupId)
+    {
+        foreach (var department in world.Departments.Where(department => department.CompanyId == company.Id))
+        {
+            var departmentContainer = world.Containers.FirstOrDefault(container =>
+                container.CompanyId == company.Id
+                && string.Equals(container.ContainerType, "OrganizationalUnit", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(container.Name, department.Name, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(container.Purpose, "Department Users", StringComparison.OrdinalIgnoreCase));
+            if (departmentContainer is null)
+            {
+                continue;
+            }
+
+            var collaborationPolicy = EnsurePolicy(
+                world,
+                company.Id,
+                $"Department Collaboration - {department.Name}",
+                "GroupPolicyObject",
+                "ActiveDirectory",
+                "UserEnvironment",
+                $"Department-specific collaboration defaults for {department.Name}.",
+                activeDirectoryStoreId,
+                null);
+            AddSettingSet(world, company.Id, collaborationPolicy.Id,
+            [
+                ("DefaultSharePath", "DriveMappings", "String", $"\\\\files.{company.PrimaryDomain}\\{Slug(department.Name)}"),
+                ("SharePointHomeSite", "Collaboration", "String", $"https://collab.{company.PrimaryDomain}/sites/{Slug(department.Name)}"),
+                ("TeamsTemplate", "Collaboration", "String", ResolveDepartmentTemplate(department.Name)),
+                ("SharedMailboxAddress", "Messaging", "String", $"{Slug(department.Name)}@{company.PrimaryDomain}"),
+                ("KnowledgeBaseRoot", "KnowledgeManagement", "String", $"https://collab.{company.PrimaryDomain}/sites/{Slug(department.Name)}/kb"),
+                ("BusinessAppLandingPage", "ApplicationAccess", "String", ResolveDepartmentApplicationLanding(company, department.Name)),
+                ("DefaultDataClassification", "InformationProtection", "String", ResolveDepartmentDataClassification(department.Name)),
+                ("RecordsRetentionLabel", "InformationProtection", "String", ResolveDepartmentRetentionLabel(department.Name))
+            ]);
+            AddPolicyTarget(world, company.Id, collaborationPolicy.Id, "Container", departmentContainer.Id, "Linked", true, 30, true);
+            AddPolicyTarget(world, company.Id, collaborationPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+            var applicationPolicy = EnsurePolicy(
+                world,
+                company.Id,
+                $"Department App Defaults - {department.Name}",
+                "IntuneConfigurationProfile",
+                "Intune",
+                "ApplicationConfiguration",
+                $"Department-specific app configuration and assignment defaults for {department.Name}.",
+                null,
+                null);
+            AddSettingSet(world, company.Id, applicationPolicy.Id,
+            [
+                ("AssignedEnterpriseApps", "AppAssignment", "String", ResolveDepartmentAssignedApps(department.Name)),
+                ("PinnedOfficeShortcuts", "AppAssignment", "String", ResolveDepartmentPinnedApps(department.Name)),
+                ("PreferredBrowserBookmarks", "BrowserConfiguration", "String", ResolveDepartmentBookmarks(department.Name)),
+                ("M365SensitivityLabelDefault", "InformationProtection", "String", ResolveDepartmentDataClassification(department.Name)),
+                ("OfflineFilesAllowed", "Files", "Boolean", ResolveOfflineFilesPreference(department.Name)),
+                ("PowerPlatformConnectorPolicy", "LowCodeGovernance", "String", ResolveDepartmentPowerPlatformPolicy(department.Name)),
+                ("LineOfBusinessAppInstallRing", "AppAssignment", "String", ResolveDepartmentInstallRing(department.Name)),
+                ("DesktopAnalyticsTag", "Telemetry", "String", Slug(department.Name))
+            ]);
+            AddPolicyTarget(world, company.Id, applicationPolicy.Id, "Container", departmentContainer.Id, "Scope", true, 1, true);
+            AddPolicyTarget(world, company.Id, applicationPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        }
+    }
+
+    private void CreateServerRolePolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string activeDirectoryStoreId,
+        string? serverAdminsGroupId)
+    {
+        foreach (var serverRole in new[]
+                 {
+                     "Domain Controller",
+                     "File Server",
+                     "SQL Server",
+                     "Web Server",
+                     "Application Server",
+                     "Jump Server"
+                 })
+        {
+            var container = FindServerRoleContainer(world, company.Id, activeDirectoryStoreId, serverRole);
+            var rolePolicy = EnsurePolicy(
+                world,
+                company.Id,
+                $"{serverRole} Controls",
+                "GroupPolicyObject",
+                "ActiveDirectory",
+                "ServerRole",
+                $"Role-specific controls for {serverRole} workloads.",
+                activeDirectoryStoreId,
+                null);
+            AddSettingSet(world, company.Id, rolePolicy.Id, BuildServerRoleSettings(serverRole, company));
+            AddPolicyTarget(world, company.Id, rolePolicy.Id, "Container", container?.Id, "Linked", true, 40, true);
+            AddPolicyTarget(world, company.Id, rolePolicy.Id, "Group", serverAdminsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        }
+    }
+
+    private void CreateModernManagementPolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IdentityStore activeDirectoryStore,
+        string? allEmployeesGroupId,
+        string? guestGroupId,
+        string? officeUsersGroupId,
+        string? workstationAdminsGroupId)
+    {
+        var entraStore = world.IdentityStores.FirstOrDefault(store =>
+            store.CompanyId == company.Id
+            && string.Equals(store.StoreType, "EntraTenant", StringComparison.OrdinalIgnoreCase));
+
+        var intunePolicies = new[]
+        {
+            ("Intune Windows Security Baseline", "EndpointSecurity", new (string,string,string,string)[] {
+                ("RequireTamperProtection", "EndpointProtection", "Boolean", "true"),
+                ("RequireMicrosoftDefender", "EndpointProtection", "Boolean", "true"),
+                ("RequireFirewallAllProfiles", "NetworkSecurity", "Boolean", "true"),
+                ("RequireExploitProtection", "EndpointProtection", "Boolean", "true"),
+                ("RequireSmartAppControl", "ApplicationControl", "Boolean", "true"),
+                ("RequireCredentialGuard", "CredentialProtection", "Boolean", "true"),
+                ("RequireAttackSurfaceReduction", "EndpointProtection", "String", "Block"),
+                ("MinimumOsVersion", "Compliance", "String", "10.0.19045"),
+                ("AllowedEdition", "Compliance", "String", "Enterprise"),
+                ("RequireMdeRiskScore", "Compliance", "String", "MediumOrLower"),
+                ("RequireSecureBoot", "DeviceHealth", "Boolean", "true"),
+                ("RequireTpm20", "DeviceHealth", "Boolean", "true")
+            }),
+            ("Intune BitLocker Standard", "DiskEncryption", new (string,string,string,string)[] {
+                ("BitLockerOsDriveEncryption", "DiskEncryption", "Boolean", "true"),
+                ("BitLockerFixedDriveEncryption", "DiskEncryption", "Boolean", "true"),
+                ("BitLockerRecoveryKeyRotation", "DiskEncryption", "String", "OnUse"),
+                ("BitLockerRecoveryEscrow", "DiskEncryption", "String", "EntraID"),
+                ("BitLockerStartupAuth", "DiskEncryption", "String", "TpmOnly"),
+                ("BitLockerRemovableDrivePolicy", "DiskEncryption", "String", "BlockWriteUnlessEncrypted"),
+                ("BitLockerRecoveryKeyLength", "DiskEncryption", "Integer", "48"),
+                ("BitLockerAllowStandardUserEncryption", "DiskEncryption", "Boolean", "false")
+            }),
+            ("Intune Microsoft 365 Apps Deployment", "ApplicationConfiguration", new (string,string,string,string)[] {
+                ("AssignedApps", "AppAssignment", "String", "Microsoft365Apps;Teams;OneDrive"),
+                ("UpdateChannel", "AppAssignment", "String", "MonthlyEnterprise"),
+                ("InstallArchitecture", "AppAssignment", "String", "x64"),
+                ("SharedComputerActivation", "AppAssignment", "Boolean", "false"),
+                ("OneDriveKnownFolderMove", "AppAssignment", "Boolean", "true"),
+                ("TeamsAutoStart", "AppAssignment", "Boolean", "true"),
+                ("OutlookCachedMode", "AppAssignment", "Boolean", "true"),
+                ("OfficeSelfServiceInstall", "AppAssignment", "Boolean", "false")
+            }),
+            ("Intune Remote Help Assignment", "RemoteSupport", new (string,string,string,string)[] {
+                ("RemoteHelpEnabled", "RemoteSupport", "Boolean", "true"),
+                ("RemoteHelpRequireElevationApproval", "RemoteSupport", "Boolean", "true"),
+                ("RemoteHelpSessionRecording", "RemoteSupport", "Boolean", "true"),
+                ("RemoteHelpClipboardSharing", "RemoteSupport", "Boolean", "false"),
+                ("RemoteHelpFileTransfer", "RemoteSupport", "Boolean", "false"),
+                ("RemoteHelpAllowedGroups", "RemoteSupport", "String", "GG Tier2 Helpdesk;GG Remote Support Operators")
+            }),
+            ("Intune Shared Device Profile", "SharedDevice", new (string,string,string,string)[] {
+                ("SharedPcMode", "SharedDevice", "Boolean", "true"),
+                ("KioskProfileAssigned", "SharedDevice", "Boolean", "true"),
+                ("LocalStorageRetentionDays", "SharedDevice", "Integer", "7"),
+                ("AccountManagementMode", "SharedDevice", "String", "GuestAndShiftWorkers"),
+                ("FastFirstSignIn", "SharedDevice", "Boolean", "true"),
+                ("TemporaryProfileCleanup", "SharedDevice", "Boolean", "true"),
+                ("EdgePublicBrowsingMode", "SharedDevice", "Boolean", "true")
+            })
+        };
+
+        foreach (var (name, category, settings) in intunePolicies)
+        {
+            var policy = EnsurePolicy(world, company.Id, name, "IntuneConfigurationProfile", "Intune", category, $"{name} managed through Intune.", entraStore?.Id, null);
+            AddSettingSet(world, company.Id, policy.Id, settings);
+            AddPolicyTarget(world, company.Id, policy.Id, "IdentityStore", entraStore?.Id, "Scope", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", officeUsersGroupId ?? allEmployeesGroupId, "Include", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", workstationAdminsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        }
+
+        var conditionalAccessPolicies = new[]
+        {
+            ("Conditional Access - Admin MFA", "Authentication", "AllAdministrativeRoles"),
+            ("Conditional Access - Device Compliance", "DeviceTrust", "CorporateUsers"),
+            ("Conditional Access - Guest Collaboration", "ExternalAccess", "Guests"),
+            ("Conditional Access - Legacy Auth Block", "Authentication", "AllUsers"),
+            ("Conditional Access - VPN Access", "RemoteAccess", "VpnUsers"),
+            ("Conditional Access - High Risk Sign-In", "RiskBased", "AllUsers")
+        };
+
+        foreach (var (name, category, audience) in conditionalAccessPolicies)
+        {
+            var policy = EnsurePolicy(world, company.Id, name, "ConditionalAccessPolicy", "EntraID", category, $"{name} managed in Entra Conditional Access.", entraStore?.Id, null);
+            AddSettingSet(world, company.Id, policy.Id,
+            [
+                ("IncludedAudience", category, "String", audience),
+                ("GrantControls", category, "String", "RequireMfa"),
+                ("SessionControls", category, "String", "SignInFrequency=12h"),
+                ("RiskLevelThreshold", category, "String", "Medium"),
+                ("ClientAppTypes", category, "String", "Browser,Mobile,Desktop"),
+                ("IncludedLocations", category, "String", "AllTrustedAndUntrusted"),
+                ("ExcludedEmergencyAccounts", category, "Boolean", "true"),
+                ("RequireCompliantDevice", category, "Boolean", audience is "CorporateUsers" or "VpnUsers" ? "true" : "false"),
+                ("RequireHybridJoin", category, "Boolean", audience == "AllAdministrativeRoles" ? "true" : "false"),
+                ("TokenProtection", category, "Boolean", "true")
+            ]);
+            AddPolicyTarget(world, company.Id, policy.Id, "IdentityStore", entraStore?.Id, "Scope", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", allEmployeesGroupId, "Include", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", guestGroupId, audience == "Guests" ? "Include" : "Exclude", false, 2);
+        }
+    }
+
+    private void CreateWindowsBenchmarkPolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string activeDirectoryStoreId,
+        string? workstationContainerId,
+        string? serverContainerId,
+        string? gpoEditorsGroupId,
+        string? workstationAdminsGroupId,
+        string? serverAdminsGroupId)
+    {
+        var accountAndLockoutPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Account and Lockout Hardening",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "IdentityBaseline",
+            "Expanded account, lockout, and Kerberos guidance aligned to common CIS-style baselines.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, accountAndLockoutPolicy.Id,
+        [
+            ("EnforcePasswordHistory", "PasswordPolicy", "Integer", "24"),
+            ("MaximumPasswordAge", "PasswordPolicy", "Integer", "365"),
+            ("MinimumPasswordAge", "PasswordPolicy", "Integer", "1"),
+            ("MinimumPasswordLength", "PasswordPolicy", "Integer", "14"),
+            ("PasswordComplexityRequired", "PasswordPolicy", "Boolean", "true"),
+            ("RelaxMinimumPasswordLengthLimits", "PasswordPolicy", "Boolean", "true"),
+            ("StorePasswordsUsingReversibleEncryption", "PasswordPolicy", "Boolean", "false"),
+            ("AccountLockoutDuration", "LockoutPolicy", "Integer", "15"),
+            ("AccountLockoutThreshold", "LockoutPolicy", "Integer", "5"),
+            ("AdministratorAccountLockout", "LockoutPolicy", "Boolean", "true"),
+            ("ResetAccountLockoutCounterAfter", "LockoutPolicy", "Integer", "15"),
+            ("KerberosEnforceUserLogonRestrictions", "Authentication", "Boolean", "true"),
+            ("KerberosMaxLifetimeForServiceTicket", "Authentication", "Integer", "600"),
+            ("KerberosMaxLifetimeForUserTicket", "Authentication", "Integer", "10"),
+            ("KerberosMaxLifetimeForUserTicketRenewal", "Authentication", "Integer", "7"),
+            ("KerberosMaxToleranceForComputerClockSynchronization", "Authentication", "Integer", "5"),
+            ("CachedLogonsCount", "Authentication", "Integer", "4"),
+            ("DoNotDisplayLastSignedIn", "Authentication", "Boolean", "true"),
+            ("BlockMicrosoftAccounts", "Authentication", "String", "UsersCantAddOrLogOn"),
+            ("AllowPKU2UAuthenticationRequests", "Authentication", "Boolean", "false"),
+            ("AllowDelegatingSavedCredentials", "Authentication", "String", "DefaultRestricted"),
+            ("AllowDelegatingSavedCredentialsWithNtLmOnlyServerAuth", "Authentication", "String", "Disabled"),
+            ("NetworkSecurityLanManagerAuthenticationLevel", "Authentication", "String", "SendNTLMv2ResponseOnlyRefuseLMAndNTLM"),
+            ("NetworkSecurityDoNotStoreLanManagerHash", "Authentication", "Boolean", "true"),
+            ("MicrosoftNetworkClientDigitallySignCommunicationsAlways", "Authentication", "Boolean", "true"),
+            ("MicrosoftNetworkServerDigitallySignCommunicationsAlways", "Authentication", "Boolean", "true"),
+            ("MachineAccountPasswordMaximumAge", "IdentityLifecycle", "Integer", "30"),
+            ("DisableMachineAccountPasswordChanges", "IdentityLifecycle", "Boolean", "false"),
+            ("DomainMemberRequireStrongSessionKey", "IdentityLifecycle", "Boolean", "true"),
+            ("DomainMemberRequireSignOrSeal", "IdentityLifecycle", "Boolean", "true"),
+            ("DomainMemberDisablePasswordChange", "IdentityLifecycle", "Boolean", "false"),
+            ("InteractiveLogonMachineInactivityLimit", "InteractiveLogon", "Integer", "900"),
+            ("InteractiveLogonSmartCardRemovalBehavior", "InteractiveLogon", "String", "LockWorkstation"),
+            ("InteractiveLogonPromptUserToChangePasswordBeforeExpiration", "InteractiveLogon", "Integer", "14"),
+            ("InteractiveLogonDoNotRequireCtrlAltDel", "InteractiveLogon", "Boolean", "false"),
+            ("InteractiveLogonMessageTitle", "InteractiveLogon", "String", "Authorized Use Only"),
+            ("InteractiveLogonMessageText", "InteractiveLogon", "String", "This system is for authorized enterprise use only."),
+            ("RenameAdministratorAccount", "InteractiveLogon", "Boolean", "true"),
+            ("RenameGuestAccount", "InteractiveLogon", "Boolean", "true"),
+            ("AccountsGuestAccountStatus", "InteractiveLogon", "Boolean", "false")
+        ]);
+        AddPolicyTarget(world, company.Id, accountAndLockoutPolicy.Id, "Container", serverContainerId, "Linked", true, 50, true);
+        AddPolicyTarget(world, company.Id, accountAndLockoutPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var userRightsPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows User Rights Assignment Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "UserRights",
+            "User rights assignment baseline inspired by benchmarked enterprise defaults.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, userRightsPolicy.Id,
+        [
+            ("AccessCredentialManagerAsTrustedCaller", "UserRightsAssignment", "String", "NoOne"),
+            ("AccessThisComputerFromTheNetwork", "UserRightsAssignment", "String", "Administrators;Remote Desktop Users"),
+            ("ActAsPartOfTheOperatingSystem", "UserRightsAssignment", "String", "NoOne"),
+            ("AdjustMemoryQuotasForAProcess", "UserRightsAssignment", "String", "Administrators;LOCAL SERVICE;NETWORK SERVICE"),
+            ("AllowLogOnLocally", "UserRightsAssignment", "String", "Administrators;Users"),
+            ("AllowLogOnThroughRemoteDesktopServices", "UserRightsAssignment", "String", "Administrators;Remote Desktop Users"),
+            ("BackUpFilesAndDirectories", "UserRightsAssignment", "String", "Administrators"),
+            ("ChangeTheSystemTime", "UserRightsAssignment", "String", "Administrators;LOCAL SERVICE"),
+            ("CreateAPagefile", "UserRightsAssignment", "String", "Administrators"),
+            ("CreateATokenObject", "UserRightsAssignment", "String", "NoOne"),
+            ("CreateGlobalObjects", "UserRightsAssignment", "String", "Administrators;LOCAL SERVICE;NETWORK SERVICE;SERVICE"),
+            ("CreatePermanentSharedObjects", "UserRightsAssignment", "String", "NoOne"),
+            ("CreateSymbolicLinks", "UserRightsAssignment", "String", "Administrators"),
+            ("DebugPrograms", "UserRightsAssignment", "String", "Administrators"),
+            ("DenyAccessToThisComputerFromTheNetwork", "UserRightsAssignment", "String", "Guests;LocalAccount"),
+            ("DenyLogOnAsABatchJob", "UserRightsAssignment", "String", "Guests"),
+            ("DenyLogOnAsAService", "UserRightsAssignment", "String", "Guests"),
+            ("DenyLogOnLocally", "UserRightsAssignment", "String", "Guests"),
+            ("DenyLogOnThroughRemoteDesktopServices", "UserRightsAssignment", "String", "Guests;LocalAccount"),
+            ("EnableComputerAndUserAccountsToBeTrustedForDelegation", "UserRightsAssignment", "String", "NoOne"),
+            ("ForceShutdownFromARemoteSystem", "UserRightsAssignment", "String", "Administrators"),
+            ("GenerateSecurityAudits", "UserRightsAssignment", "String", "LOCAL SERVICE;NETWORK SERVICE"),
+            ("ImpersonateAClientAfterAuthentication", "UserRightsAssignment", "String", "Administrators;LOCAL SERVICE;NETWORK SERVICE;SERVICE"),
+            ("IncreaseAProcessWorkingSet", "UserRightsAssignment", "String", "Administrators;LOCAL SERVICE"),
+            ("IncreaseSchedulingPriority", "UserRightsAssignment", "String", "Administrators"),
+            ("LoadAndUnloadDeviceDrivers", "UserRightsAssignment", "String", "Administrators"),
+            ("LockPagesInMemory", "UserRightsAssignment", "String", "NoOne"),
+            ("LogOnAsABatchJob", "UserRightsAssignment", "String", "Administrators"),
+            ("LogOnAsAService", "UserRightsAssignment", "String", "ManagedServiceAccountsOnly"),
+            ("ManageAuditingAndSecurityLog", "UserRightsAssignment", "String", "Administrators"),
+            ("ModifyAnObjectLabel", "UserRightsAssignment", "String", "NoOne"),
+            ("ModifyFirmwareEnvironmentValues", "UserRightsAssignment", "String", "Administrators"),
+            ("PerformVolumeMaintenanceTasks", "UserRightsAssignment", "String", "Administrators"),
+            ("ProfileSingleProcess", "UserRightsAssignment", "String", "Administrators"),
+            ("ProfileSystemPerformance", "UserRightsAssignment", "String", "Administrators"),
+            ("ReplaceAProcessLevelToken", "UserRightsAssignment", "String", "LOCAL SERVICE;NETWORK SERVICE"),
+            ("RestoreFilesAndDirectories", "UserRightsAssignment", "String", "Administrators"),
+            ("ShutDownTheSystem", "UserRightsAssignment", "String", "Administrators;Users"),
+            ("SynchronizeDirectoryServiceData", "UserRightsAssignment", "String", "NoOne"),
+            ("TakeOwnershipOfFilesOrOtherObjects", "UserRightsAssignment", "String", "Administrators")
+        ]);
+        AddPolicyTarget(world, company.Id, userRightsPolicy.Id, "Container", workstationContainerId, "Linked", true, 51, true);
+        AddPolicyTarget(world, company.Id, userRightsPolicy.Id, "Container", serverContainerId, "Linked", true, 52, true);
+        AddPolicyTarget(world, company.Id, userRightsPolicy.Id, "Group", serverAdminsGroupId ?? workstationAdminsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var securityOptionsPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Security Options Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "SecurityOptions",
+            "Expanded Windows security options baseline inspired by enterprise benchmark guidance.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, securityOptionsPolicy.Id,
+        [
+            ("AccountsAdministratorAccountStatus", "SecurityOptions", "Boolean", "false"),
+            ("AccountsBlockMicrosoftAccounts", "SecurityOptions", "String", "UsersCantAddOrLogOn"),
+            ("AccountsGuestAccountStatus", "SecurityOptions", "Boolean", "false"),
+            ("AccountsLimitLocalAccountUseOfBlankPasswords", "SecurityOptions", "Boolean", "true"),
+            ("AuditForceAuditPolicySubcategorySettings", "SecurityOptions", "Boolean", "true"),
+            ("DevicesAllowedToFormatAndEjectRemovableMedia", "SecurityOptions", "String", "Administrators"),
+            ("DomainMemberDigitallyEncryptOrSignSecureChannelDataAlways", "SecurityOptions", "Boolean", "true"),
+            ("DomainMemberDigitallyEncryptSecureChannelDataWhenPossible", "SecurityOptions", "Boolean", "true"),
+            ("DomainMemberDigitallySignSecureChannelDataWhenPossible", "SecurityOptions", "Boolean", "true"),
+            ("DomainMemberDisableMachineAccountPasswordChanges", "SecurityOptions", "Boolean", "false"),
+            ("DomainMemberMaximumMachineAccountPasswordAge", "SecurityOptions", "Integer", "30"),
+            ("InteractiveLogonDoNotDisplayLastUserName", "SecurityOptions", "Boolean", "true"),
+            ("InteractiveLogonDoNotRequireCtrlAltDel", "SecurityOptions", "Boolean", "false"),
+            ("InteractiveLogonMachineAccountLockoutThreshold", "SecurityOptions", "Integer", "5"),
+            ("InteractiveLogonMachineInactivityLimit", "SecurityOptions", "Integer", "900"),
+            ("InteractiveLogonMessageTextForUsersAttemptingToLogOn", "SecurityOptions", "String", "Authorized use only."),
+            ("InteractiveLogonMessageTitleForUsersAttemptingToLogOn", "SecurityOptions", "String", "Enterprise Warning"),
+            ("InteractiveLogonNumberOfPreviousLogonsToCache", "SecurityOptions", "Integer", "4"),
+            ("InteractiveLogonPromptUserToChangePasswordBeforeExpiration", "SecurityOptions", "Integer", "14"),
+            ("InteractiveLogonRequireDomainControllerAuthenticationToUnlock", "SecurityOptions", "Boolean", "false"),
+            ("MicrosoftNetworkClientDigitallySignCommunicationsAlways", "SecurityOptions", "Boolean", "true"),
+            ("MicrosoftNetworkClientDigitallySignCommunicationsIfServerAgrees", "SecurityOptions", "Boolean", "true"),
+            ("MicrosoftNetworkClientSendUnencryptedPasswordToThirdPartySmbServers", "SecurityOptions", "Boolean", "false"),
+            ("MicrosoftNetworkServerAmountOfIdleTimeRequiredBeforeSuspendingSession", "SecurityOptions", "Integer", "15"),
+            ("MicrosoftNetworkServerDigitallySignCommunicationsAlways", "SecurityOptions", "Boolean", "true"),
+            ("MicrosoftNetworkServerDigitallySignCommunicationsIfClientAgrees", "SecurityOptions", "Boolean", "true"),
+            ("MicrosoftNetworkServerDisconnectClientsWhenLogonHoursExpire", "SecurityOptions", "Boolean", "true"),
+            ("MicrosoftNetworkServerServerSpnTargetNameValidationLevel", "SecurityOptions", "String", "AcceptIfProvidedByClient"),
+            ("NetworkAccessAllowAnonymousSidNameTranslation", "SecurityOptions", "Boolean", "false"),
+            ("NetworkAccessDoNotAllowAnonymousEnumerationOfSamAccounts", "SecurityOptions", "Boolean", "true"),
+            ("NetworkAccessDoNotAllowAnonymousEnumerationOfSamAccountsAndShares", "SecurityOptions", "Boolean", "true"),
+            ("NetworkAccessLetEveryonePermissionsApplyToAnonymousUsers", "SecurityOptions", "Boolean", "false"),
+            ("NetworkAccessNamedPipesThatCanBeAccessedAnonymously", "SecurityOptions", "String", "None"),
+            ("NetworkAccessSharesThatCanBeAccessedAnonymously", "SecurityOptions", "String", "None"),
+            ("NetworkAccessRestrictAnonymousAccessToNamedPipesAndShares", "SecurityOptions", "Boolean", "true"),
+            ("NetworkSecurityAllowLocalSystemToUseComputerIdentityForNtLm", "SecurityOptions", "Boolean", "true"),
+            ("NetworkSecurityDoNotStoreLanManagerHashValue", "SecurityOptions", "Boolean", "true"),
+            ("NetworkSecurityForceLogoffWhenLogonHoursExpire", "SecurityOptions", "Boolean", "true"),
+            ("NetworkSecurityLanManagerAuthenticationLevel", "SecurityOptions", "String", "SendNTLMv2ResponseOnlyRefuseLMAndNTLM"),
+            ("NetworkSecurityLdapClientSigningRequirements", "SecurityOptions", "String", "NegotiateSigning"),
+            ("NetworkSecurityMinimumSessionSecurityForNtlmSspBasedClients", "SecurityOptions", "String", "RequireNtLmV2And128Bit"),
+            ("NetworkSecurityMinimumSessionSecurityForNtlmSspBasedServers", "SecurityOptions", "String", "RequireNtLmV2And128Bit"),
+            ("RecoveryConsoleAllowAutomaticAdministrativeLogon", "SecurityOptions", "Boolean", "false"),
+            ("RecoveryConsoleAllowFloppyCopyAndAccessToAllDrivesAndFolders", "SecurityOptions", "Boolean", "false"),
+            ("ShutdownAllowSystemToBeShutDownWithoutHavingToLogOn", "SecurityOptions", "Boolean", "false"),
+            ("ShutdownClearVirtualMemoryPagefile", "SecurityOptions", "Boolean", "true"),
+            ("SystemCryptographyUseFipsCompliantAlgorithms", "SecurityOptions", "Boolean", "false"),
+            ("SystemObjectsDefaultOwnerForObjectsCreatedByMembersOfAdministratorsGroup", "SecurityOptions", "String", "AdministratorsGroup"),
+            ("SystemObjectsRequireCaseInsensitivityForNonWindowsSubsystems", "SecurityOptions", "Boolean", "true"),
+            ("SystemSettingsOptionalSubsystems", "SecurityOptions", "String", "Disabled"),
+            ("UserAccountControlAdminApprovalModeForTheBuiltInAdministratorAccount", "SecurityOptions", "Boolean", "true"),
+            ("UserAccountControlAllowUiAccessApplicationsToPromptForElevationWithoutUsingTheSecureDesktop", "SecurityOptions", "Boolean", "false"),
+            ("UserAccountControlBehaviorOfTheElevationPromptForAdministrators", "SecurityOptions", "String", "PromptForConsentOnSecureDesktop"),
+            ("UserAccountControlBehaviorOfTheElevationPromptForStandardUsers", "SecurityOptions", "String", "AutomaticallyDenyElevationRequests"),
+            ("UserAccountControlDetectApplicationInstallationsAndPromptForElevation", "SecurityOptions", "Boolean", "true"),
+            ("UserAccountControlOnlyElevateExecutablesThatAreSignedAndValidated", "SecurityOptions", "Boolean", "false"),
+            ("UserAccountControlOnlyElevateUiAccessApplicationsInstalledInSecureLocations", "SecurityOptions", "Boolean", "true"),
+            ("UserAccountControlRunAllAdministratorsInAdminApprovalMode", "SecurityOptions", "Boolean", "true"),
+            ("UserAccountControlSwitchToTheSecureDesktopWhenPromptingForElevation", "SecurityOptions", "Boolean", "true"),
+            ("UserAccountControlVirtualizeFileAndRegistryWriteFailuresToPerUserLocations", "SecurityOptions", "Boolean", "true")
+        ]);
+        AddPolicyTarget(world, company.Id, securityOptionsPolicy.Id, "Container", workstationContainerId, "Linked", true, 53, true);
+        AddPolicyTarget(world, company.Id, securityOptionsPolicy.Id, "Container", serverContainerId, "Linked", true, 54, true);
+        AddPolicyTarget(world, company.Id, securityOptionsPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var advancedAuditPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Advanced Audit Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "AuditPolicy",
+            "Advanced audit policy categories and subcategories for endpoints and servers.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, advancedAuditPolicy.Id,
+        [
+            ("AuditCredentialValidation", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditKerberosAuthenticationService", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditKerberosServiceTicketOperations", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditComputerAccountManagement", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditSecurityGroupManagement", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditUserAccountManagement", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditDirectoryServiceAccess", "AdvancedAudit", "String", "Failure"),
+            ("AuditDirectoryServiceChanges", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditLogon", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditLogoff", "AdvancedAudit", "String", "Success"),
+            ("AuditSpecialLogon", "AdvancedAudit", "String", "Success"),
+            ("AuditOtherLogonLogoffEvents", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditDetailedFileShare", "AdvancedAudit", "String", "Failure"),
+            ("AuditFileShare", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditFileSystem", "AdvancedAudit", "String", "Failure"),
+            ("AuditFilteringPlatformConnection", "AdvancedAudit", "String", "Success"),
+            ("AuditFilteringPlatformPacketDrop", "AdvancedAudit", "String", "Failure"),
+            ("AuditOtherObjectAccessEvents", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditRegistry", "AdvancedAudit", "String", "Failure"),
+            ("AuditApplicationGenerated", "AdvancedAudit", "String", "Success"),
+            ("AuditCertificationServices", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditDetailedTracking", "AdvancedAudit", "String", "Success"),
+            ("AuditPnpActivity", "AdvancedAudit", "String", "Success"),
+            ("AuditProcessCreation", "AdvancedAudit", "String", "Success"),
+            ("AuditProcessTermination", "AdvancedAudit", "String", "Success"),
+            ("AuditDpapiActivity", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditRpcEvents", "AdvancedAudit", "String", "Failure"),
+            ("AuditPolicyChange", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditAuthenticationPolicyChange", "AdvancedAudit", "String", "Success"),
+            ("AuditAuthorizationPolicyChange", "AdvancedAudit", "String", "Success"),
+            ("AuditMpsSvcRuleLevelPolicyChange", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditSensitivePrivilegeUse", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditIpsecDriver", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditOtherSystemEvents", "AdvancedAudit", "String", "Success,Failure"),
+            ("AuditSecurityStateChange", "AdvancedAudit", "String", "Success"),
+            ("AuditSecuritySystemExtension", "AdvancedAudit", "String", "Success"),
+            ("AuditSystemIntegrity", "AdvancedAudit", "String", "Success,Failure")
+        ]);
+        AddPolicyTarget(world, company.Id, advancedAuditPolicy.Id, "Container", workstationContainerId, "Linked", true, 55, true);
+        AddPolicyTarget(world, company.Id, advancedAuditPolicy.Id, "Container", serverContainerId, "Linked", true, 56, true);
+
+        var defenderPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Defender and ASR Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "EndpointProtection",
+            "Expanded Defender, SmartScreen, Exploit Guard, and ASR configuration baseline.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, defenderPolicy.Id,
+        [
+            ("DefenderRealtimeProtection", "Defender", "Boolean", "true"),
+            ("DefenderBehaviorMonitoring", "Defender", "Boolean", "true"),
+            ("DefenderCloudDeliveredProtection", "Defender", "String", "High"),
+            ("DefenderBlockAtFirstSeen", "Defender", "Boolean", "true"),
+            ("DefenderPotentiallyUnwantedAppProtection", "Defender", "Boolean", "true"),
+            ("DefenderScanArchiveFiles", "Defender", "Boolean", "true"),
+            ("DefenderEmailScanning", "Defender", "Boolean", "true"),
+            ("DefenderScriptScanning", "Defender", "Boolean", "true"),
+            ("DefenderRemediationDelay", "Defender", "Integer", "0"),
+            ("DefenderScheduledQuickScanTime", "Defender", "String", "12:00"),
+            ("DefenderScheduledFullScanDay", "Defender", "String", "Sunday"),
+            ("DefenderScheduledFullScanTime", "Defender", "String", "02:00"),
+            ("DefenderAutomaticRemediation", "Defender", "Boolean", "true"),
+            ("DefenderTamperProtection", "Defender", "Boolean", "true"),
+            ("DefenderNetworkProtection", "Defender", "String", "Block"),
+            ("DefenderControlledFolderAccess", "Defender", "String", "Enabled"),
+            ("DefenderSmartScreenForExplorer", "Defender", "String", "Warn"),
+            ("DefenderSmartScreenForEdge", "Defender", "String", "Block"),
+            ("ExploitGuardAttackSurfaceReductionOfficeChildProcess", "ASR", "String", "Block"),
+            ("ExploitGuardAttackSurfaceReductionOfficeExecutableContent", "ASR", "String", "Block"),
+            ("ExploitGuardAttackSurfaceReductionScriptDownloadedPayload", "ASR", "String", "Block"),
+            ("ExploitGuardAttackSurfaceReductionLsassCredentialStealing", "ASR", "String", "Block"),
+            ("ExploitGuardAttackSurfaceReductionPsexecAndWmi", "ASR", "String", "Audit"),
+            ("ExploitGuardAttackSurfaceReductionUntrustedUsbProcess", "ASR", "String", "Block"),
+            ("ExploitGuardAttackSurfaceReductionAbuseSignedDrivers", "ASR", "String", "Block"),
+            ("ExploitGuardNetworkProtection", "ASR", "String", "Enabled"),
+            ("ExploitGuardControlledFolderAccessProtectedFolders", "ASR", "String", "Documents;Desktop;Finance"),
+            ("ExploitProtectionDataExecutionPrevention", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionMandatoryAslr", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionBottomUpAslr", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionValidateExceptionChains", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionValidateHeapIntegrity", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionBlockRemoteImageLoads", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionBlockLowIntegrityImages", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionCodeIntegrityGuard", "ExploitProtection", "Boolean", "true"),
+            ("ExploitProtectionExtensionPointDisable", "ExploitProtection", "Boolean", "true")
+        ]);
+        AddPolicyTarget(world, company.Id, defenderPolicy.Id, "Container", workstationContainerId, "Linked", true, 57, true);
+        AddPolicyTarget(world, company.Id, defenderPolicy.Id, "Container", serverContainerId, "Linked", true, 58, true);
+
+        var networkFirewallPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Network and Firewall Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "NetworkSecurity",
+            "Expanded firewall, networking, and name resolution hardening controls.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, networkFirewallPolicy.Id,
+        [
+            ("WindowsFirewallDomainProfileState", "Firewall", "Boolean", "true"),
+            ("WindowsFirewallPrivateProfileState", "Firewall", "Boolean", "true"),
+            ("WindowsFirewallPublicProfileState", "Firewall", "Boolean", "true"),
+            ("WindowsFirewallDomainProfileInboundAction", "Firewall", "String", "Block"),
+            ("WindowsFirewallPrivateProfileInboundAction", "Firewall", "String", "Block"),
+            ("WindowsFirewallPublicProfileInboundAction", "Firewall", "String", "Block"),
+            ("WindowsFirewallDomainProfileOutboundAction", "Firewall", "String", "Allow"),
+            ("WindowsFirewallLogDroppedPackets", "Firewall", "Boolean", "true"),
+            ("WindowsFirewallLogSuccessfulConnections", "Firewall", "Boolean", "true"),
+            ("WindowsFirewallDisableNotifications", "Firewall", "Boolean", "true"),
+            ("WindowsFirewallApplyLocalFirewallRules", "Firewall", "Boolean", "false"),
+            ("WindowsFirewallApplyLocalConnectionSecurityRules", "Firewall", "Boolean", "false"),
+            ("WindowsFirewallDisplayName", "Firewall", "String", "Enterprise Firewall"),
+            ("DisableIpv6SourceRouting", "Networking", "Boolean", "true"),
+            ("TcpIpDisableIpSourceRouting", "Networking", "String", "HighestProtection"),
+            ("EnableIpv6RandomizeIdentifiers", "Networking", "Boolean", "true"),
+            ("DisableNetbiosOverTcpIp", "Networking", "Boolean", "true"),
+            ("DisableLltdio", "Networking", "Boolean", "true"),
+            ("DisableRspndr", "Networking", "Boolean", "true"),
+            ("EnableDnsOverHttps", "Networking", "String", "Automatic"),
+            ("DisableLLMNR", "Networking", "Boolean", "true"),
+            ("DisableWPAD", "Networking", "Boolean", "true"),
+            ("DisableProxyFallback", "Networking", "Boolean", "true"),
+            ("DisableInternetConnectionSharing", "Networking", "Boolean", "true"),
+            ("DisableNetworkBridge", "Networking", "Boolean", "true"),
+            ("DisableTeredo", "Networking", "Boolean", "true"),
+            ("DisableIsatap", "Networking", "Boolean", "true"),
+            ("DisableIpHttps", "Networking", "Boolean", "false"),
+            ("DisableSimpleTcpIpServices", "Networking", "Boolean", "true"),
+            ("DisableServerMessageBlock1", "Networking", "Boolean", "true"),
+            ("RequireSmbEncryption", "Networking", "Boolean", "true"),
+            ("RequireRpcAuthentication", "Networking", "Boolean", "true"),
+            ("RestrictRemoteNamedPipes", "Networking", "Boolean", "true"),
+            ("RestrictRemoteSam", "Networking", "String", "AdministratorsOnly"),
+            ("DisableMulticastNameResolution", "Networking", "Boolean", "true"),
+            ("DisableRemoteAssistanceSolicited", "Networking", "Boolean", "true"),
+            ("DisableRemoteAssistanceOffer", "Networking", "Boolean", "true"),
+            ("RemoteDesktopRequireNetworkLevelAuthentication", "RemoteAccess", "Boolean", "true"),
+            ("RemoteDesktopRequireSecureRpcCommunication", "RemoteAccess", "Boolean", "true"),
+            ("RemoteDesktopSetClientConnectionEncryptionLevel", "RemoteAccess", "String", "High")
+        ]);
+        AddPolicyTarget(world, company.Id, networkFirewallPolicy.Id, "Container", workstationContainerId, "Linked", true, 59, true);
+        AddPolicyTarget(world, company.Id, networkFirewallPolicy.Id, "Container", serverContainerId, "Linked", true, 60, true);
+    }
+
+    private void CreateBrowserAndOfficeBenchmarkPolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string activeDirectoryStoreId,
+        string? workstationContainerId,
+        string? allEmployeesGroupId,
+        string? browserPilotUsersGroupId,
+        string? officeUsersGroupId,
+        string? officeAdminsGroupId)
+    {
+        var chromeSecurityPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Chrome Enterprise Security Baseline",
+            "ChromeEnterprisePolicy",
+            "ActiveDirectory",
+            "BrowserSecurity",
+            "Expanded Chrome enterprise security policy baseline inspired by CIS guidance.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, chromeSecurityPolicy.Id,
+        [
+            ("ChromeCrossOriginHttpAuthenticationPrompts", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeSafeBrowsingAllowList", "ChromeSecurity", "String", "Disabled"),
+            ("ChromeSafeBrowsingProtectionLevel", "ChromeSecurity", "String", "Standard"),
+            ("ChromeAllowGoogleCastOnAllIpAddresses", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeAllowTimeQueries", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeAudioSandboxEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromePromptForDownloadLocation", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeBackgroundAppsEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeVariationServiceEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeCertificateTransparencyCaExceptions", "ChromeSecurity", "String", "Disabled"),
+            ("ChromeCertificateTransparencySpkiExceptions", "ChromeSecurity", "String", "Disabled"),
+            ("ChromeCertificateTransparencyUrlExceptions", "ChromeSecurity", "String", "Disabled"),
+            ("ChromeSavingBrowserHistoryDisabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeDnsInterceptionChecksEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeComponentUpdatesEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeGloballyScopedHttpAuthCacheEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeOnlineRevocationChecksEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeRendererCodeIntegrityEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeCommandLineFlagSecurityWarningsEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeThirdPartyBlockingEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeEnterpriseHardwarePlatformApiAllowed", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeEphemeralProfileEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeImportAutofillFormDataDisabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeImportHomePageDisabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeImportSearchEngineDisabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeInsecureOriginsExceptionsDisabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromePasswordManagerEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeAutofillAddressEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeAutofillCreditCardEnabled", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeBuiltInDnsClientEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeQuicAllowed", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeBrowserSigninAllowed", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeIncognitoModeAvailability", "ChromeSecurity", "String", "Disabled"),
+            ("ChromeSitePerProcessEnabled", "ChromeSecurity", "Boolean", "true"),
+            ("ChromeHttpsOnlyMode", "ChromeSecurity", "Boolean", "true"),
+            ("ChromePopupsAllowedForUrls", "ChromeSecurity", "String", "Disabled"),
+            ("ChromeDefaultNotificationsSetting", "ChromeSecurity", "String", "Block"),
+            ("ChromeDefaultGeolocationSetting", "ChromeSecurity", "String", "Block"),
+            ("ChromeDefaultWebUsbGuardSetting", "ChromeSecurity", "String", "Block"),
+            ("ChromeDefaultWebBluetoothGuardSetting", "ChromeSecurity", "String", "Block"),
+            ("ChromeDefaultSerialGuardSetting", "ChromeSecurity", "String", "Block"),
+            ("ChromeRemoteAccessHostFirewallTraversal", "ChromeSecurity", "Boolean", "false"),
+            ("ChromeRemoteAccessHostDomainList", "ChromeSecurity", "String", company.PrimaryDomain)
+        ]);
+        AddPolicyTarget(world, company.Id, chromeSecurityPolicy.Id, "Container", workstationContainerId, "Linked", true, 61, true);
+        AddPolicyTarget(world, company.Id, chromeSecurityPolicy.Id, "Group", allEmployeesGroupId, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, chromeSecurityPolicy.Id, "Group", browserPilotUsersGroupId, "SecurityFilterInclude", false, 2);
+
+        var chromeContentPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Chrome Content and Update Controls",
+            "ChromeEnterprisePolicy",
+            "ActiveDirectory",
+            "BrowserConfiguration",
+            "Chrome content controls, updates, download restrictions, and extension governance.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, chromeContentPolicy.Id,
+        [
+            ("ChromeAutoUpdateCheckPeriodMinutes", "ChromeUpdate", "Integer", "720"),
+            ("ChromeTargetVersionPrefix", "ChromeUpdate", "String", "Stable"),
+            ("ChromeRelaunchNotification", "ChromeUpdate", "String", "Required"),
+            ("ChromeRelaunchNotificationPeriod", "ChromeUpdate", "Integer", "4320"),
+            ("ChromeDownloadRestrictions", "ChromeContent", "String", "BlockDangerous"),
+            ("ChromeDefaultDownloadDirectory", "ChromeContent", "String", "%USERPROFILE%\\Downloads"),
+            ("ChromeOpenPdfDownloadInSystemReader", "ChromeContent", "Boolean", "false"),
+            ("ChromePrintingAllowedBackgroundGraphicsMode", "ChromeContent", "String", "Disabled"),
+            ("ChromeBookmarksBarEnabled", "ChromeContent", "Boolean", "true"),
+            ("ChromeManagedBookmarks", "ChromeContent", "String", "Intranet;Help Center;Service Desk"),
+            ("ChromeHomepageLocation", "ChromeContent", "String", $"https://intranet.{company.PrimaryDomain}"),
+            ("ChromeHomepageIsNewTabPage", "ChromeContent", "Boolean", "false"),
+            ("ChromeStartupUrls", "ChromeContent", "String", $"https://intranet.{company.PrimaryDomain};https://collab.{company.PrimaryDomain}"),
+            ("ChromeRestoreOnStartup", "ChromeContent", "String", "OpenSpecificPages"),
+            ("ChromeDeveloperToolsAvailability", "ChromeContent", "String", "Disallowed"),
+            ("ChromeTaskManagerEndProcessEnabled", "ChromeContent", "Boolean", "false"),
+            ("ChromeDefaultCookiesSetting", "ChromeContent", "String", "Allow"),
+            ("ChromeBlockThirdPartyCookies", "ChromeContent", "Boolean", "true"),
+            ("ChromeDefaultImagesSetting", "ChromeContent", "String", "Allow"),
+            ("ChromeDefaultJavaScriptSetting", "ChromeContent", "String", "Allow"),
+            ("ChromeDefaultPluginsSetting", "ChromeContent", "String", "Block"),
+            ("ChromeDefaultPopupsSetting", "ChromeContent", "String", "Block"),
+            ("ChromeDefaultFileSystemReadGuardSetting", "ChromeContent", "String", "Block"),
+            ("ChromeDefaultFileSystemWriteGuardSetting", "ChromeContent", "String", "Block"),
+            ("ChromeExtensionInstallAllowlist", "ChromeExtensions", "String", "CorpPasswordManager;SSOHelper;MdeBrowserIsolation"),
+            ("ChromeExtensionInstallBlocklist", "ChromeExtensions", "String", "*"),
+            ("ChromeExtensionInstallForcelist", "ChromeExtensions", "String", "CorpPasswordManager;SSOHelper"),
+            ("ChromeBrowserLabsEnabled", "ChromeContent", "Boolean", "false"),
+            ("ChromeSpellcheckEnabled", "ChromeContent", "Boolean", "true"),
+            ("ChromeMetricsReportingEnabled", "ChromeContent", "Boolean", "false"),
+            ("ChromeSearchSuggestEnabled", "ChromeContent", "Boolean", "false"),
+            ("ChromeTranslateEnabled", "ChromeContent", "Boolean", "false"),
+            ("ChromeSavingBrowserHistoryDisabled", "ChromeContent", "Boolean", "false"),
+            ("ChromeEnterpriseReportingEnabled", "ChromeContent", "Boolean", "true"),
+            ("ChromeEnterpriseReportingUploadFrequency", "ChromeContent", "Integer", "720"),
+            ("ChromeDataLeakPreventionRuleSet", "ChromeContent", "String", "CorpStandard")
+        ]);
+        AddPolicyTarget(world, company.Id, chromeContentPolicy.Id, "Container", workstationContainerId, "Linked", true, 62, true);
+        AddPolicyTarget(world, company.Id, chromeContentPolicy.Id, "Group", allEmployeesGroupId, "SecurityFilterInclude", false, 1);
+
+        var officeTrustPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Office Trust Center and Macro Baseline",
+            "OfficePolicy",
+            "ActiveDirectory",
+            "ApplicationSecurity",
+            "Expanded Office macro, trust center, ActiveX, and document protection baseline.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, officeTrustPolicy.Id,
+        [
+            ("OfficeBlockFlashActivation", "OfficeSecurity", "String", "BlockAllActivation"),
+            ("OfficeRestrictLegacyJScriptExecution", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeAllowTrustedLocationsOnNetwork", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeDisableAllTrustedLocations", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeTrustBarNotificationForUnsignedAddIns", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeRequireApplicationAddinsToBeSigned", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableAllActiveX", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableEmbeddedFiles", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeOpenXmlFileValidation", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeProtectedViewForInternetFiles", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeProtectedViewForUnsafeLocations", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeProtectedViewForOutlookAttachments", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeProtectedViewAllowEditing", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeMacroRuntimeScanning", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeVbaMacroNotificationSettings", "OfficeSecurity", "String", "DisableExceptSigned"),
+            ("OfficeBlockMacrosFromInternet", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableExcel4Macros", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableDdeServerLaunch", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableAutomaticLinkUpdate", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableHiddenDataAndPersonalInfo", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableCustomUiLoadingFromDocument", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeEnableDataExecutionPrevention", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeRequireMacroScanningByAntivirus", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeVstoSuppressPrompts", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeTrustedPublisherLockdown", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeOneNoteEmbeddedFilesProtection", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeOutlookReadAsPlainText", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeOutlookAutomaticPictureDownload", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeOutlookSmtpAuthenticationRequired", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeOutlookPromptForProfile", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeDisablePublisherMacroRuntime", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableAccessSandboxMode", "OfficeSecurity", "Boolean", "false"),
+            ("OfficeDisableAccessLegacyBarcodes", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisablePowerPointExternalContent", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeDisableAutomaticUnsafeHyperlinks", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeIEMimeHandling", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeIESavedFromUrlProtection", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeIERestrictFileDownload", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeIELocalMachineZoneLockdown", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeIENavigateUrlRestrictions", "OfficeSecurity", "Boolean", "true"),
+            ("OfficeIEScriptedWindowSecurityRestrictions", "OfficeSecurity", "Boolean", "true")
+        ]);
+        AddPolicyTarget(world, company.Id, officeTrustPolicy.Id, "Container", workstationContainerId, "Linked", true, 63, true);
+        AddPolicyTarget(world, company.Id, officeTrustPolicy.Id, "Group", officeUsersGroupId ?? allEmployeesGroupId, "SecurityFilterInclude", false, 1);
+        AddPolicyTarget(world, company.Id, officeTrustPolicy.Id, "Group", officeAdminsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var officePrivacyPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Office Privacy and Update Baseline",
+            "OfficePolicy",
+            "ActiveDirectory",
+            "ApplicationConfiguration",
+            "Office privacy, telemetry, connected experiences, and update governance baseline.",
+            activeDirectoryStoreId,
+            null);
+        AddSettingSet(world, company.Id, officePrivacyPolicy.Id,
+        [
+            ("OfficeEnableAutomaticUpdates", "OfficeUpdates", "Boolean", "true"),
+            ("OfficeHideEnableDisableUpdatesOption", "OfficeUpdates", "Boolean", "true"),
+            ("OfficeUpdateChannel", "OfficeUpdates", "String", "MonthlyEnterprise"),
+            ("OfficeDelayDownloadOfUpdates", "OfficeUpdates", "Boolean", "false"),
+            ("OfficeTelemetryLevel", "OfficePrivacy", "String", "Required"),
+            ("OfficeConnectedExperiences", "OfficePrivacy", "String", "Limited"),
+            ("OfficeOptionalConnectedExperiences", "OfficePrivacy", "Boolean", "false"),
+            ("OfficeDiagnosticDataLevel", "OfficePrivacy", "String", "Required"),
+            ("OfficeSendPersonalInformation", "OfficePrivacy", "Boolean", "false"),
+            ("OfficeOnlineContentDownload", "OfficePrivacy", "String", "Disabled"),
+            ("OfficeRoamingSettingsEnabled", "OfficePrivacy", "Boolean", "false"),
+            ("OfficeLinkedInFeaturesEnabled", "OfficePrivacy", "Boolean", "false"),
+            ("OfficeAddinStoreAccess", "OfficePrivacy", "Boolean", "false"),
+            ("OfficeFeedbackEnabled", "OfficePrivacy", "Boolean", "false"),
+            ("OfficeFileOpenBlockLegacyFormats", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeDefaultSaveFormat", "OfficeConfiguration", "String", "OpenXml"),
+            ("OfficeDefaultFileBlockBehavior", "OfficeConfiguration", "String", "OpenInProtectedView"),
+            ("OfficeModernCommentsEnabled", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeAdobePdfIntegrationEnabled", "OfficeConfiguration", "Boolean", "false"),
+            ("OfficeAutoRecoverEnabled", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeAutoRecoverIntervalMinutes", "OfficeConfiguration", "Integer", "10"),
+            ("OfficeSyncIntegrationEnabled", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeOutlookCachedModeEnabled", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeTeamsMeetingAddInEnabled", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeCloudFontsEnabled", "OfficeConfiguration", "Boolean", "false"),
+            ("OfficeStartupBoostEnabled", "OfficeConfiguration", "Boolean", "false"),
+            ("OfficePowerQueryExternalDataWarning", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeWorkbookLinksWarning", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeCoauthoringAllowed", "OfficeConfiguration", "Boolean", "true"),
+            ("OfficeOneDriveKnownFolderMovePrompt", "OfficeConfiguration", "Boolean", "false")
+        ]);
+        AddPolicyTarget(world, company.Id, officePrivacyPolicy.Id, "Container", workstationContainerId, "Linked", true, 64, true);
+        AddPolicyTarget(world, company.Id, officePrivacyPolicy.Id, "Group", officeUsersGroupId ?? allEmployeesGroupId, "SecurityFilterInclude", false, 1);
+    }
+
+    private void AddSettingSet(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string policyId,
+        IEnumerable<(string Name, string Category, string ValueType, string Value)> settings)
+    {
+        foreach (var (name, category, valueType, value) in settings)
+        {
+            AddPolicySetting(world, companyId, policyId, name, category, valueType, value);
+        }
+    }
+
+    private static string ResolveRegionalLocale(Office office)
+        => office.Country switch
+        {
+            "Canada" => office.City.Contains("Montr", StringComparison.OrdinalIgnoreCase) ? "fr-CA" : "en-CA",
+            "Mexico" => "es-MX",
+            "United Kingdom" => "en-GB",
+            _ => "en-US"
+        };
+
+    private static string ResolveDepartmentTemplate(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("sales") => "Sales Pursuit Workspace",
+            var name when name.Contains("marketing") => "Campaign Operations Workspace",
+            var name when name.Contains("support") => "Case Management Workspace",
+            var name when name.Contains("engineering") => "Engineering Delivery Workspace",
+            var name when name.Contains("quality") => "Quality Review Workspace",
+            var name when name.Contains("finance") || name.Contains("account") => "Controlled Finance Workspace",
+            _ => "Department Operations Workspace"
+        };
+
+    private string ResolveDepartmentApplicationLanding(Company company, string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("sales") || name.Contains("marketing") => $"https://crm.{company.PrimaryDomain}",
+            var name when name.Contains("human") || name.Contains("people") => $"https://hris.{company.PrimaryDomain}",
+            var name when name.Contains("finance") || name.Contains("account") || name.Contains("procurement") => $"https://erp.{company.PrimaryDomain}",
+            _ => $"https://portal.{company.PrimaryDomain}"
+        };
+
+    private static string ResolveDepartmentDataClassification(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("finance") || name.Contains("account") || name.Contains("payroll") => "Confidential-Finance",
+            var name when name.Contains("human") || name.Contains("people") => "Confidential-HR",
+            var name when name.Contains("legal") || name.Contains("compliance") => "HighlyConfidential-Legal",
+            var name when name.Contains("engineering") || name.Contains("product") => "Internal-Engineering",
+            _ => "Internal-General"
+        };
+
+    private static string ResolveDepartmentRetentionLabel(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("finance") || name.Contains("account") => "Finance-7Y",
+            var name when name.Contains("human") || name.Contains("people") => "HR-6Y",
+            var name when name.Contains("quality") || name.Contains("manufacturing") => "Operations-5Y",
+            _ => "Corporate-3Y"
+        };
+
+    private static string ResolveDepartmentAssignedApps(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("sales") || name.Contains("marketing") => "CRM;PowerBI;DocuSign",
+            var name when name.Contains("support") => "ITSM;RemoteHelp;KnowledgeBase",
+            var name when name.Contains("engineering") || name.Contains("product") => "VisualStudioCode;GitHubDesktop;PowerBI",
+            var name when name.Contains("finance") || name.Contains("account") => "ERP;ExcelAddins;PowerBI",
+            var name when name.Contains("human") || name.Contains("people") => "HRIS;AdobeSign;PowerBI",
+            _ => "Microsoft365Apps;Edge;CompanyPortal"
+        };
+
+    private static string ResolveDepartmentPinnedApps(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("sales") => "Outlook;Teams;CRM;PowerBI",
+            var name when name.Contains("support") => "Teams;ITSM;RemoteHelp;Edge",
+            var name when name.Contains("engineering") => "Teams;VisualStudioCode;Edge;PowerShell",
+            _ => "Outlook;Teams;Edge;Office"
+        };
+
+    private static string ResolveDepartmentBookmarks(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("sales") => "CRM Home;Pricing Desk;Partner Portal",
+            var name when name.Contains("marketing") => "Campaign Calendar;Brand Center;Analytics",
+            var name when name.Contains("support") => "Case Console;Runbooks;Knowledge Base",
+            var name when name.Contains("engineering") => "Build Dashboard;Repo Portal;Architecture Wiki",
+            _ => "Company Portal;Intranet;Help Center"
+        };
+
+    private static string ResolveOfflineFilesPreference(string departmentName)
+        => departmentName.Contains("engineering", StringComparison.OrdinalIgnoreCase) || departmentName.Contains("sales", StringComparison.OrdinalIgnoreCase)
+            ? "true"
+            : "false";
+
+    private static string ResolveDepartmentPowerPlatformPolicy(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("finance") || name.Contains("human") => "RestrictedConnectors",
+            var name when name.Contains("operations") || name.Contains("engineering") => "ApprovedBusinessConnectors",
+            _ => "StandardConnectors"
+        };
+
+    private static string ResolveDepartmentInstallRing(string departmentName)
+        => departmentName.ToLowerInvariant() switch
+        {
+            var name when name.Contains("information technology") || name.Contains("engineering") => "Pilot",
+            var name when name.Contains("finance") || name.Contains("human") => "BroadWithApproval",
+            _ => "Broad"
+        };
+
+    private EnvironmentContainer? FindServerRoleContainer(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string activeDirectoryStoreId,
+        string serverRole)
+    {
+        var containerName = serverRole.ToLowerInvariant() switch
+        {
+            var role when role.Contains("domain") => "Identity",
+            var role when role.Contains("file") || role.Contains("print") => "File and Print",
+            var role when role.Contains("database") || role.Contains("sql") => "Database",
+            var role when role.Contains("web") => "Web",
+            var role when role.Contains("application") || role.Contains("app") => "Application",
+            var role when role.Contains("jump") || role.Contains("vpn") || role.Contains("remote") => "Remote Access",
+            _ => "Management"
+        };
+
+        return FindContainer(world, companyId, "OrganizationalUnit", activeDirectoryStoreId, containerName)
+               ?? FindContainer(world, companyId, "OrganizationalUnit", activeDirectoryStoreId, "Servers");
+    }
+
+    private IEnumerable<(string Name, string Category, string ValueType, string Value)> BuildServerRoleSettings(string serverRole, Company company)
+    {
+        var common = new List<(string, string, string, string)>
+        {
+            ("WindowsFirewallEnabled", "NetworkSecurity", "Boolean", "true"),
+            ("PowerShellTranscription", "AuditPolicy", "Boolean", "true"),
+            ("ServiceAccountRestrictionMode", "IdentityProtection", "String", "ManagedOnly"),
+            ("PatchWindow", "PatchManagement", "String", "Sunday-0200"),
+            ("ApprovedBackupPolicy", "Operations", "String", "DailyIncremental"),
+            ("MonitoringProfile", "Operations", "String", "EnterpriseStandard")
+        };
+
+        var roleSpecific = serverRole.ToLowerInvariant() switch
+        {
+            var role when role.Contains("domain") => new (string, string, string, string)[]
+            {
+                ("InteractiveLogonAllowed", "IdentityProtection", "Boolean", "false"),
+                ("DcShadowProtection", "IdentityProtection", "Boolean", "true"),
+                ("PrivilegedAccessWorkflow", "IdentityProtection", "String", "Tier0Only"),
+                ("KerberosArmoring", "Authentication", "Boolean", "true"),
+                ("LdapChannelBinding", "Authentication", "String", "Required"),
+                ("ReplicationMonitoring", "Operations", "String", "Critical")
+            },
+            var role when role.Contains("file") || role.Contains("print") => new (string, string, string, string)[]
+            {
+                ("SmbEncryptionRequired", "FileServices", "Boolean", "true"),
+                ("AccessBasedEnumeration", "FileServices", "Boolean", "true"),
+                ("PrintDriverInstallRestrictions", "PrintServices", "String", "AdminsOnly"),
+                ("RansomwareProtectionMode", "FileServices", "String", "Enhanced"),
+                ("ShadowCopySchedule", "FileServices", "String", "Daily"),
+                ("QuotaTemplate", "FileServices", "String", "DepartmentStandard")
+            },
+            var role when role.Contains("database") || role.Contains("sql") => new (string, string, string, string)[]
+            {
+                ("SqlTlsMinimumVersion", "DatabaseSecurity", "String", "TLS1.2"),
+                ("SqlAuditingEnabled", "DatabaseSecurity", "Boolean", "true"),
+                ("SqlSaAccountDisabled", "DatabaseSecurity", "Boolean", "true"),
+                ("SqlTempDbSizingProfile", "DatabasePerformance", "String", "Production"),
+                ("SqlAgentProxyRestriction", "DatabaseSecurity", "String", "ManagedAccountsOnly"),
+                ("SqlBackupEncryption", "DatabaseSecurity", "Boolean", "true")
+            },
+            var role when role.Contains("web") => new (string, string, string, string)[]
+            {
+                ("IisDynamicCompression", "WebConfiguration", "Boolean", "true"),
+                ("IisRequestFiltering", "WebSecurity", "String", "Strict"),
+                ("HttpStrictTransportSecurity", "WebSecurity", "Boolean", "true"),
+                ("TlsCertificateAutoRenewal", "WebSecurity", "Boolean", "true"),
+                ("WebAppPoolIdentityMode", "WebConfiguration", "String", "ServiceAccountOnly"),
+                ("ReverseProxyWafProfile", "WebSecurity", "String", "EnterpriseStandard")
+            },
+            var role when role.Contains("application") || role.Contains("app") => new (string, string, string, string)[]
+            {
+                ("AppServiceAccountRotation", "ApplicationSecurity", "String", "30Days"),
+                ("MiddlewareJitAdmin", "ApplicationSecurity", "Boolean", "true"),
+                ("ApprovedOutboundDestinations", "NetworkSecurity", "String", $"api.{company.PrimaryDomain};id.{company.PrimaryDomain}"),
+                ("AppTelemetryProfile", "Observability", "String", "DeepDiagnostics"),
+                ("InMemorySecretsAllowed", "ApplicationSecurity", "Boolean", "false"),
+                ("ServiceRecoveryActions", "Operations", "String", "Restart-Restart-Alert")
+            },
+            _ => new (string, string, string, string)[]
+            {
+                ("RemoteAdminSourceIps", "NetworkSecurity", "String", "CorpManagementSubnets"),
+                ("InteractiveLogonAllowed", "IdentityProtection", "Boolean", "false"),
+                ("PrivilegedSessionRecording", "AuditPolicy", "Boolean", "true"),
+                ("ChangeWindowEnforcement", "Operations", "String", "Required"),
+                ("ServiceNowChangeLinkRequired", "Operations", "Boolean", "true"),
+                ("LocalAdminBreakGlassPolicy", "IdentityProtection", "String", "EscrowedAndMonitored")
+            }
+        };
+
+        return common.Concat(roleSpecific);
+    }
+
     private void SetManagerRelationships(
         SyntheticEnterpriseWorld world,
         Company company,
@@ -415,6 +1711,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private List<DirectoryOrganizationalUnit> CreateOus(
         Company company,
         IReadOnlyList<Department> departments,
+        IReadOnlyList<Office> offices,
         string rootDomain,
         bool includeAdministrativeTiers)
     {
@@ -436,6 +1733,17 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var productionServers = CreateOu(company, "Production", servers.Id, $"OU=Production,{servers.DistinguishedName}", "Production Servers");
         var stagingServers = CreateOu(company, "Staging", servers.Id, $"OU=Staging,{servers.DistinguishedName}", "Staging Servers");
         var developmentServers = CreateOu(company, "Development", servers.Id, $"OU=Development,{servers.DistinguishedName}", "Development Servers");
+        var workstationStandard = CreateOu(company, "Corporate Standard", workstations.Id, $"OU=Corporate Standard,{workstations.DistinguishedName}", "Corporate workstation baseline");
+        var workstationRemote = CreateOu(company, "Remote Workforce", workstations.Id, $"OU=Remote Workforce,{workstations.DistinguishedName}", "Remote and mobile workforce devices");
+        var workstationKiosk = CreateOu(company, "Shared Kiosks", workstations.Id, $"OU=Shared Kiosks,{workstations.DistinguishedName}", "Shared kiosk and frontline devices");
+        var workstationIt = CreateOu(company, "IT Administration", workstations.Id, $"OU=IT Administration,{workstations.DistinguishedName}", "IT and support workstations");
+        var serverIdentity = CreateOu(company, "Identity", productionServers.Id, $"OU=Identity,{productionServers.DistinguishedName}", "Identity and directory servers");
+        var serverFilePrint = CreateOu(company, "File and Print", productionServers.Id, $"OU=File and Print,{productionServers.DistinguishedName}", "File and print servers");
+        var serverDatabase = CreateOu(company, "Database", productionServers.Id, $"OU=Database,{productionServers.DistinguishedName}", "Database servers");
+        var serverWeb = CreateOu(company, "Web", productionServers.Id, $"OU=Web,{productionServers.DistinguishedName}", "Web servers");
+        var serverApplication = CreateOu(company, "Application", productionServers.Id, $"OU=Application,{productionServers.DistinguishedName}", "Application servers");
+        var serverManagement = CreateOu(company, "Management", productionServers.Id, $"OU=Management,{productionServers.DistinguishedName}", "Management and monitoring servers");
+        var serverRemoteAccess = CreateOu(company, "Remote Access", productionServers.Id, $"OU=Remote Access,{productionServers.DistinguishedName}", "VPN and remote access servers");
 
         var result = new List<DirectoryOrganizationalUnit>
         {
@@ -453,7 +1761,18 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             servers,
             productionServers,
             stagingServers,
-            developmentServers
+            developmentServers,
+            workstationStandard,
+            workstationRemote,
+            workstationKiosk,
+            workstationIt,
+            serverIdentity,
+            serverFilePrint,
+            serverDatabase,
+            serverWeb,
+            serverApplication,
+            serverManagement,
+            serverRemoteAccess
         };
 
         if (includeAdministrativeTiers)
@@ -475,6 +1794,25 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 users.Id,
                 $"OU={EscapeDn(department.Name)},{users.DistinguishedName}",
                 "Department Users"));
+        }
+
+        foreach (var office in offices
+                     .GroupBy(office => office.City, StringComparer.OrdinalIgnoreCase)
+                     .Select(group => group.First()))
+        {
+            var officeToken = EscapeDn(office.City);
+            result.Add(CreateOu(
+                company,
+                office.City,
+                workstationStandard.Id,
+                $"OU={officeToken},{workstationStandard.DistinguishedName}",
+                "Location Workstations"));
+            result.Add(CreateOu(
+                company,
+                office.City,
+                users.Id,
+                $"OU={officeToken},{users.DistinguishedName}",
+                "Location Users"));
         }
 
         return result;
@@ -541,32 +1879,34 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         ISet<string> issuedAccountUpns,
         bool includeAdministrativeTiers)
     {
-        var targetOu = includeAdministrativeTiers
-            ? FindAdminTierOu(ous, "Tier 1") ?? ous.First(o => o.Name == "Service Accounts")
-            : ous.First(o => o.Name == "Service Accounts");
+        var defaultOu = ous.First(o => o.Name == "Service Accounts");
+        var tier1Ou = includeAdministrativeTiers
+            ? FindAdminTierOu(ous, "Tier 1") ?? defaultOu
+            : defaultOu;
         var results = new List<DirectoryAccount>();
 
         for (var i = 0; i < definition.ServiceAccountCount; i++)
         {
-            var name = $"svc_{Slug(company.Name)}_{i + 1:00}";
-            var upn = BuildUniqueDirectoryAccountUpn(name, rootDomain, issuedAccountUpns);
+            var blueprint = BuildServiceAccountBlueprint(company, i);
+            var targetOu = blueprint.AdministrativeTier is null ? defaultOu : tier1Ou;
+            var upn = BuildUniqueDirectoryAccountUpn(blueprint.UserPrincipalNameLocalPart, rootDomain, issuedAccountUpns);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(7, 180));
             results.Add(new DirectoryAccount
             {
                 Id = _idFactory.Next("ACT"),
                 CompanyId = company.Id,
                 AccountType = "Service",
-                SamAccountName = Truncate(name, 20),
+                SamAccountName = blueprint.SamAccountName,
                 UserPrincipalName = upn,
                 Mail = null,
-                DistinguishedName = $"CN={name},{targetOu.DistinguishedName}",
+                DistinguishedName = $"CN={blueprint.CommonName},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
-                Privileged = _randomSource.NextDouble() < 0.25,
+                Privileged = blueprint.Privileged,
                 MfaEnabled = false,
                 GeneratedPassword = CreateUniquePassword(issuedPasswords, 20),
-                PasswordProfile = "ServiceManaged",
-                AdministrativeTier = includeAdministrativeTiers ? "Tier1" : null,
+                PasswordProfile = blueprint.PasswordProfile,
+                AdministrativeTier = blueprint.AdministrativeTier,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = null,
                 PasswordNeverExpires = true,
@@ -686,6 +2026,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private List<DirectoryGroup> CreateGroups(
         Company company,
         IReadOnlyList<Department> departments,
+        IReadOnlyList<Team> teams,
+        IReadOnlyList<DirectoryAccount> accounts,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         bool includeAdministrativeTiers)
     {
@@ -694,32 +2036,71 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         foreach (var department in departments)
         {
-            var slug = Slug(department.Name);
-            result.Add(CreateGroup(company, $"SG-{slug}-Users", "Security", "Global", false, groupsOu, $"Baseline access for {department.Name}"));
-            result.Add(CreateGroup(company, $"DL-{slug}", "Distribution", "Universal", true, groupsOu, $"Mail distribution for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentUserGroupName(department), "Security", "Global", false, groupsOu, $"Baseline access for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentDistributionGroupName(department), "Distribution", "Universal", true, groupsOu, $"Mail distribution for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentLeadershipGroupName(department), "Distribution", "Universal", true, groupsOu, $"Management and leads for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentFileAccessGroupName(department), "Security", "DomainLocal", false, groupsOu, $"{department.Name} departmental file share access"));
+            result.Add(CreateGroup(company, DepartmentMailboxAccessGroupName(department), "Security", "DomainLocal", false, groupsOu, $"{department.Name} shared mailbox delegation"));
         }
 
-        result.Add(CreateGroup(company, "SG-AllEmployees", "Security", "Global", false, groupsOu, "All employee baseline access"));
-        result.Add(CreateGroup(company, "M365-AllEmployees", "M365", "Universal", true, groupsOu, "Collaboration membership"));
-        result.Add(CreateGroup(company, "SG-ExternalContractors", "Security", "Global", false, groupsOu, "External contractor baseline access"));
-        result.Add(CreateGroup(company, "SG-MSP-Operators", "Security", "Global", false, groupsOu, "Managed service provider operator access"));
-        result.Add(CreateGroup(company, "SG-B2BGuests", "Security", "Global", false, groupsOu, "B2B guest collaboration access"));
-        result.Add(CreateGroup(company, "M365-GuestCollaboration", "M365", "Universal", true, groupsOu, "Guest collaboration membership"));
+        result.Add(CreateGroup(company, AllEmployeesSecurityGroupName(), "Security", "Global", false, groupsOu, "All employee baseline access"));
+        result.Add(CreateGroup(company, "M365 All Employees", "M365", "Universal", true, groupsOu, "Collaboration membership"));
+        result.Add(CreateGroup(company, AllEmployeesDistributionGroupName(), "Distribution", "Universal", true, groupsOu, "All employee announcements"));
+        result.Add(CreateGroup(company, AllManagersDistributionGroupName(), "Distribution", "Universal", true, groupsOu, "Manager and leadership announcements"));
+        result.Add(CreateGroup(company, ExternalContractorsGroupName(), "Security", "Global", false, groupsOu, "External contractor baseline access"));
+        result.Add(CreateGroup(company, MspOperatorsGroupName(), "Security", "Global", false, groupsOu, "Managed service provider operator access"));
+        result.Add(CreateGroup(company, B2BGuestsGroupName(), "Security", "Global", false, groupsOu, "B2B guest collaboration access"));
+        result.Add(CreateGroup(company, "M365 Guest Collaboration", "M365", "Universal", true, groupsOu, "Guest collaboration membership"));
+        result.Add(CreateGroup(company, VpnUsersGroupName(), "Security", "Global", false, groupsOu, "VPN user assignment"));
+        result.Add(CreateGroup(company, CorpWifiUsersGroupName(), "Security", "Global", false, groupsOu, "Corporate Wi-Fi access"));
+        result.Add(CreateGroup(company, OfficeUsersGroupName(), "Security", "Global", false, groupsOu, "Microsoft 365 and Office productivity user access"));
+        result.Add(CreateGroup(company, OfficeAdminsGroupName(), "Security", "Global", false, groupsOu, "Microsoft 365 and Office administration"));
+        result.Add(CreateGroup(company, ErpUsersGroupName(), "Security", "Global", false, groupsOu, "ERP user access"));
+        result.Add(CreateGroup(company, ErpAdminsGroupName(), "Security", "Global", false, groupsOu, "ERP administration"));
+        result.Add(CreateGroup(company, CrmUsersGroupName(), "Security", "Global", false, groupsOu, "CRM user access"));
+        result.Add(CreateGroup(company, CrmAdminsGroupName(), "Security", "Global", false, groupsOu, "CRM administration"));
+        result.Add(CreateGroup(company, HrisUsersGroupName(), "Security", "Global", false, groupsOu, "HRIS user access"));
+        result.Add(CreateGroup(company, HrisAdminsGroupName(), "Security", "Global", false, groupsOu, "HRIS administration"));
+        result.Add(CreateGroup(company, ItsmAgentsGroupName(), "Security", "Global", false, groupsOu, "ITSM analyst and agent access"));
+        result.Add(CreateGroup(company, ItsmAdminsGroupName(), "Security", "Global", false, groupsOu, "ITSM administrator access"));
+        result.Add(CreateGroup(company, BrowserPilotUsersGroupName(), "Security", "Global", false, groupsOu, "Enterprise browser pilot and staged compatibility users"));
+        result.Add(CreateGroup(company, RemoteSupportOperatorsGroupName(), "Security", "Global", false, groupsOu, "Remote support and assistance operators"));
+        result.Add(CreateGroup(company, ServerRemoteDesktopUsersGroupName(), "Security", "Global", false, groupsOu, "Authorized server remote desktop users"));
+        result.Add(CreateGroup(company, ServerRemoteDesktopAdminsGroupName(), "Security", "Global", false, groupsOu, "Server remote desktop administrators"));
+        result.Add(CreateGroup(company, SqlAdminsGroupName(), "Security", "Global", false, groupsOu, "Database administrators"));
+        result.Add(CreateGroup(company, BackupOperatorsGroupName(), "Security", "Global", false, groupsOu, "Backup and restore operators"));
+        result.Add(CreateGroup(company, GroupPolicyEditorsGroupName(), "Security", "Global", false, groupsOu, "Group Policy editors and reviewers"));
+        result.Add(CreateGroup(company, LapsReadersGroupName(), "Security", "Global", false, groupsOu, "LAPS password readers"));
+        result.Add(CreateGroup(company, PasswordResetOperatorsGroupName(), "Security", "Global", false, groupsOu, "Password reset operators"));
+        result.Add(CreateGroup(company, WorkstationJoinOperatorsGroupName(), "Security", "Global", false, groupsOu, "Delegated workstation join operators"));
+        result.Add(CreateGroup(company, PrintOperatorsGroupName(), "Security", "Global", false, groupsOu, "Printer and queue operators"));
+
+        foreach (var team in teams)
+        {
+            var department = departments.FirstOrDefault(candidate => candidate.Id == team.DepartmentId);
+            result.Add(CreateGroup(company, TeamUserGroupName(department, team), "Security", "Global", false, groupsOu, $"Team access for {team.Name}"));
+            result.Add(CreateGroup(company, TeamDistributionGroupName(department, team), "Distribution", "Universal", true, groupsOu, $"Mail distribution for {team.Name}"));
+        }
+
+        foreach (var sharedAccount in accounts.Where(account => account.CompanyId == company.Id && account.AccountType == "Shared"))
+        {
+            result.Add(CreateGroup(company, SharedMailboxAccessGroupName(sharedAccount), "Security", "DomainLocal", false, groupsOu, $"Delegated access for shared mailbox {sharedAccount.UserPrincipalName}"));
+        }
 
         if (includeAdministrativeTiers)
         {
-            result.Add(CreateGroup(company, "SG-PrivilegedAccess", "Security", "Universal", false, groupsOu, "Umbrella privileged access group", "Tier0"));
-            result.Add(CreateGroup(company, "SG-Tier0-IdentityAdmins", "Security", "Global", false, groupsOu, "Tier 0 identity administrators", "Tier0"));
-            result.Add(CreateGroup(company, "SG-Tier0-PAW-Users", "Security", "Global", false, groupsOu, "Tier 0 privileged access workstation users", "Tier0"));
-            result.Add(CreateGroup(company, "SG-Tier0-PAW-Devices", "Security", "Global", false, groupsOu, "Tier 0 privileged access workstation devices", "Tier0"));
-            result.Add(CreateGroup(company, "SG-Tier1-ServerAdmins", "Security", "Global", false, groupsOu, "Tier 1 server administrators", "Tier1"));
-            result.Add(CreateGroup(company, "SG-Tier1-WorkstationAdmins", "Security", "Global", false, groupsOu, "Tier 1 workstation administrators", "Tier1"));
-            result.Add(CreateGroup(company, "SG-Tier1-PAW-Users", "Security", "Global", false, groupsOu, "Tier 1 privileged access workstation users", "Tier1"));
-            result.Add(CreateGroup(company, "SG-Tier1-PAW-Devices", "Security", "Global", false, groupsOu, "Tier 1 privileged access workstation devices", "Tier1"));
-            result.Add(CreateGroup(company, "SG-Tier1-ManagedWorkstations", "Security", "Global", false, groupsOu, "Tier 1 managed workstation computer objects", "Tier1"));
-            result.Add(CreateGroup(company, "SG-Tier1-ManagedServers", "Security", "Global", false, groupsOu, "Tier 1 managed server computer objects", "Tier1"));
-            result.Add(CreateGroup(company, "SG-Tier2-Helpdesk", "Security", "Global", false, groupsOu, "Tier 2 helpdesk operators", "Tier2"));
-            result.Add(CreateGroup(company, "SG-Tier2-ApplicationSupport", "Security", "Global", false, groupsOu, "Tier 2 application support", "Tier2"));
+            result.Add(CreateGroup(company, PrivilegedAccessGroupName(), "Security", "Universal", false, groupsOu, "Umbrella privileged access group", "Tier0"));
+            result.Add(CreateGroup(company, Tier0IdentityAdminsGroupName(), "Security", "Global", false, groupsOu, "Tier 0 identity administrators", "Tier0"));
+            result.Add(CreateGroup(company, Tier0PawUsersGroupName(), "Security", "Global", false, groupsOu, "Tier 0 privileged access workstation users", "Tier0"));
+            result.Add(CreateGroup(company, Tier0PawDevicesGroupName(), "Security", "Global", false, groupsOu, "Tier 0 privileged access workstation devices", "Tier0"));
+            result.Add(CreateGroup(company, Tier1ServerAdminsGroupName(), "Security", "Global", false, groupsOu, "Tier 1 server administrators", "Tier1"));
+            result.Add(CreateGroup(company, Tier1WorkstationAdminsGroupName(), "Security", "Global", false, groupsOu, "Tier 1 workstation administrators", "Tier1"));
+            result.Add(CreateGroup(company, Tier1PawUsersGroupName(), "Security", "Global", false, groupsOu, "Tier 1 privileged access workstation users", "Tier1"));
+            result.Add(CreateGroup(company, Tier1PawDevicesGroupName(), "Security", "Global", false, groupsOu, "Tier 1 privileged access workstation devices", "Tier1"));
+            result.Add(CreateGroup(company, Tier1ManagedWorkstationsGroupName(), "Security", "Global", false, groupsOu, "Tier 1 managed workstation computer objects", "Tier1"));
+            result.Add(CreateGroup(company, Tier1ManagedServersGroupName(), "Security", "Global", false, groupsOu, "Tier 1 managed server computer objects", "Tier1"));
+            result.Add(CreateGroup(company, Tier2HelpdeskGroupName(), "Security", "Global", false, groupsOu, "Tier 2 helpdesk operators", "Tier2"));
+            result.Add(CreateGroup(company, Tier2ApplicationSupportGroupName(), "Security", "Global", false, groupsOu, "Tier 2 application support", "Tier2"));
         }
 
         return result;
@@ -728,6 +2109,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private List<DirectoryGroupMembership> CreateMemberships(
         Company company,
         IReadOnlyList<Department> departments,
+        IReadOnlyList<Team> teams,
         IReadOnlyList<Person> people,
         IReadOnlyList<DirectoryGroup> groups,
         IReadOnlyList<DirectoryAccount> accounts,
@@ -736,27 +2118,60 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var results = new List<DirectoryGroupMembership>();
         var userAccounts = accounts.Where(a => a.CompanyId == company.Id && (a.AccountType == "User" || a.AccountType == "Contractor")).ToList();
         var privilegedAccounts = accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "Privileged").ToList();
+        var sharedAccounts = accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "Shared").ToList();
 
-        var allEmployeesGroup = FindGroup(groups, company.Id, "SG-AllEmployees");
-        var m365Group = FindGroup(groups, company.Id, "M365-AllEmployees");
+        var allEmployeesGroup = FindGroup(groups, company.Id, AllEmployeesSecurityGroupName());
+        var m365Group = FindGroup(groups, company.Id, "M365 All Employees");
+        var allEmployeesDl = FindGroup(groups, company.Id, AllEmployeesDistributionGroupName());
+        var allManagersDl = FindGroup(groups, company.Id, AllManagersDistributionGroupName());
+        var vpnUsers = FindGroup(groups, company.Id, VpnUsersGroupName());
+        var wifiUsers = FindGroup(groups, company.Id, CorpWifiUsersGroupName());
+        var officeUsers = FindGroup(groups, company.Id, OfficeUsersGroupName());
+        var browserPilotUsers = FindGroup(groups, company.Id, BrowserPilotUsersGroupName());
+        var remoteSupportOperators = FindGroup(groups, company.Id, RemoteSupportOperatorsGroupName());
+        var rdpUsers = FindGroup(groups, company.Id, ServerRemoteDesktopUsersGroupName());
+        var rdpAdmins = FindGroup(groups, company.Id, ServerRemoteDesktopAdminsGroupName());
+        var sqlAdmins = FindGroup(groups, company.Id, SqlAdminsGroupName());
+        var backupOperators = FindGroup(groups, company.Id, BackupOperatorsGroupName());
+        var gpoEditors = FindGroup(groups, company.Id, GroupPolicyEditorsGroupName());
+        var lapsReaders = FindGroup(groups, company.Id, LapsReadersGroupName());
+        var passwordResetOperators = FindGroup(groups, company.Id, PasswordResetOperatorsGroupName());
+        var workstationJoiners = FindGroup(groups, company.Id, WorkstationJoinOperatorsGroupName());
+        var printOperators = FindGroup(groups, company.Id, PrintOperatorsGroupName());
+        var erpUsers = FindGroup(groups, company.Id, ErpUsersGroupName());
+        var erpAdmins = FindGroup(groups, company.Id, ErpAdminsGroupName());
+        var crmUsers = FindGroup(groups, company.Id, CrmUsersGroupName());
+        var crmAdmins = FindGroup(groups, company.Id, CrmAdminsGroupName());
+        var hrisUsers = FindGroup(groups, company.Id, HrisUsersGroupName());
+        var hrisAdmins = FindGroup(groups, company.Id, HrisAdminsGroupName());
+        var itsmAgents = FindGroup(groups, company.Id, ItsmAgentsGroupName());
+        var itsmAdmins = FindGroup(groups, company.Id, ItsmAdminsGroupName());
 
         foreach (var account in userAccounts)
         {
-            if (m365Group is not null)
-            {
-                results.Add(CreateMembership(m365Group.Id, account.Id, "Account"));
-            }
+            AddMembershipIfPresent(results, m365Group, account.Id, "Account");
+            AddMembershipIfPresent(results, allEmployeesDl, account.Id, "Account");
+            AddMembershipIfPresent(results, vpnUsers, account.Id, "Account");
+            AddMembershipIfPresent(results, wifiUsers, account.Id, "Account");
+            AddMembershipIfPresent(results, officeUsers, account.Id, "Account");
         }
 
         foreach (var department in departments)
         {
-            var sg = FindGroup(groups, company.Id, $"SG-{Slug(department.Name)}-Users");
-            var dl = FindGroup(groups, company.Id, $"DL-{Slug(department.Name)}");
+            var sg = FindGroup(groups, company.Id, DepartmentUserGroupName(department));
+            var dl = FindGroup(groups, company.Id, DepartmentDistributionGroupName(department));
+            var leadershipDl = FindGroup(groups, company.Id, DepartmentLeadershipGroupName(department));
+            var fileShareGroup = FindGroup(groups, company.Id, DepartmentFileAccessGroupName(department));
+            var mailboxAccessGroup = FindGroup(groups, company.Id, DepartmentMailboxAccessGroupName(department));
 
             if (allEmployeesGroup is not null && sg is not null)
             {
                 results.Add(CreateMembership(allEmployeesGroup.Id, sg.Id, "Group"));
             }
+
+            AddMembershipIfPresent(results, fileShareGroup, sg?.Id, "Group");
+            AddMembershipIfPresent(results, mailboxAccessGroup, sg?.Id, "Group");
+            AddDepartmentResourceMemberships(results, department, sg, groups, company.Id);
 
             var deptPeople = people.Where(p => p.CompanyId == company.Id && p.DepartmentId == department.Id).ToList();
             foreach (var person in deptPeople)
@@ -776,6 +2191,63 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 {
                     results.Add(CreateMembership(dl.Id, account.Id, "Account"));
                 }
+
+                var title = person.Title ?? string.Empty;
+                if (IsLeadershipTitle(title))
+                {
+                    AddMembershipIfPresent(results, leadershipDl, account.Id, "Account");
+                    AddMembershipIfPresent(results, allManagersDl, account.Id, "Account");
+                }
+
+                if (LooksLikePilotUser(person))
+                {
+                    AddMembershipIfPresent(results, browserPilotUsers, account.Id, "Account");
+                }
+
+                if (LooksLikeSupportUser(person))
+                {
+                    AddMembershipIfPresent(results, remoteSupportOperators, account.Id, "Account");
+                    AddMembershipIfPresent(results, passwordResetOperators, account.Id, "Account");
+                    AddMembershipIfPresent(results, printOperators, account.Id, "Account");
+                }
+
+                if (LooksLikeServerAdmin(title))
+                {
+                    AddMembershipIfPresent(results, rdpUsers, account.Id, "Account");
+                }
+            }
+        }
+
+        foreach (var team in teams)
+        {
+            var department = departments.FirstOrDefault(candidate => candidate.Id == team.DepartmentId);
+            var teamSg = FindGroup(groups, company.Id, TeamUserGroupName(department, team));
+            var teamDl = FindGroup(groups, company.Id, TeamDistributionGroupName(department, team));
+
+            foreach (var person in people.Where(p => p.CompanyId == company.Id && p.TeamId == team.Id))
+            {
+                var account = userAccounts.FirstOrDefault(a => a.PersonId == person.Id);
+                if (account is null)
+                {
+                    continue;
+                }
+
+                AddMembershipIfPresent(results, teamSg, account.Id, "Account");
+                AddMembershipIfPresent(results, teamDl, account.Id, "Account");
+            }
+        }
+
+        foreach (var sharedAccount in sharedAccounts)
+        {
+            var mailboxGroup = FindGroup(groups, company.Id, SharedMailboxAccessGroupName(sharedAccount));
+            if (mailboxGroup is null)
+            {
+                continue;
+            }
+
+            foreach (var departmentGroup in ResolveSharedMailboxDepartmentGroups(sharedAccount, groups, departments, company.Id))
+            {
+                AddMembershipIfPresent(results, mailboxGroup, departmentGroup.Id, "Group");
             }
         }
 
@@ -795,14 +2267,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         if (includeAdministrativeTiers)
         {
-            var privilegedUmbrella = FindGroup(groups, company.Id, "SG-PrivilegedAccess");
-            var tier0 = FindGroup(groups, company.Id, "SG-Tier0-IdentityAdmins");
-            var tier0Paw = FindGroup(groups, company.Id, "SG-Tier0-PAW-Users");
-            var tier1Server = FindGroup(groups, company.Id, "SG-Tier1-ServerAdmins");
-            var tier1Workstation = FindGroup(groups, company.Id, "SG-Tier1-WorkstationAdmins");
-            var tier1Paw = FindGroup(groups, company.Id, "SG-Tier1-PAW-Users");
-            var tier2Helpdesk = FindGroup(groups, company.Id, "SG-Tier2-Helpdesk");
-            var tier2AppSupport = FindGroup(groups, company.Id, "SG-Tier2-ApplicationSupport");
+            var privilegedUmbrella = FindGroup(groups, company.Id, PrivilegedAccessGroupName());
+            var tier0 = FindGroup(groups, company.Id, Tier0IdentityAdminsGroupName());
+            var tier0Paw = FindGroup(groups, company.Id, Tier0PawUsersGroupName());
+            var tier1Server = FindGroup(groups, company.Id, Tier1ServerAdminsGroupName());
+            var tier1Workstation = FindGroup(groups, company.Id, Tier1WorkstationAdminsGroupName());
+            var tier1Paw = FindGroup(groups, company.Id, Tier1PawUsersGroupName());
+            var tier2Helpdesk = FindGroup(groups, company.Id, Tier2HelpdeskGroupName());
+            var tier2AppSupport = FindGroup(groups, company.Id, Tier2ApplicationSupportGroupName());
 
             foreach (var adminGroup in new[] { tier0, tier0Paw, tier1Server, tier1Workstation, tier1Paw, tier2Helpdesk, tier2AppSupport })
             {
@@ -811,6 +2283,19 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                     results.Add(CreateMembership(privilegedUmbrella.Id, adminGroup.Id, "Group"));
                 }
             }
+
+            AddMembershipIfPresent(results, gpoEditors, tier1Workstation?.Id, "Group");
+            AddMembershipIfPresent(results, gpoEditors, tier1Server?.Id, "Group");
+            AddMembershipIfPresent(results, gpoEditors, tier0?.Id, "Group");
+            AddMembershipIfPresent(results, lapsReaders, tier1Workstation?.Id, "Group");
+            AddMembershipIfPresent(results, lapsReaders, tier2Helpdesk?.Id, "Group");
+            AddMembershipIfPresent(results, passwordResetOperators, tier2Helpdesk?.Id, "Group");
+            AddMembershipIfPresent(results, workstationJoiners, tier1Workstation?.Id, "Group");
+            AddMembershipIfPresent(results, remoteSupportOperators, tier2Helpdesk?.Id, "Group");
+            AddMembershipIfPresent(results, backupOperators, tier1Server?.Id, "Group");
+            AddMembershipIfPresent(results, rdpAdmins, tier1Server?.Id, "Group");
+            AddMembershipIfPresent(results, sqlAdmins, tier1Server?.Id, "Group");
+            AddMembershipIfPresent(results, itsmAdmins, tier2AppSupport?.Id, "Group");
 
             foreach (var account in privilegedAccounts)
             {
@@ -832,7 +2317,52 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             }
         }
 
-        return results;
+        foreach (var account in userAccounts)
+        {
+            var person = people.FirstOrDefault(candidate => candidate.Id == account.PersonId);
+            if (person is null)
+            {
+                continue;
+            }
+
+            if (MatchesDepartment(person, departments, "finance", "accounting", "payroll", "procurement"))
+            {
+                AddMembershipIfPresent(results, erpUsers, account.Id, "Account");
+            }
+
+            if (MatchesDepartment(person, departments, "human resources", "hr", "people"))
+            {
+                AddMembershipIfPresent(results, hrisUsers, account.Id, "Account");
+            }
+
+            if (MatchesDepartment(person, departments, "sales", "marketing", "customer", "commercial"))
+            {
+                AddMembershipIfPresent(results, crmUsers, account.Id, "Account");
+            }
+
+            if (MatchesDepartment(person, departments, "information technology", "it", "security", "operations", "engineering", "platform", "infrastructure"))
+            {
+                AddMembershipIfPresent(results, itsmAgents, account.Id, "Account");
+            }
+
+            if (IsLeadershipTitle(person.Title ?? string.Empty))
+            {
+                AddMembershipIfPresent(results, erpAdmins, account.Id, "Account");
+                if (MatchesDepartment(person, departments, "sales", "marketing"))
+                {
+                    AddMembershipIfPresent(results, crmAdmins, account.Id, "Account");
+                }
+
+                if (MatchesDepartment(person, departments, "human resources", "hr", "people"))
+                {
+                    AddMembershipIfPresent(results, hrisAdmins, account.Id, "Account");
+                }
+            }
+        }
+
+        return results
+            .DistinctBy(membership => $"{membership.GroupId}|{membership.MemberObjectId}|{membership.MemberObjectType}", StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private List<ExternalOrganization> EnsureExternalIdentityOrganizations(
@@ -855,7 +2385,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         {
             EnsureExternalOrganization(world, company, "NorthPeak Talent Partners", "StaffingPartner", country, ownerDepartmentId, "ExternalWorkforce", "Medium", "northpeaktalent.example"),
             EnsureExternalOrganization(world, company, "BlueRiver Managed Services", "ManagedServiceProvider", country, ownerDepartmentId, "ManagedServices", "High", "blueriverms.example"),
-            EnsureExternalOrganization(world, company, $"{company.Name} Partner Collaboration", "Partner", country, ownerDepartmentId, "B2BPartner", "Medium", $"partners.{rootDomain}")
+            EnsureExternalOrganization(world, company, "NorthBridge Supply Alliance", "Partner", country, ownerDepartmentId, "B2BPartner", "Medium", "northbridgesupply.example")
         };
     }
 
@@ -870,6 +2400,16 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string criticality,
         string websiteHost)
     {
+        if (string.Equals(name, company.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            name = $"{name} {country} {relationshipType switch
+            {
+                "Vendor" => "Supply Network",
+                "ManagedServiceProvider" => "Services",
+                _ => "Partner Services"
+            }}";
+        }
+
         var existing = world.ExternalOrganizations.FirstOrDefault(organization =>
             organization.CompanyId == company.Id
             && string.Equals(organization.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -892,6 +2432,26 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 _ => $"Serving {company.Name} workforce and operations"
             },
             RelationshipType = relationshipType,
+            RelationshipBasis = relationshipType switch
+            {
+                "ManagedServiceProvider" => "ManagedService",
+                "StaffingPartner" => "ContractedLabor",
+                "Partner" => "BusinessPartnership",
+                _ => "ExternalWorkforce"
+            },
+            RelationshipScope = relationshipType switch
+            {
+                "ManagedServiceProvider" => "Enterprise",
+                "StaffingPartner" => "Department",
+                _ => "BusinessUnit"
+            },
+            RelationshipDefinition = relationshipType switch
+            {
+                "ManagedServiceProvider" => $"{name} provides managed services supporting {company.Name} operations.",
+                "StaffingPartner" => $"{name} supplies temporary contracted labor to support {company.Name}.",
+                "Partner" => $"{name} collaborates with {company.Name} on external workforce operations.",
+                _ => $"{name} participates in the extended workforce supporting {company.Name}."
+            },
             Industry = company.Industry,
             Country = country,
             PrimaryDomain = websiteHost,
@@ -1273,10 +2833,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var groupsOu = ous.First(o => o.Name == "Groups");
         return new List<DirectoryGroup>
         {
-            CreateGroup(company, "SG-ExternalContractors", "Security", "Global", false, groupsOu, "External contractor baseline access"),
-            CreateGroup(company, "SG-MSP-Operators", "Security", "Global", false, groupsOu, "Managed service provider operator access"),
-            CreateGroup(company, "SG-B2BGuests", "Security", "Global", false, groupsOu, "B2B guest collaboration access"),
-            CreateGroup(company, "M365-GuestCollaboration", "M365", "Universal", true, groupsOu, "Guest collaboration membership")
+            CreateGroup(company, ExternalContractorsGroupName(), "Security", "Global", false, groupsOu, "External contractor baseline access"),
+            CreateGroup(company, MspOperatorsGroupName(), "Security", "Global", false, groupsOu, "Managed service provider operator access"),
+            CreateGroup(company, B2BGuestsGroupName(), "Security", "Global", false, groupsOu, "B2B guest collaboration access"),
+            CreateGroup(company, "M365 Guest Collaboration", "M365", "Universal", true, groupsOu, "Guest collaboration membership")
         };
     }
 
@@ -1288,12 +2848,12 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Department> departments)
     {
         var results = new List<DirectoryGroupMembership>();
-        var contractorsGroup = FindGroup(groups, company.Id, "SG-ExternalContractors");
-        var mspGroup = FindGroup(groups, company.Id, "SG-MSP-Operators");
-        var guestsGroup = FindGroup(groups, company.Id, "SG-B2BGuests");
-        var guestCollaboration = FindGroup(groups, company.Id, "M365-GuestCollaboration");
-        var allEmployeesGroup = FindGroup(groups, company.Id, "SG-AllEmployees");
-        var m365AllEmployees = FindGroup(groups, company.Id, "M365-AllEmployees");
+        var contractorsGroup = FindGroup(groups, company.Id, ExternalContractorsGroupName());
+        var mspGroup = FindGroup(groups, company.Id, MspOperatorsGroupName());
+        var guestsGroup = FindGroup(groups, company.Id, B2BGuestsGroupName());
+        var guestCollaboration = FindGroup(groups, company.Id, "M365 Guest Collaboration");
+        var allEmployeesGroup = FindGroup(groups, company.Id, AllEmployeesSecurityGroupName());
+        var m365AllEmployees = FindGroup(groups, company.Id, "M365 All Employees");
 
         foreach (var account in externalAccounts)
         {
@@ -1857,7 +3417,316 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
 
         return groups.FirstOrDefault(group =>
-            string.Equals(group.Name, $"SG-{Slug(department.Name)}-Users", StringComparison.OrdinalIgnoreCase));
+            string.Equals(group.Name, DepartmentUserGroupName(department), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void AddMembershipIfPresent(List<DirectoryGroupMembership> memberships, DirectoryGroup? group, string? memberObjectId, string memberObjectType)
+    {
+        if (group is null || string.IsNullOrWhiteSpace(memberObjectId))
+        {
+            return;
+        }
+
+        memberships.Add(CreateMembership(group.Id, memberObjectId, memberObjectType));
+    }
+
+    private void AddDepartmentResourceMemberships(
+        List<DirectoryGroupMembership> memberships,
+        Department department,
+        DirectoryGroup? departmentGroup,
+        IReadOnlyList<DirectoryGroup> groups,
+        string companyId)
+    {
+        if (departmentGroup is null)
+        {
+            return;
+        }
+
+        var normalized = department.Name.ToLowerInvariant();
+        if (normalized.Contains("finance") || normalized.Contains("account") || normalized.Contains("payroll") || normalized.Contains("procurement"))
+        {
+            AddMembershipIfPresent(memberships, FindGroup(groups, companyId, ErpUsersGroupName()), departmentGroup.Id, "Group");
+        }
+
+        if (normalized.Contains("human") || normalized.Contains("people") || normalized == "hr")
+        {
+            AddMembershipIfPresent(memberships, FindGroup(groups, companyId, HrisUsersGroupName()), departmentGroup.Id, "Group");
+        }
+
+        if (normalized.Contains("sales") || normalized.Contains("marketing") || normalized.Contains("commercial") || normalized.Contains("customer"))
+        {
+            AddMembershipIfPresent(memberships, FindGroup(groups, companyId, CrmUsersGroupName()), departmentGroup.Id, "Group");
+        }
+
+        if (normalized.Contains("information technology") || normalized == "it" || normalized.Contains("engineering") || normalized.Contains("security") || normalized.Contains("operations") || normalized.Contains("platform") || normalized.Contains("infrastructure"))
+        {
+            AddMembershipIfPresent(memberships, FindGroup(groups, companyId, ItsmAgentsGroupName()), departmentGroup.Id, "Group");
+        }
+    }
+
+    private static IEnumerable<DirectoryGroup> ResolveSharedMailboxDepartmentGroups(
+        DirectoryAccount sharedAccount,
+        IReadOnlyList<DirectoryGroup> groups,
+        IReadOnlyList<Department> departments,
+        string companyId)
+    {
+        var token = (sharedAccount.SamAccountName ?? string.Empty).ToLowerInvariant();
+        foreach (var department in departments)
+        {
+            var departmentName = department.Name.ToLowerInvariant();
+            var match =
+                (token.Contains("helpdesk") || token.Contains("itops")) && (departmentName.Contains("information technology") || departmentName.Contains("operations")) ||
+                token.Contains("payroll") && (departmentName.Contains("finance") || departmentName.Contains("account")) ||
+                token.Contains("accountspayable") && departmentName.Contains("finance") ||
+                token.Contains("salesops") && (departmentName.Contains("sales") || departmentName.Contains("marketing")) ||
+                token.Contains("recruiting") && (departmentName.Contains("human") || departmentName.Contains("people") || departmentName == "hr") ||
+                token.Contains("facilities") && (departmentName.Contains("operations") || departmentName.Contains("facilities"));
+
+            if (match)
+            {
+                var group = FindGroup(groups, companyId, DepartmentUserGroupName(department));
+                if (group is not null)
+                {
+                    yield return group;
+                }
+            }
+        }
+    }
+
+    private static string DepartmentUserGroupName(Department department)
+        => $"GG {department.Name} Users";
+
+    private static string DepartmentDistributionGroupName(Department department)
+        => $"DL {department.Name}";
+
+    private static string DepartmentLeadershipGroupName(Department department)
+        => $"DL {department.Name} Leadership";
+
+    private static string DepartmentFileAccessGroupName(Department department)
+        => $"ACL FS {department.Name} Modify";
+
+    private static string DepartmentMailboxAccessGroupName(Department department)
+        => $"ACL MBX {department.Name} Shared";
+
+    private static string TeamUserGroupName(Department? department, Team team)
+        => department is null ? $"GG {team.Name}" : $"GG {department.Name} {team.Name}";
+
+    private static string TeamDistributionGroupName(Department? department, Team team)
+        => department is null ? $"DL {team.Name}" : $"DL {department.Name} {team.Name}";
+
+    private static string SharedMailboxAccessGroupName(DirectoryAccount sharedAccount)
+        => $"ACL MBX {ResolveMailboxToken(sharedAccount)} Access";
+
+    private static string AllEmployeesSecurityGroupName()
+        => "GG All Employees";
+
+    private static string AllEmployeesDistributionGroupName()
+        => "DL All Employees";
+
+    private static string AllManagersDistributionGroupName()
+        => "DL People Leaders";
+
+    private static string ExternalContractorsGroupName()
+        => "GG External Contractors";
+
+    private static string MspOperatorsGroupName()
+        => "GG MSP Operations";
+
+    private static string B2BGuestsGroupName()
+        => "GG B2B Guests";
+
+    private static string VpnUsersGroupName()
+        => "GG VPN Users";
+
+    private static string CorpWifiUsersGroupName()
+        => "GG Corp WiFi Users";
+
+    private static string OfficeUsersGroupName()
+        => "GG Microsoft 365 Users";
+
+    private static string OfficeAdminsGroupName()
+        => "GG Microsoft 365 Admins";
+
+    private static string ErpUsersGroupName()
+        => "GG ERP Users";
+
+    private static string ErpAdminsGroupName()
+        => "GG ERP Admins";
+
+    private static string CrmUsersGroupName()
+        => "GG CRM Users";
+
+    private static string CrmAdminsGroupName()
+        => "GG CRM Admins";
+
+    private static string HrisUsersGroupName()
+        => "GG HRIS Users";
+
+    private static string HrisAdminsGroupName()
+        => "GG HRIS Admins";
+
+    private static string ItsmAgentsGroupName()
+        => "GG ITSM Agents";
+
+    private static string ItsmAdminsGroupName()
+        => "GG ITSM Admins";
+
+    private static string BrowserPilotUsersGroupName()
+        => "GG Browser Pilot Users";
+
+    private static string RemoteSupportOperatorsGroupName()
+        => "GG Remote Support Operators";
+
+    private static string ServerRemoteDesktopUsersGroupName()
+        => "GG Server Remote Desktop Users";
+
+    private static string ServerRemoteDesktopAdminsGroupName()
+        => "GG Server Remote Desktop Admins";
+
+    private static string SqlAdminsGroupName()
+        => "GG SQL Administrators";
+
+    private static string BackupOperatorsGroupName()
+        => "GG Backup Operators";
+
+    private static string GroupPolicyEditorsGroupName()
+        => "GG Group Policy Editors";
+
+    private static string LapsReadersGroupName()
+        => "GG LAPS Readers";
+
+    private static string PasswordResetOperatorsGroupName()
+        => "GG Password Reset Operators";
+
+    private static string WorkstationJoinOperatorsGroupName()
+        => "GG Workstation Join Operators";
+
+    private static string PrintOperatorsGroupName()
+        => "GG Print Operators";
+
+    private static string PrivilegedAccessGroupName()
+        => "UG Privileged Access";
+
+    private static string Tier0IdentityAdminsGroupName()
+        => "GG Tier0 Identity Admins";
+
+    private static string Tier0PawUsersGroupName()
+        => "GG Tier0 PAW Users";
+
+    private static string Tier0PawDevicesGroupName()
+        => "GG Tier0 PAW Devices";
+
+    private static string Tier1ServerAdminsGroupName()
+        => "GG Tier1 Server Admins";
+
+    private static string Tier1WorkstationAdminsGroupName()
+        => "GG Tier1 Workstation Admins";
+
+    private static string Tier1PawUsersGroupName()
+        => "GG Tier1 PAW Users";
+
+    private static string Tier1PawDevicesGroupName()
+        => "GG Tier1 PAW Devices";
+
+    private static string Tier1ManagedWorkstationsGroupName()
+        => "GG Tier1 Managed Workstations";
+
+    private static string Tier1ManagedServersGroupName()
+        => "GG Tier1 Managed Servers";
+
+    private static string Tier2HelpdeskGroupName()
+        => "GG Tier2 Helpdesk";
+
+    private static string Tier2ApplicationSupportGroupName()
+        => "GG Tier2 Application Support";
+
+    private static string ResolveMailboxToken(DirectoryAccount sharedAccount)
+        => sharedAccount.UserPrincipalName?.Split('@')[0].Replace(".", " ", StringComparison.OrdinalIgnoreCase)
+               .Replace("-", " ", StringComparison.OrdinalIgnoreCase)
+           ?? sharedAccount.SamAccountName
+           ?? "Shared Mailbox";
+
+    private ServiceAccountBlueprint BuildServiceAccountBlueprint(Company company, int index)
+    {
+        var workloadPatterns = new (string Prefix, string Role, bool Privileged, string PasswordProfile)[]
+        {
+            ("sql", "database", true, "ServiceManaged"),
+            ("web", "frontend", false, "ServiceManaged"),
+            ("app", "middleware", true, "ServiceManaged"),
+            ("erp", "integration", false, "ServiceManaged"),
+            ("crm", "sync", false, "ServiceManaged"),
+            ("hris", "feed", false, "ServiceManaged"),
+            ("backup", "vault", true, "ServiceManaged"),
+            ("monitor", "telemetry", false, "ServiceManaged"),
+            ("print", "spool", false, "ServiceManaged"),
+            ("deploy", "agent", true, "ServiceManaged"),
+            ("filesync", "transfer", false, "ServiceManaged"),
+            ("sso", "proxy", true, "ServiceManaged")
+        };
+
+        var pattern = workloadPatterns[index % workloadPatterns.Length];
+        var sequence = (index / workloadPatterns.Length) + 1;
+        var commonName = $"svc-{pattern.Prefix}-{pattern.Role}-{sequence:00}";
+        var upnLocalPart = $"svc.{pattern.Prefix}.{pattern.Role}.{sequence:00}";
+        var roleToken = pattern.Role.Length <= 3 ? pattern.Role : pattern.Role[..3];
+        var sam = Truncate($"svc_{pattern.Prefix}_{roleToken}{sequence:00}", 20);
+
+        return new ServiceAccountBlueprint(
+            commonName,
+            sam,
+            upnLocalPart,
+            pattern.Privileged,
+            pattern.Privileged ? "Tier1" : null,
+            pattern.PasswordProfile);
+    }
+
+    private sealed record ServiceAccountBlueprint(
+        string CommonName,
+        string SamAccountName,
+        string UserPrincipalNameLocalPart,
+        bool Privileged,
+        string? AdministrativeTier,
+        string PasswordProfile);
+
+    private static bool IsLeadershipTitle(string title)
+        => !string.IsNullOrWhiteSpace(title)
+           && (title.Contains("Chief", StringComparison.OrdinalIgnoreCase)
+               || title.Contains("Vice President", StringComparison.OrdinalIgnoreCase)
+               || title.Contains("Director", StringComparison.OrdinalIgnoreCase)
+               || title.Contains("Manager", StringComparison.OrdinalIgnoreCase)
+               || title.Contains("Head", StringComparison.OrdinalIgnoreCase));
+
+    private static bool LooksLikePilotUser(Person person)
+        => IsLeadershipTitle(person.Title ?? string.Empty)
+           || (person.Title?.Contains("Engineer", StringComparison.OrdinalIgnoreCase) ?? false)
+           || (person.Title?.Contains("Analyst", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static bool LooksLikeSupportUser(Person person)
+        => (person.Title?.Contains("Support", StringComparison.OrdinalIgnoreCase) ?? false)
+           || (person.Title?.Contains("Helpdesk", StringComparison.OrdinalIgnoreCase) ?? false)
+           || (person.Title?.Contains("Desktop", StringComparison.OrdinalIgnoreCase) ?? false)
+           || (person.Title?.Contains("Service", StringComparison.OrdinalIgnoreCase) ?? false);
+
+    private static bool LooksLikeServerAdmin(string title)
+        => title.Contains("Engineer", StringComparison.OrdinalIgnoreCase)
+           || title.Contains("Administrator", StringComparison.OrdinalIgnoreCase)
+           || title.Contains("Platform", StringComparison.OrdinalIgnoreCase)
+           || title.Contains("Infrastructure", StringComparison.OrdinalIgnoreCase);
+
+    private static bool MatchesDepartment(Person person, IReadOnlyList<Department> departments, params string[] keywords)
+    {
+        if (string.IsNullOrWhiteSpace(person.DepartmentId))
+        {
+            return false;
+        }
+
+        var department = departments.FirstOrDefault(candidate => candidate.Id == person.DepartmentId);
+        if (department is null)
+        {
+            return false;
+        }
+
+        return keywords.Any(keyword => department.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase));
     }
 
     private static IEnumerable<DirectoryGroup> ResolveAdminGroups(

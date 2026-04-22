@@ -87,6 +87,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'About',
       items: [
+        'about/whats-new',
         'about/product-roadmap',
         'about/contributing',
         'about/docs-site-implementation-plan',

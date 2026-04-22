@@ -95,6 +95,67 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                 },
                 SortKeySelector = company => company.Id
             },
+            new EntityTableDescriptor<BusinessUnit>
+            {
+                LogicalName = "business_units",
+                RelativePathStem = "entities/business_units",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "name"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.BusinessUnits,
+                RowProjector = unit => new Dictionary<string, object?>
+                {
+                    ["id"] = unit.Id,
+                    ["company_id"] = unit.CompanyId,
+                    ["name"] = unit.Name
+                },
+                SortKeySelector = unit => unit.Id
+            },
+            new EntityTableDescriptor<Department>
+            {
+                LogicalName = "departments",
+                RelativePathStem = "entities/departments",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "business_unit_id",
+                    "name"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.Departments,
+                RowProjector = department => new Dictionary<string, object?>
+                {
+                    ["id"] = department.Id,
+                    ["company_id"] = department.CompanyId,
+                    ["business_unit_id"] = department.BusinessUnitId,
+                    ["name"] = department.Name
+                },
+                SortKeySelector = department => department.Id
+            },
+            new EntityTableDescriptor<Team>
+            {
+                LogicalName = "teams",
+                RelativePathStem = "entities/teams",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "department_id",
+                    "name"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.Teams,
+                RowProjector = team => new Dictionary<string, object?>
+                {
+                    ["id"] = team.Id,
+                    ["company_id"] = team.CompanyId,
+                    ["department_id"] = team.DepartmentId,
+                    ["name"] = team.Name
+                },
+                SortKeySelector = team => team.Id
+            },
             new EntityTableDescriptor<Office>
             {
                 LogicalName = "offices",
@@ -677,6 +738,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "assigned_person_id",
                     "assigned_office_id",
                     "directory_account_id",
+                    "on_prem_directory_account_id",
+                    "cloud_directory_account_id",
                     "ou_id",
                     "distinguished_name",
                     "domain_joined",
@@ -699,6 +762,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["assigned_person_id"] = device.AssignedPersonId,
                     ["assigned_office_id"] = device.AssignedOfficeId,
                     ["directory_account_id"] = device.DirectoryAccountId,
+                    ["on_prem_directory_account_id"] = device.OnPremDirectoryAccountId,
+                    ["cloud_directory_account_id"] = device.CloudDirectoryAccountId,
                     ["ou_id"] = device.OuId,
                     ["distinguished_name"] = device.DistinguishedName,
                     ["domain_joined"] = device.DomainJoined,
@@ -721,6 +786,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "operating_system",
                     "operating_system_version",
                     "office_id",
+                    "directory_account_id",
+                    "on_prem_directory_account_id",
+                    "cloud_directory_account_id",
                     "ou_id",
                     "distinguished_name",
                     "domain_joined",
@@ -738,6 +806,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["operating_system"] = server.OperatingSystem,
                     ["operating_system_version"] = server.OperatingSystemVersion,
                     ["office_id"] = server.OfficeId,
+                    ["directory_account_id"] = server.DirectoryAccountId,
+                    ["on_prem_directory_account_id"] = server.OnPremDirectoryAccountId,
+                    ["cloud_directory_account_id"] = server.CloudDirectoryAccountId,
                     ["ou_id"] = server.OuId,
                     ["distinguished_name"] = server.DistinguishedName,
                     ["domain_joined"] = server.DomainJoined,
@@ -1052,6 +1123,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "description",
                     "tagline",
                     "relationship_type",
+                    "relationship_basis",
+                    "relationship_scope",
+                    "relationship_definition",
                     "industry",
                     "country",
                     "primary_domain",
@@ -1073,6 +1147,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["description"] = organization.Description,
                     ["tagline"] = organization.Tagline,
                     ["relationship_type"] = organization.RelationshipType,
+                    ["relationship_basis"] = organization.RelationshipBasis,
+                    ["relationship_scope"] = organization.RelationshipScope,
+                    ["relationship_definition"] = organization.RelationshipDefinition,
                     ["industry"] = organization.Industry,
                     ["country"] = organization.Country,
                     ["primary_domain"] = organization.PrimaryDomain,

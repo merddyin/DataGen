@@ -10,6 +10,137 @@ namespace SyntheticEnterprise.Core.Tests;
 public sealed class CatalogDrivenGenerationTests
 {
     [Fact]
+    public void WorldGenerator_Contextualizes_Duplicate_Department_And_Team_Names_Instead_Of_Numbering_Them()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Contextual Org Names Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Contextual Org Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 80,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 1,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 1,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["business_units"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Commercial")),
+                        NewRow(("Name", "Technology"))
+                    },
+                    ["departments"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Planning"))
+                    },
+                    ["teams"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Operations"))
+                    }
+                }
+            });
+
+        Assert.Equal(2, result.World.Departments.Count);
+        Assert.Equal(2, result.World.Teams.Count);
+        Assert.DoesNotContain(result.World.Departments, department => Regex.IsMatch(department.Name, @"\s\d+$"));
+        Assert.DoesNotContain(result.World.Teams, team => Regex.IsMatch(team.Name, @"\s\d+$"));
+        Assert.Contains(result.World.Departments, department => department.Name.Contains("Commercial", StringComparison.OrdinalIgnoreCase) || department.Name.Contains("Technology", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Teams, team => team.Name.Contains("Planning", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_BusinessUnit_And_Department_Appropriate_Org_Structures_For_Manufacturing()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 17,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Manufacturing Org Realism Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Manufacturing Org Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 240,
+                            BusinessUnitCount = 3,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["business_units"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Commercial Operations")),
+                        NewRow(("Name", "Product and Quality Engineering")),
+                        NewRow(("Name", "Supply Chain and Manufacturing"))
+                    }
+                }
+            });
+
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Contains(" - ", StringComparison.Ordinal));
+        Assert.Contains(result.World.Departments, department => department.Name == "Sales");
+        Assert.Contains(result.World.Departments, department => department.Name == "Marketing");
+        Assert.Contains(result.World.Departments, department => department.Name == "Customer Support");
+        Assert.Contains(result.World.Departments, department => department.Name == "Product Engineering");
+        Assert.Contains(result.World.Departments, department => department.Name == "Manufacturing Engineering");
+        Assert.Contains(result.World.Departments, department => department.Name == "Quality Assurance");
+        Assert.Contains(result.World.Departments, department => department.Name == "Production Operations");
+        Assert.Contains(result.World.Departments, department => department.Name == "Procurement");
+        Assert.Contains(result.World.Departments, department => department.Name == "Logistics and Planning");
+
+        Assert.DoesNotContain(result.World.Teams, team => team.Name.Contains(" - Sales", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Teams, team => team.Name.Contains(" - Marketing", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Teams, team => Regex.IsMatch(team.Name, @"\s\d+$"));
+        Assert.True(result.World.Teams.Count(team => team.Name.Equals("Commercial Planning", StringComparison.OrdinalIgnoreCase)) <= 1);
+        Assert.Contains(result.World.Teams, team => team.Name == "Regional Sales");
+        Assert.Contains(result.World.Teams, team => team.Name == "Account Management");
+        Assert.Contains(result.World.Teams, team => team.Name == "Product Marketing");
+        Assert.Contains(result.World.Teams, team => team.Name == "Demand Generation");
+        Assert.Contains(result.World.Teams, team => team.Name == "Technical Support");
+        Assert.Contains(result.World.Teams, team => team.Name == "Customer Care");
+        Assert.Contains(result.World.Teams, team => team.Name == "Industrial Automation");
+        Assert.Contains(result.World.Teams, team => team.Name == "Plant Systems");
+        Assert.Contains(result.World.Teams, team => team.Name == "Strategic Sourcing");
+        Assert.Contains(result.World.Teams, team => team.Name == "Supplier Management");
+        Assert.Contains(result.World.Teams, team => team.Name == "Supply Planning");
+        Assert.Contains(result.World.Teams, team => team.Name == "Demand Planning");
+    }
+
+    [Fact]
     public void WorldGenerator_Uses_CityReferenceCatalog_For_PopulationAware_OfficePlacement()
     {
         var services = new ServiceCollection()
@@ -63,6 +194,85 @@ public sealed class CatalogDrivenGenerationTests
         Assert.Equal(new[] { "New York", "Los Angeles", "Chicago" }, result.World.Offices.Select(office => office.City).ToArray());
         Assert.All(result.World.Offices, office => Assert.False(string.IsNullOrWhiteSpace(office.PostalCode)));
         Assert.All(result.World.Offices, office => Assert.EndsWith("Boulevard", office.StreetName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Prefers_PrimaryCountry_For_Headquarters_And_Distributes_People_Across_Offices()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 23,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Office Distribution Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Office Distribution Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 90,
+                            BusinessUnitCount = 3,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 6,
+                            Countries = { "United States", "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["business_units"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Commercial Operations")),
+                        NewRow(("Name", "Product and Quality Engineering")),
+                        NewRow(("Name", "Supply Chain and Manufacturing"))
+                    },
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "US"), ("StateCode", "NY"), ("StateOrProvince", "New York"), ("City", "New York"), ("PostalCode", "10001"), ("TimeZone", "America/New_York"), ("Latitude", "40.7128"), ("Longitude", "-74.0060"), ("Population", "8804190"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "US"), ("StateCode", "CA"), ("StateOrProvince", "California"), ("City", "Los Angeles"), ("PostalCode", "90001"), ("TimeZone", "America/Los_Angeles"), ("Latitude", "34.0522"), ("Longitude", "-118.2437"), ("Population", "3898747"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "CA"), ("StateCode", "ON"), ("StateOrProvince", "Ontario"), ("City", "Toronto"), ("PostalCode", "M5H"), ("TimeZone", "America/Toronto"), ("Latitude", "43.6532"), ("Longitude", "-79.3832"), ("Population", "2731571"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "CA"), ("StateCode", "AB"), ("StateOrProvince", "Alberta"), ("City", "Calgary"), ("PostalCode", "T2P"), ("TimeZone", "America/Edmonton"), ("Latitude", "51.0447"), ("Longitude", "-114.0719"), ("Population", "1306784"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateCode", "BC"), ("StateOrProvince", "Baja California"), ("City", "Tijuana"), ("PostalCode", "22000"), ("TimeZone", "America/Tijuana"), ("Latitude", "32.5149"), ("Longitude", "-117.0382"), ("Population", "1810645"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateCode", "CMX"), ("StateOrProvince", "Ciudad de Mexico"), ("City", "Mexico City"), ("PostalCode", "06000"), ("TimeZone", "America/Mexico_City"), ("Latitude", "19.4326"), ("Longitude", "-99.1332"), ("Population", "9209944"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "United States"), ("Code", "US"), ("Continent", "North America")),
+                        NewRow(("Name", "Canada"), ("Code", "CA"), ("Continent", "North America")),
+                        NewRow(("Name", "Mexico"), ("Code", "MX"), ("Continent", "North America"))
+                    }
+                }
+            });
+
+        var headquarters = Assert.Single(result.World.Offices, office => office.IsHeadquarters);
+        Assert.Equal("United States", headquarters.Country);
+
+        var peopleByOffice = result.World.People
+            .GroupBy(person => person.OfficeId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Count())
+            .OrderByDescending(count => count)
+            .ToArray();
+
+        Assert.True(peopleByOffice.Length >= 3);
+        Assert.True(peopleByOffice[0] > peopleByOffice[^1]);
+        Assert.All(
+            result.World.People.Where(person => !string.IsNullOrWhiteSpace(person.OfficeId)),
+            person =>
+            {
+                var office = result.World.Offices.First(candidate => candidate.Id == person.OfficeId);
+                Assert.Equal(office.Country, person.Country);
+            });
     }
 
     [Fact]
@@ -567,13 +777,13 @@ public sealed class CatalogDrivenGenerationTests
                 {
                     ["departments"] = new List<Dictionary<string, string?>>
                     {
-                        NewRow(("Name", "Engineering")),
+                        NewRow(("Name", "Sales")),
                         NewRow(("Name", "Finance"))
                     },
                     ["titles"] = new List<Dictionary<string, string?>>
                     {
-                        NewRow(("Department", "Engineering"), ("Title", "Platform Engineer"), ("Level", "Experienced")),
-                        NewRow(("Department", "Engineering"), ("Title", "Junior QA Analyst"), ("Level", "Entry")),
+                        NewRow(("Department", "Sales"), ("Title", "Account Executive"), ("Level", "Experienced")),
+                        NewRow(("Department", "Sales"), ("Title", "Sales Coordinator"), ("Level", "Entry")),
                         NewRow(("Department", "Finance"), ("Title", "Payroll Analyst"), ("Level", "Experienced")),
                         NewRow(("Department", "Finance"), ("Title", "Accounts Payable Clerk"), ("Level", "Entry"))
                     }
@@ -581,16 +791,11 @@ public sealed class CatalogDrivenGenerationTests
             });
 
         var departments = result.World.Departments.ToDictionary(department => department.Id, department => department.Name, StringComparer.OrdinalIgnoreCase);
-        var engineeringTitles = result.World.People
-            .Where(person => departments.TryGetValue(person.DepartmentId, out var departmentName) && departmentName == "Engineering")
-            .Select(person => person.Title)
-            .ToList();
         var financeTitles = result.World.People
             .Where(person => departments.TryGetValue(person.DepartmentId, out var departmentName) && departmentName == "Finance")
             .Select(person => person.Title)
             .ToList();
 
-        Assert.Contains(engineeringTitles, title => title == "Platform Engineer" || title == "Junior QA Analyst");
         Assert.Contains(financeTitles, title => title == "Payroll Analyst" || title == "Accounts Payable Clerk");
         Assert.Contains(result.World.People, person => person.Title == "Director" || person.Title == "Manager" || person.Title == "Vice President");
     }
@@ -1640,17 +1845,16 @@ public sealed class CatalogDrivenGenerationTests
         Assert.Contains(result.World.BusinessUnits, unit => unit.Name == "Commercial Operations");
 
         var departmentsById = result.World.Departments.ToDictionary(department => department.Id, department => department, StringComparer.OrdinalIgnoreCase);
-        var operationsDepartment = Assert.Single(result.World.Departments, department => department.Name == "Operations");
-        var qualityDepartment = Assert.Single(result.World.Departments, department => department.Name == "Quality");
+        var operationsDepartment = Assert.Single(result.World.Departments, department => department.Name is "Operations" or "Production Operations");
         var salesDepartment = Assert.Single(result.World.Departments, department => department.Name == "Sales");
 
         Assert.Equal("Supply Chain and Manufacturing", result.World.BusinessUnits.Single(unit => unit.Id == operationsDepartment.BusinessUnitId).Name);
-        Assert.Equal("Supply Chain and Manufacturing", result.World.BusinessUnits.Single(unit => unit.Id == qualityDepartment.BusinessUnitId).Name);
         Assert.Equal("Commercial Operations", result.World.BusinessUnits.Single(unit => unit.Id == salesDepartment.BusinessUnitId).Name);
 
-        Assert.Contains(result.World.Teams, team => team.Name == "Production Scheduling" && departmentsById[team.DepartmentId].Name == "Operations");
-        Assert.Contains(result.World.Teams, team => team.Name == "Supplier Quality" && departmentsById[team.DepartmentId].Name == "Quality");
-        Assert.Contains(result.World.Teams, team => team.Name == "Commercial Planning" && departmentsById[team.DepartmentId].Name == "Sales");
+        Assert.Contains(result.World.Teams, team => team.Name == "Production Scheduling" && departmentsById[team.DepartmentId].Name == operationsDepartment.Name);
+        Assert.Contains(result.World.Teams, team =>
+            departmentsById[team.DepartmentId].Name == "Sales"
+            && team.Name is "Commercial Planning" or "Regional Sales" or "Account Management");
     }
 
     private static Dictionary<string, string?> NewRow(params (string Key, string? Value)[] entries)

@@ -4,6 +4,15 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.4.0
+
+- added first-class bundled domain packs for ITSM, SecOps, and BusinessOps, plus scenario-native pack enablement
+- added temporal simulation foundations with timeline events, drift history, and normalized temporal export artifacts
+- productized scenario authoring with archetypes, persona presets, smarter overlays, and an archetype-first wizard flow
+- expanded end-to-end realism for organization structure, geography, identity, groups, policies, repositories, CMDB data, applications, and infrastructure
+- added structured quality reporting, scored validation outputs, realism review automation, and CI quality artifacts
+- tightened external-organization modeling so vendor metadata is no longer treated as a business relationship by default
+
 ### v0.3.0
 
 - improved end-to-end realism for people, offices, applications, repositories, and architecture objects
@@ -19,11 +28,12 @@ DataGen is designed to generate believable enterprise structure without hand-aut
 
 Current product capabilities include:
 
-- scenario-first world generation with templates, overlays, JSON, and a terminal wizard
+- scenario-first world generation with archetypes, persona presets, overlays, JSON, and a terminal wizard
 - identity, infrastructure, repository, application, policy, access-evidence, observed-data, and CMDB generation
+- temporal simulation with change events and snapshot-oriented export surfaces
 - hard identity invariants so duplicate user principal names are blocked instead of emitted as "realistic" flaws
 - configurable realism through deviation profiles such as `Clean`, `Realistic`, and `Aggressive`
-- normalized export surfaces for downstream tooling
+- normalized export and quality validation surfaces for downstream tooling and CI
 - a plugin model for extending the synthetic dataset safely
 - bundled first-party domain packs for ITSM, SecOps, and BusinessOps using the native scenario `packs` shape
 
@@ -81,14 +91,14 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.3.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.3.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.4.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.4.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### 5. Generate a first world
 
 ```powershell
-$scenario = New-SEScenarioFromTemplate -Template RegionalManufacturer
+$scenario = New-SEScenarioFromArchetype -Archetype RegionalManufacturer
 $scenario = Resolve-SEScenario -Scenario $scenario
 $world = New-SEEnterpriseWorld -Scenario $scenario -Seed 4242
 $world | Get-SEWorldSummary
@@ -105,6 +115,19 @@ $world | Export-SEEnterpriseWorld `
   -IncludeSummary `
   -Overwrite
 ```
+
+### 7. Review realism and quality
+
+```powershell
+.\scripts\invoke-realism-review.ps1 `
+  -ScenarioPath .\examples\regional_manufacturer.scenario.json `
+  -Seed 4242 `
+  -OutputPath .\artifacts\quality\realism-review.md `
+  -JsonOutputPath .\artifacts\quality\realism-review.json `
+  -OutputFormat Both
+```
+
+That review emits a human-readable summary plus machine-readable quality validation output that can also be used in CI.
 
 ## Repository guide
 
@@ -147,6 +170,7 @@ The docs site includes:
 
 - getting started guides
 - cmdlet reference
+- release notes and roadmap pages
 - multiple end-to-end walkthroughs
 - SDK and plugin architecture guidance
 - contribution guidance
@@ -167,6 +191,8 @@ For a concrete example, see:
 
 - `examples/regional_manufacturer_packs.scenario.json`
 - `docs/FirstParty_Packs_Walkthrough.md`
+
+The same scenario model also supports temporal outputs and quality reports directly on the generation result.
 
 ## Walkthrough assets
 

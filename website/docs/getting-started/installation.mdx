@@ -49,18 +49,19 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a packaged module with a manifest, build one from the repo root:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.2.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.2.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.4.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.4.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ## Verify the core command surface
 
 At minimum, confirm these commands are available:
 
+- `Get-SEModuleCommandSurface`
 - `Get-SEScenarioArchetype`
 - `New-SEScenarioFromArchetype`
-- `Get-SEScenarioTemplate`
-- `New-SEScenarioFromTemplate`
+- `Get-SEScenarioPersonaPreset`
+- `New-SEScenarioFromPersonaPreset`
 - `New-SEScenarioWizard`
 - `Resolve-SEScenario`
 - `Test-SEScenario`
@@ -69,6 +70,12 @@ At minimum, confirm these commands are available:
 - `Export-SEEnterpriseWorld`
 - `Save-SEEnterpriseWorld`
 - `Import-SEEnterpriseWorld`
+
+If you want the categorized module view instead of a flat command list:
+
+```powershell
+Get-SEModuleCommandSurface
+```
 
 ## Catalog expectations
 

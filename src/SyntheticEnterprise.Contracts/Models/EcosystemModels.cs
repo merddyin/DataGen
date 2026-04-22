@@ -9,6 +9,9 @@ public record ExternalOrganization
     public string Description { get; init; } = "";
     public string Tagline { get; init; } = "";
     public string RelationshipType { get; init; } = "";
+    public string RelationshipBasis { get; init; } = "";
+    public string RelationshipScope { get; init; } = "";
+    public string RelationshipDefinition { get; init; } = "";
     public string Industry { get; init; } = "";
     public string Country { get; init; } = "";
     public string PrimaryDomain { get; init; } = "";

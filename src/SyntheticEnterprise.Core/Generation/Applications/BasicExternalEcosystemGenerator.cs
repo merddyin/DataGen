@@ -57,11 +57,11 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
         var results = new List<ExternalOrganization>();
         var industryTokens = BuildIndustryTokens(company.Industry ?? string.Empty, taxonomy);
 
-        foreach (var vendor in applications
-                     .Select(application => application.Vendor)
-                     .Where(vendor => !string.IsNullOrWhiteSpace(vendor))
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (var vendorGroup in applications
+                     .Where(application => !string.IsNullOrWhiteSpace(application.Vendor))
+                     .GroupBy(application => application.Vendor!, StringComparer.OrdinalIgnoreCase))
         {
+            var vendor = vendorGroup.Key;
             if (!vendorNames.Add(vendor))
             {
                 continue;
@@ -69,6 +69,15 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
 
             var definition = vendorCatalog.FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, vendor, StringComparison.OrdinalIgnoreCase));
+            var vendorApplications = vendorGroup.ToList();
+            if (!ShouldMaterializeVendorRelationship(vendor, vendorApplications, definition))
+            {
+                continue;
+            }
+
+            var relationshipBasis = DetermineVendorRelationshipBasis(vendor, vendorApplications, definition);
+            var relationshipScope = DetermineVendorRelationshipScope(vendorApplications);
+            var relationshipDefinition = BuildVendorRelationshipDefinition(vendor, vendorApplications, relationshipBasis);
 
             results.Add(CreateExternalOrganization(
                 company,
@@ -80,7 +89,10 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
                 definition?.Segment ?? "StrategicSupplier",
                 definition?.Criticality ?? "High",
                 definition?.RevenueBand ?? "Enterprise",
-                primaryDomain: BuildPrimaryDomain(vendor, "Vendor", country, domainSuffixes, definition?.PrimaryDomain, catalogs)));
+                primaryDomain: BuildPrimaryDomain(vendor, "Vendor", country, domainSuffixes, definition?.PrimaryDomain, catalogs),
+                relationshipBasis: relationshipBasis,
+                relationshipScope: relationshipScope,
+                relationshipDefinition: relationshipDefinition));
         }
 
         var desiredAdditionalVendors = Math.Clamp(Math.Max(peopleCount / 180, processes.Count / 2), 4, 12);
@@ -112,7 +124,10 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
                 definition.Segment,
                 definition.Criticality,
                 definition.RevenueBand,
-                primaryDomain: BuildPrimaryDomain(definition.Name, "Vendor", country, domainSuffixes, definition.PrimaryDomain, catalogs)));
+                primaryDomain: BuildPrimaryDomain(definition.Name, "Vendor", country, domainSuffixes, definition.PrimaryDomain, catalogs),
+                relationshipBasis: DetermineCatalogVendorRelationshipBasis(definition),
+                relationshipScope: "Enterprise",
+                relationshipDefinition: BuildCatalogVendorRelationshipDefinition(definition)));
         }
 
         return results;
@@ -188,7 +203,10 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
                 tagline: tagline,
                 primaryDomain: primaryDomain,
                 contactEmail: contactEmail,
-                taxIdentifier: taxIdentifier));
+                taxIdentifier: taxIdentifier,
+                relationshipBasis: DetermineCounterpartyRelationshipBasis(relationship, segment),
+                relationshipScope: DetermineCounterpartyRelationshipScope(segment),
+                relationshipDefinition: BuildCounterpartyRelationshipDefinition(relationship, segment, organizationIndustry)));
         }
 
         return results;
@@ -468,8 +486,21 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
         string? tagline = null,
         string? primaryDomain = null,
         string? contactEmail = null,
-        string? taxIdentifier = null)
+        string? taxIdentifier = null,
+        string? relationshipBasis = null,
+        string? relationshipScope = null,
+        string? relationshipDefinition = null)
     {
+        if (string.Equals(name, company.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            name = $"{name} {country} {relationshipType switch
+            {
+                "Vendor" => "Supply Network",
+                "ManagedServiceProvider" => "Services",
+                _ => "Partner Services"
+            }}";
+        }
+
         var resolvedPrimaryDomain = FirstNonEmpty(primaryDomain, $"{Slug(name)}.example.test");
         return new ExternalOrganization
         {
@@ -480,6 +511,9 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
             Description = FirstNonEmpty(description, BuildOrganizationDescription(relationshipType, industry, segment)),
             Tagline = FirstNonEmpty(tagline, BuildDefaultTagline(name, relationshipType)),
             RelationshipType = relationshipType,
+            RelationshipBasis = FirstNonEmpty(relationshipBasis, InferDefaultRelationshipBasis(relationshipType, segment)),
+            RelationshipScope = FirstNonEmpty(relationshipScope, InferDefaultRelationshipScope(relationshipType, segment)),
+            RelationshipDefinition = FirstNonEmpty(relationshipDefinition, BuildRelationshipDefinition(relationshipType, segment, industry)),
             Industry = industry,
             Country = country,
             PrimaryDomain = resolvedPrimaryDomain,
@@ -526,6 +560,207 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
 
         return $"{baseName} {Guid.NewGuid():N}";
     }
+
+    private static bool ShouldMaterializeVendorRelationship(string vendorName, IReadOnlyList<ApplicationRecord> applications, VendorDefinition? definition)
+    {
+        if (applications.Count == 0)
+        {
+            return false;
+        }
+
+        if (IsCommoditySoftwareVendor(vendorName, applications, definition))
+        {
+            return false;
+        }
+
+        if (definition is not null && definition.Segment is "ManagedServiceProvider" or "SharedServiceProvider" or "StrategicSupplier")
+        {
+            return true;
+        }
+
+        if (applications.Any(application =>
+                string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(application.HostingModel, "Hybrid", StringComparison.OrdinalIgnoreCase)
+                || application.SsoEnabled
+                || application.MfaRequired))
+        {
+            return true;
+        }
+
+        return applications.Any(application =>
+            string.Equals(application.Criticality, "High", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(application.UserScope, "SingleUser", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(application.UserScope, "Department", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsCommoditySoftwareVendor(string vendorName, IReadOnlyList<ApplicationRecord> applications, VendorDefinition? definition)
+    {
+        if (definition is not null
+            && (definition.Segment.Contains("OpenSource", StringComparison.OrdinalIgnoreCase)
+                || definition.Segment.Contains("Community", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        var knownCommodityVendors = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "7-Zip",
+            "Notepad++",
+            "VideoLAN",
+            "Mozilla",
+            "WinRAR"
+        };
+
+        if (knownCommodityVendors.Contains(vendorName))
+        {
+            return true;
+        }
+
+        return applications.All(application =>
+            application.Name.Contains("Agent", StringComparison.OrdinalIgnoreCase)
+            || application.Name.Contains("Desktop", StringComparison.OrdinalIgnoreCase)
+            || application.Name.Contains("Sync Client", StringComparison.OrdinalIgnoreCase)
+            || application.Name.Contains("Backup", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string DetermineVendorRelationshipBasis(string vendorName, IReadOnlyList<ApplicationRecord> applications, VendorDefinition? definition)
+    {
+        if (definition is not null)
+        {
+            return DetermineCatalogVendorRelationshipBasis(definition);
+        }
+
+        if (applications.Any(application => string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "SaaSSubscription";
+        }
+
+        if (applications.Any(application => application.Name.Contains("Identity", StringComparison.OrdinalIgnoreCase)
+                                            || application.Name.Contains("Entra", StringComparison.OrdinalIgnoreCase)
+                                            || application.Name.Contains("Okta", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "IdentityPlatformAgreement";
+        }
+
+        if (applications.Any(application => application.Name.Contains("Microsoft 365", StringComparison.OrdinalIgnoreCase)
+                                            || application.Name.Contains("Office", StringComparison.OrdinalIgnoreCase)
+                                            || application.Name.Contains("Windows", StringComparison.OrdinalIgnoreCase)
+                                            || application.Name.Contains("SQL Server", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "EnterpriseAgreement";
+        }
+
+        if (applications.Any(application => application.Name.Contains("Support", StringComparison.OrdinalIgnoreCase)
+                                            || application.Name.Contains("Service", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "SupportAgreement";
+        }
+
+        return "SoftwareSubscription";
+    }
+
+    private static string DetermineCatalogVendorRelationshipBasis(VendorDefinition definition)
+        => definition.Segment switch
+        {
+            "ManagedServiceProvider" => "ManagedService",
+            "SharedServiceProvider" => "OutsourcedBusinessService",
+            "TechnologySupplier" => "SoftwareSubscription",
+            "StrategicSupplier" => "EnterpriseAgreement",
+            _ => "CommercialVendorRelationship"
+        };
+
+    private static string DetermineVendorRelationshipScope(IReadOnlyList<ApplicationRecord> applications)
+    {
+        var ownerDepartmentIds = applications
+            .Select(application => application.OwnerDepartmentId)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        if (ownerDepartmentIds > 1 || applications.Any(application => string.Equals(application.UserScope, "Enterprise", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Enterprise";
+        }
+
+        if (applications.Any(application => string.Equals(application.UserScope, "Regional", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "Regional";
+        }
+
+        return "Application";
+    }
+
+    private static string BuildVendorRelationshipDefinition(string vendorName, IReadOnlyList<ApplicationRecord> applications, string relationshipBasis)
+    {
+        var applicationNames = applications
+            .Select(application => application.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(3)
+            .ToArray();
+        var label = applicationNames.Length > 0 ? string.Join(", ", applicationNames) : "platform services";
+        return $"{relationshipBasis} supporting {label} through {vendorName}.";
+    }
+
+    private static string BuildCatalogVendorRelationshipDefinition(VendorDefinition definition)
+        => definition.Segment switch
+        {
+            "ManagedServiceProvider" => $"{definition.Name} provides managed operational services to the enterprise.",
+            "SharedServiceProvider" => $"{definition.Name} provides outsourced shared-business services to the enterprise.",
+            "StrategicSupplier" => $"{definition.Name} is a strategic enterprise supplier with a governed commercial relationship.",
+            _ => $"{definition.Name} is a qualified commercial vendor supporting enterprise capabilities."
+        };
+
+    private static string DetermineCounterpartyRelationshipBasis(string relationshipType, string segment)
+        => relationshipType switch
+        {
+            "Partner" when segment.Contains("Distribution", StringComparison.OrdinalIgnoreCase) => "SupplyChainPartnership",
+            "Partner" when segment.Contains("Channel", StringComparison.OrdinalIgnoreCase) => "ChannelPartnership",
+            "Partner" => "BusinessPartnership",
+            "Customer" => "CustomerRelationship",
+            _ => "CommercialRelationship"
+        };
+
+    private static string DetermineCounterpartyRelationshipScope(string segment)
+        => segment switch
+        {
+            "StrategicAccount" or "StrategicSupplier" => "Enterprise",
+            "RegionalAccount" => "Regional",
+            _ => "BusinessUnit"
+        };
+
+    private static string BuildCounterpartyRelationshipDefinition(string relationshipType, string segment, string industry)
+        => relationshipType switch
+        {
+            "Partner" => $"{segment} relationship supporting coordination with an organization in {industry}.",
+            "Customer" => $"{segment} customer relationship operating in {industry}.",
+            _ => $"{segment} commercial relationship operating in {industry}."
+        };
+
+    private static string InferDefaultRelationshipBasis(string relationshipType, string segment)
+        => relationshipType switch
+        {
+            "Vendor" => segment.Contains("ManagedService", StringComparison.OrdinalIgnoreCase) ? "ManagedService" : "CommercialVendorRelationship",
+            "Partner" => "BusinessPartnership",
+            "Customer" => "CustomerRelationship",
+            _ => "CommercialRelationship"
+        };
+
+    private static string InferDefaultRelationshipScope(string relationshipType, string segment)
+        => segment switch
+        {
+            "StrategicAccount" or "StrategicSupplier" => "Enterprise",
+            "RegionalAccount" => "Regional",
+            _ => relationshipType == "Vendor" ? "Enterprise" : "BusinessUnit"
+        };
+
+    private static string BuildRelationshipDefinition(string relationshipType, string segment, string industry)
+        => relationshipType switch
+        {
+            "Vendor" => $"{segment} vendor relationship operating in {industry}.",
+            "Partner" => $"{segment} partner relationship operating in {industry}.",
+            "Customer" => $"{segment} customer relationship operating in {industry}.",
+            _ => $"{segment} relationship operating in {industry}."
+        };
 
     private static List<VendorDefinition> ReadVendorReference(CatalogSet catalogs)
     {

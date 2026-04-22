@@ -112,6 +112,8 @@ public sealed class CmdbGenerationTests
         Assert.Contains(result.World.ConfigurationItems, item => item.CiClass == "Server");
         Assert.Contains(result.World.ConfigurationItems, item => item.CiClass == "InstalledSoftware");
         Assert.Contains(result.World.ConfigurationItems, item => item.CiClass == "CollaborationWorkspace");
+        Assert.DoesNotContain(result.World.ConfigurationItems, item => item.CiClass == "BusinessProcessService");
+        Assert.DoesNotContain(result.World.ConfigurationItems, item => item.DisplayName.StartsWith(@"\\", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.ConfigurationItemRelationships, relationship => relationship.RelationshipType == "DependsOn");
         Assert.Contains(result.World.ConfigurationItemRelationships, relationship => relationship.RelationshipType == "InstalledOn");
         Assert.Contains(result.World.ConfigurationItemRelationships, relationship => relationship.RelationshipType == "HostedOn");
@@ -121,9 +123,7 @@ public sealed class CmdbGenerationTests
         Assert.Contains(result.World.CmdbSourceRecords, record => record.SourceSystem == "SpreadsheetImport");
         Assert.Contains(result.World.CmdbSourceRecords, record => record.MatchStatus == "CatalogOnly");
         Assert.Contains(result.World.CmdbSourceRecords, record => record.MatchStatus == "Orphaned");
-        Assert.Contains(
-            result.World.CmdbSourceRecords,
-            record => record.CiClass is "BusinessApplication" or "BusinessProcessService");
+        Assert.Contains(result.World.CmdbSourceRecords, record => record.CiClass == "BusinessApplication");
         Assert.Contains(result.World.CmdbSourceLinks, link => !string.IsNullOrWhiteSpace(link.ConfigurationItemId));
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "InstalledOn");
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "HostedOn");

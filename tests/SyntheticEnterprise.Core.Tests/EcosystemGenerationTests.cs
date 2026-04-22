@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
+using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
 using SyntheticEnterprise.Core.Catalogs;
 using SyntheticEnterprise.Core.DependencyInjection;
@@ -77,6 +78,11 @@ public sealed class EcosystemGenerationTests
             organization.RelationshipType == "Vendor"
             && organization.Name == "Microsoft"
             && organization.PrimaryDomain == "microsoft.com");
+        Assert.Contains(result.World.ExternalOrganizations, organization =>
+            organization.RelationshipType == "Vendor"
+            && !string.IsNullOrWhiteSpace(organization.RelationshipBasis)
+            && !string.IsNullOrWhiteSpace(organization.RelationshipScope)
+            && !string.IsNullOrWhiteSpace(organization.RelationshipDefinition));
         Assert.Contains(result.World.ExternalOrganizations, organization =>
             organization.RelationshipType == "Vendor"
             && organization.PrimaryDomain == "servicenow.com"
@@ -213,5 +219,92 @@ public sealed class EcosystemGenerationTests
             && organization.PrimaryDomain == "siemens.com"
             && organization.Segment == "StrategicSupplier"
             && organization.Industry == "Industrial Automation");
+    }
+
+    [Fact]
+    public void EcosystemGenerator_Does_Not_Materialize_Commodity_Publishers_As_External_Organizations()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IExternalEcosystemGenerator>();
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var world = new SyntheticEnterpriseWorld();
+        world.Companies.Add(new Company
+        {
+            Id = "CO-001",
+            Name = "Commodity Filter Co",
+            Industry = "Manufacturing",
+            PrimaryCountry = "United States"
+        });
+        world.Departments.Add(new Department
+        {
+            Id = "DEP-001",
+            CompanyId = "CO-001",
+            Name = "Information Technology"
+        });
+        world.Offices.Add(new Office
+        {
+            Id = "OFF-001",
+            CompanyId = "CO-001",
+            Name = "HQ",
+            Country = "United States"
+        });
+        world.People.AddRange(Enumerable.Range(1, 600).Select(index => new Person
+        {
+            Id = $"P-{index}",
+            CompanyId = "CO-001",
+            FirstName = "Alex",
+            LastName = $"User{index}",
+            DisplayName = $"Alex User{index}",
+            EmploymentType = "Employee"
+        }));
+        world.Applications.AddRange(
+        [
+            new ApplicationRecord
+            {
+                Id = "APP-001",
+                CompanyId = "CO-001",
+                Name = "7-Zip",
+                Vendor = "7-Zip",
+                Category = "Utilities",
+                HostingModel = "Endpoint",
+                UserScope = "SingleUser",
+                OwnerDepartmentId = "DEP-001",
+                Criticality = "Low"
+            },
+            new ApplicationRecord
+            {
+                Id = "APP-002",
+                CompanyId = "CO-001",
+                Name = "Microsoft 365 Apps",
+                Vendor = "Microsoft",
+                Category = "Productivity",
+                HostingModel = "SaaS",
+                UserScope = "Enterprise",
+                OwnerDepartmentId = "DEP-001",
+                Criticality = "High",
+                SsoEnabled = true,
+                MfaRequired = true
+            }
+        ]);
+
+        generator.GenerateEcosystem(world, new GenerationContext
+        {
+            Scenario = new ScenarioDefinition
+            {
+                Name = "Commodity Filter Test"
+            }
+        }, catalogs);
+
+        Assert.DoesNotContain(world.ExternalOrganizations, organization =>
+            string.Equals(organization.Name, "7-Zip", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(world.ExternalOrganizations, organization =>
+            string.Equals(organization.Name, "Microsoft", StringComparison.OrdinalIgnoreCase)
+            && organization.RelationshipType == "Vendor"
+            && !string.IsNullOrWhiteSpace(organization.RelationshipBasis)
+            && !string.IsNullOrWhiteSpace(organization.RelationshipScope)
+            && !string.IsNullOrWhiteSpace(organization.RelationshipDefinition));
     }
 }

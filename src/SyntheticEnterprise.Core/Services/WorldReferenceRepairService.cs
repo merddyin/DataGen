@@ -245,6 +245,16 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
             "device account references",
             warnings);
         updatedCount += NullInvalidReferences(world.Devices,
+            device => device.OnPremDirectoryAccountId is not null && !accountIds.Contains(device.OnPremDirectoryAccountId),
+            device => device with { OnPremDirectoryAccountId = null },
+            "device on-prem account references",
+            warnings);
+        updatedCount += NullInvalidReferences(world.Devices,
+            device => device.CloudDirectoryAccountId is not null && !accountIds.Contains(device.CloudDirectoryAccountId),
+            device => device with { CloudDirectoryAccountId = null },
+            "device cloud account references",
+            warnings);
+        updatedCount += NullInvalidReferences(world.Devices,
             device => device.AssignedOfficeId is not null && !ExistsInCollection(device.AssignedOfficeId, world.Offices.Select(office => office.Id)),
             device => device with { AssignedOfficeId = null },
             "device office references",
@@ -259,6 +269,21 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
             server => !string.IsNullOrWhiteSpace(server.OfficeId) && !ExistsInCollection(server.OfficeId, world.Offices.Select(office => office.Id)),
             server => server with { OfficeId = string.Empty },
             "server office references",
+            warnings);
+        updatedCount += NullInvalidReferences(world.Servers,
+            server => server.DirectoryAccountId is not null && !accountIds.Contains(server.DirectoryAccountId),
+            server => server with { DirectoryAccountId = null },
+            "server account references",
+            warnings);
+        updatedCount += NullInvalidReferences(world.Servers,
+            server => server.OnPremDirectoryAccountId is not null && !accountIds.Contains(server.OnPremDirectoryAccountId),
+            server => server with { OnPremDirectoryAccountId = null },
+            "server on-prem account references",
+            warnings);
+        updatedCount += NullInvalidReferences(world.Servers,
+            server => server.CloudDirectoryAccountId is not null && !accountIds.Contains(server.CloudDirectoryAccountId),
+            server => server with { CloudDirectoryAccountId = null },
+            "server cloud account references",
             warnings);
         updatedCount += NullInvalidReferences(world.Servers,
             server => server.OuId is not null && !ouIds.Contains(server.OuId),

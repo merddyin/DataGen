@@ -3,6 +3,7 @@ namespace SyntheticEnterprise.Core.Generation;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Services;
 
 public sealed class LayerProcessor : ILayerProcessor
 {
@@ -434,30 +435,46 @@ public sealed class LayerProcessor : ILayerProcessor
         input.WorldMetadata?.AppliedLayers.Add(layer);
     }
 
-    private static GenerationResult RefreshStatistics(GenerationResult input)
+    private GenerationResult RefreshStatistics(GenerationResult input)
     {
+        var audit = _worldQualityAuditService.Audit(input.World);
+        var statistics = BuildStatistics(input);
+        var quality = WorldQualityReportBuilder.Build(
+            audit,
+            statistics,
+            input.WorldMetadata,
+            input.Temporal);
+        var warnings = input.Warnings
+            .Concat(quality.Warnings)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         return input with
         {
-            Statistics = new GenerationStatistics
-            {
-                CompanyCount = input.World.Companies.Count,
-                OfficeCount = input.World.Offices.Count,
-                PersonCount = input.World.People.Count,
-                AccountCount = input.World.Accounts.Count,
-                GroupCount = input.World.Groups.Count,
-                ApplicationCount = input.World.Applications.Count,
-                DeviceCount = input.World.Devices.Count + input.World.Servers.Count,
-                RepositoryCount = input.World.Databases.Count
-                    + input.World.FileShares.Count
-                    + input.World.CollaborationSites.Count
-                    + input.World.CollaborationChannels.Count
-                    + input.World.CollaborationChannelTabs.Count
-                    + input.World.DocumentLibraries.Count
-                    + input.World.SitePages.Count
-                    + input.World.DocumentFolders.Count
-            }
+            Warnings = warnings,
+            Statistics = statistics,
+            Quality = quality
         };
     }
+
+    private static GenerationStatistics BuildStatistics(GenerationResult input)
+        => new()
+        {
+            CompanyCount = input.World.Companies.Count,
+            OfficeCount = input.World.Offices.Count,
+            PersonCount = input.World.People.Count,
+            AccountCount = input.World.Accounts.Count,
+            GroupCount = input.World.Groups.Count,
+            ApplicationCount = input.World.Applications.Count,
+            DeviceCount = input.World.Devices.Count + input.World.Servers.Count,
+            RepositoryCount = input.World.Databases.Count
+                + input.World.FileShares.Count
+                + input.World.CollaborationSites.Count
+                + input.World.CollaborationChannels.Count
+                + input.World.CollaborationChannelTabs.Count
+                + input.World.DocumentLibraries.Count
+                + input.World.SitePages.Count
+                + input.World.DocumentFolders.Count
+        };
 
     private static GenerationResult AppendWarning(GenerationResult input, string warning)
     {
@@ -502,16 +519,34 @@ public sealed class LayerProcessor : ILayerProcessor
     {
         var ownershipResult = _worldOwnershipReconciliationService.Reconcile(input.World);
         var repairResult = _worldReferenceRepairService.Repair(input.World);
-        var auditWarnings = _worldQualityAuditService.Audit(input.World).Warnings;
+        var audit = _worldQualityAuditService.Audit(input.World);
+        var auditWarnings = audit.Warnings;
+        var quality = WorldQualityReportBuilder.Build(
+            audit,
+            BuildStatistics(input),
+            input.WorldMetadata,
+            input.Temporal);
         if (ownershipResult.Warnings.Count == 0 && repairResult.Warnings.Count == 0 && auditWarnings.Count == 0)
         {
-            return input;
+            return input with
+            {
+                Warnings = input.Warnings
+                    .Concat(quality.Warnings)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
+                Quality = quality
+            };
         }
 
         var warnings = input.Warnings.ToList();
         warnings.AddRange(ownershipResult.Warnings);
         warnings.AddRange(repairResult.Warnings);
         warnings.AddRange(auditWarnings);
-        return input with { Warnings = warnings };
+        warnings.AddRange(quality.Warnings);
+        return input with
+        {
+            Warnings = warnings.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            Quality = quality
+        };
     }
 }

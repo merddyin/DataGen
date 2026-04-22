@@ -24,9 +24,10 @@ You should see a valid resolved scenario unless your environment is missing requ
 $world = New-SEEnterpriseWorld -Scenario $scenario -Seed 4242
 $summary = $world | Get-SEWorldSummary
 $summary
+$world.Quality
 ```
 
-The summary object is the quickest way to confirm you generated a substantial world instead of an unexpectedly sparse dataset.
+The summary object is the quickest way to confirm you generated a substantial world instead of an unexpectedly sparse dataset. The `Quality` report gives you a structured realism and validation view for the same run.
 
 ## 3. Save the snapshot
 
@@ -59,8 +60,22 @@ Typical normalized export output includes entity and relationship artifacts for 
 - devices, servers, software, and network assets
 - applications, services, tenants, and repositories
 - policies, access evidence, observed views, and CMDB artifacts
+- temporal events and temporal snapshots when the scenario includes simulation output
 
-## 5. Re-import the snapshot
+## 5. Run a realism review
+
+```powershell
+.\scripts\invoke-realism-review.ps1 `
+  -ScenarioPath .\examples\regional_manufacturer.scenario.json `
+  -Seed 4242 `
+  -OutputPath .\artifacts\quality\realism-review.md `
+  -JsonOutputPath .\artifacts\quality\realism-review.json `
+  -OutputFormat Both
+```
+
+That gives you both a human-readable review and a JSON validation artifact you can reuse in CI or downstream checks.
+
+## 6. Re-import the snapshot
 
 ```powershell
 $imported = Import-SEEnterpriseWorld -Path $snapshotPath
@@ -75,9 +90,10 @@ After this flow, you should have:
 
 - a valid scenario
 - a generated world
+- a structured quality report
 - a saved snapshot
 - a normalized export directory
-- a manifest and summary
+- a manifest, summary, and realism review
 
 ## Next step
 

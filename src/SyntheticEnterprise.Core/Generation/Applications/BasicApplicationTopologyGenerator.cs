@@ -137,21 +137,11 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
         var runtime = ResolveRuntime(application, topologyPattern);
         var services = new List<ApplicationService>();
 
-        var addFrontend = topologyPattern?.AddFrontend ?? (application.Name.Contains("Portal", StringComparison.OrdinalIgnoreCase)
-                          || application.Name.Contains("Workspace", StringComparison.OrdinalIgnoreCase)
-                          || application.Name.Contains("Studio", StringComparison.OrdinalIgnoreCase)
-                          || application.Name.Contains("Console", StringComparison.OrdinalIgnoreCase)
-                          || application.Name.Contains("Hub", StringComparison.OrdinalIgnoreCase)
-                          || application.Category is "Collaboration" or "Productivity" or "Web" or "Sales" or "Marketing");
-
-        var addApi = topologyPattern?.AddApi ?? true;
-        var addWorker = topologyPattern?.AddWorker ?? (application.Category is "Operations" or "Analytics" or "Security" or "Finance" or "Procurement");
-        var addIntegration = topologyPattern?.AddIntegration ?? (application.HostingModel is "Hybrid" or "SaaS"
-                             || application.Name.Contains("Integration", StringComparison.OrdinalIgnoreCase)
-                             || application.Name.Contains("Exchange", StringComparison.OrdinalIgnoreCase));
-        var addData = topologyPattern?.AddData ?? (application.HostingModel != "SaaS"
-                      && application.Category is "Analytics" or "Finance" or "Operations" or "Database" or "Security"
-                      || application.Criticality == "High");
+        var addFrontend = topologyPattern?.AddFrontend ?? ShouldAddFrontend(application);
+        var addApi = topologyPattern?.AddApi ?? ShouldAddApi(application);
+        var addWorker = topologyPattern?.AddWorker ?? ShouldAddWorker(application);
+        var addIntegration = topologyPattern?.AddIntegration ?? ShouldAddIntegration(application);
+        var addData = topologyPattern?.AddData ?? ShouldAddData(application);
 
         if (addFrontend)
         {
@@ -159,7 +149,7 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
                 company,
                 application,
                 ownerTeam,
-                $"{application.Name} Frontend",
+                BuildServiceName(application, "Frontend", topologyPattern?.FrontendRuntime ?? runtime),
                 "Frontend",
                 topologyPattern?.FrontendRuntime ?? runtime,
                 deploymentModel));
@@ -171,7 +161,7 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
                 company,
                 application,
                 ownerTeam,
-                $"{application.Name} API",
+                BuildServiceName(application, "API", topologyPattern?.ApiRuntime ?? runtime),
                 "API",
                 topologyPattern?.ApiRuntime ?? runtime,
                 deploymentModel));
@@ -183,7 +173,7 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
                 company,
                 application,
                 ownerTeam,
-                $"{application.Name} Worker",
+                BuildServiceName(application, "Worker", topologyPattern?.WorkerRuntime ?? runtime),
                 "Worker",
                 topologyPattern?.WorkerRuntime ?? runtime,
                 deploymentModel));
@@ -195,7 +185,7 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
                 company,
                 application,
                 ownerTeam,
-                $"{application.Name} Integration",
+                BuildServiceName(application, "Integration", topologyPattern?.IntegrationRuntime ?? runtime),
                 "Integration",
                 topologyPattern?.IntegrationRuntime ?? runtime,
                 deploymentModel));
@@ -207,7 +197,7 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
                 company,
                 application,
                 ownerTeam,
-                $"{application.Name} Data Access",
+                BuildServiceName(application, "Data", topologyPattern?.DataRuntime ?? ResolveDataRuntime(application)),
                 "Data",
                 topologyPattern?.DataRuntime ?? ResolveDataRuntime(application),
                 deploymentModel));
@@ -353,6 +343,67 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
     private static Team? SelectOwnerTeam(IReadOnlyList<Team> teams, string departmentId)
         => teams.FirstOrDefault(team => team.DepartmentId == departmentId)
            ?? teams.FirstOrDefault();
+
+    private static bool ShouldAddFrontend(ApplicationRecord application)
+    {
+        if (string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase))
+        {
+            return application.Name.Contains("Admin Center", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("Portal", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("Console", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return application.Name.Contains("Portal", StringComparison.OrdinalIgnoreCase)
+               || application.Name.Contains("Workspace", StringComparison.OrdinalIgnoreCase)
+               || application.Name.Contains("Studio", StringComparison.OrdinalIgnoreCase)
+               || application.Name.Contains("Console", StringComparison.OrdinalIgnoreCase)
+               || application.Name.Contains("Hub", StringComparison.OrdinalIgnoreCase)
+               || application.Category is "Collaboration" or "Productivity" or "Web" or "Sales" or "Marketing";
+    }
+
+    private static bool ShouldAddApi(ApplicationRecord application)
+        => !string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Admin Center", StringComparison.OrdinalIgnoreCase)
+           || application.Category is "Security" or "Analytics";
+
+    private static bool ShouldAddWorker(ApplicationRecord application)
+    {
+        if (string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase))
+        {
+            return application.Category == "Analytics";
+        }
+
+        return application.Category is "Operations" or "Analytics" or "Security" or "Finance" or "Procurement";
+    }
+
+    private static bool ShouldAddIntegration(ApplicationRecord application)
+        => application.HostingModel is "Hybrid" or "SaaS"
+           || application.Name.Contains("Integration", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Exchange", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldAddData(ApplicationRecord application)
+    {
+        if (string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase))
+        {
+            return application.Category is "Analytics" or "Database";
+        }
+
+        return application.Category is "Analytics" or "Finance" or "Operations" or "Database" or "Security"
+               || application.Criticality == "High";
+    }
+
+    private static string BuildServiceName(ApplicationRecord application, string serviceType, string runtime)
+        => serviceType switch
+        {
+            "Frontend" => $"{application.Name} Web Portal",
+            "API" => $"{application.Name} API Service",
+            "Worker" when string.Equals(runtime, "spark", StringComparison.OrdinalIgnoreCase) => $"{application.Name} Spark Jobs",
+            "Worker" => $"{application.Name} Windows Service",
+            "Integration" => $"{application.Name} Integration Service",
+            "Data" when string.Equals(runtime, "spark", StringComparison.OrdinalIgnoreCase) => $"{application.Name} SQL Warehouse",
+            "Data" => $"{application.Name} Database Jobs",
+            _ => $"{application.Name} {serviceType}"
+        };
 
     private static string ResolveDeploymentModel(string hostingModel, string category)
         => hostingModel switch

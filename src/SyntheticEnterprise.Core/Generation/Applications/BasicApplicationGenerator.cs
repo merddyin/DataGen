@@ -964,14 +964,18 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         int employeeCount,
         IReadOnlyList<EssentialSoftwarePattern> essentialPatterns)
     {
-        if (desiredCount <= 0 || templates.Count == 0)
+        var appCandidates = templates
+            .Where(IsEnterpriseApplicationCandidate)
+            .ToList();
+
+        if (desiredCount <= 0 || appCandidates.Count == 0)
         {
             return new List<SoftwareTemplate>();
         }
 
-        if (templates.Count <= desiredCount)
+        if (appCandidates.Count <= desiredCount)
         {
-            return templates.ToList();
+            return appCandidates.ToList();
         }
 
         var selected = new List<SoftwareTemplate>();
@@ -986,14 +990,14 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             {
                 "Microsoft 365 Apps",
                 "Microsoft Teams",
-                "CrowdStrike Falcon",
-                "OneDrive Sync Client"
+                "SQL Server",
+                "Splunk Enterprise"
             });
         }
 
         foreach (var essentialName in preferredEssentialNames)
         {
-            var template = templates.FirstOrDefault(candidate =>
+            var template = appCandidates.FirstOrDefault(candidate =>
                 string.Equals(candidate.Name, essentialName, StringComparison.OrdinalIgnoreCase));
             if (template is null || !selectedNames.Add(template.Name))
             {
@@ -1007,7 +1011,7 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             }
         }
 
-        var remaining = templates
+        var remaining = appCandidates
             .Where(template => !selectedNames.Contains(template.Name))
             .ToList();
 
@@ -1048,6 +1052,47 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         }
 
         return selected;
+    }
+
+    private static bool IsEnterpriseApplicationCandidate(SoftwareTemplate template)
+    {
+        if (string.IsNullOrWhiteSpace(template.Name))
+        {
+            return false;
+        }
+
+        if (template.Category is "Browser" or "Utility" or "VPN" or "Backup" or "Developer")
+        {
+            return false;
+        }
+
+        var excludedNameTokens = new[]
+        {
+            "Sync Client",
+            "Agent",
+            "Plugin",
+            "CLI",
+            "Tools",
+            "Tooling",
+            "Backup",
+            "Updater",
+            "VMware Tools",
+            "Server Backup",
+            "Power BI Desktop",
+            "Visual Studio Code",
+            "Docker Desktop",
+            "Citrix Workspace",
+            "Workday Mobile",
+            "Postman",
+            "IIS",
+            "Forwarder",
+            "Drive",
+            "Acrobat",
+            "Desktop",
+            "Sync"
+        };
+
+        return !excludedNameTokens.Any(token => template.Name.Contains(token, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<SoftwareTemplate> ReadSoftwareCatalog(CatalogSet catalogs)

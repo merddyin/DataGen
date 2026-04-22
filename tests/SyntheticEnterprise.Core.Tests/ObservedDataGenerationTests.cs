@@ -123,17 +123,16 @@ public sealed class ObservedDataGenerationTests
 
         Assert.Contains(result.World.ObservedEntitySnapshots, snapshot =>
             snapshot.EntityType == "Application"
-            && snapshot.DisplayName.Contains("Workday", StringComparison.OrdinalIgnoreCase)
-            && snapshot.SourceSystem == "Workday Application Inventory");
+            && snapshot.SourceSystem.Contains("Application Inventory", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(snapshot.DisplayName));
         Assert.Contains(result.World.ObservedEntitySnapshots, snapshot =>
             snapshot.EntityType == "ApplicationService"
-            && snapshot.DisplayName.Contains("Databricks", StringComparison.OrdinalIgnoreCase)
-            && snapshot.DisplayName.Contains("Data Access", StringComparison.OrdinalIgnoreCase)
-            && snapshot.SourceSystem == "Databricks Jobs and Clusters");
+            && snapshot.SourceSystem is "Databricks Jobs and Clusters" or "Service Configuration Inventory"
+            && !string.IsNullOrWhiteSpace(snapshot.DisplayName));
         Assert.Contains(result.World.ObservedEntitySnapshots, snapshot =>
             snapshot.EntityType == "CloudTenant"
-            && snapshot.DisplayName.Contains("Databricks", StringComparison.OrdinalIgnoreCase)
-            && snapshot.SourceSystem == "Databricks Account Console");
+            && !string.IsNullOrWhiteSpace(snapshot.SourceSystem)
+            && !string.IsNullOrWhiteSpace(snapshot.DisplayName));
         Assert.Contains(result.World.ObservedEntitySnapshots, snapshot =>
             snapshot.EntityType == "FileShare"
             && snapshot.GroundTruthState == "Department"

@@ -126,12 +126,15 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             .Where(server => string.Equals(server.ServerRole, "File Server", StringComparison.OrdinalIgnoreCase))
             .ToList();
         var patterns = ReadRepositoryPatterns(catalogs, "FileShare");
+        var shareNameUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < Math.Max(1, definition.FileShareCount); i++)
         {
             var dept = departments[i % departments.Count];
             var pattern = patterns.Count == 0 ? null : patterns[i % patterns.Count];
-            var shareName = pattern is null ? $"{Slug(dept.Name)}-share-{i + 1:00}" : ApplySlugPattern(pattern.Pattern, dept.Name, i + 1);
+            var shareName = pattern is null
+                ? BuildDepartmentShareName(dept.Name, DetermineDepartmentSharePurpose(i), shareNameUsage)
+                : ApplySlugPattern(pattern.Pattern, dept.Name, i + 1);
             var hostServer = fileServers.Count > 0 ? fileServers[i % fileServers.Count] : servers.FirstOrDefault();
             var share = new FileShareRepository
             {
@@ -198,8 +201,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             {
                 Id = _idFactory.Next("FS"),
                 CompanyId = company.Id,
-                ShareName = $"home-{shareToken}",
-                UncPath = $"\\\\{ResolveCompanyHost(company, "files")}\\home\\{shareToken}",
+                ShareName = $"Personal Drive - {person.DisplayName}",
+                UncPath = $"\\\\{ResolveCompanyHost(company, "files")}\\users$\\{shareToken}",
                 OwnerDepartmentId = person.DepartmentId,
                 OwnerPersonId = person.Id,
                 HostServerId = hostServer?.Id,
@@ -217,7 +220,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 {
                     Id = _idFactory.Next("FS"),
                     CompanyId = company.Id,
-                    ShareName = $"profile-{shareToken}",
+                    ShareName = $"Profile Store - {person.DisplayName}",
                     UncPath = $"\\\\{ResolveCompanyHost(company, "profiles")}\\profiles$\\{shareToken}",
                     OwnerDepartmentId = person.DepartmentId,
                     OwnerPersonId = person.Id,
@@ -256,7 +259,9 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             var owner = people[i % people.Count];
             var platform = i % 5 == 0 ? "Teams" : "SharePoint";
             var pattern = patterns.Count == 0 ? null : patterns[i % patterns.Count];
-            var siteName = pattern is null ? $"{dept.Name} {(i % 3 == 0 ? "Operations" : i % 3 == 1 ? "Workspace" : "Projects")}" : ApplyDisplayPattern(pattern.Pattern, dept.Name, i + 1);
+            var siteName = pattern is null
+                ? BuildDefaultSiteName(dept.Name, i, platform)
+                : ApplyDisplayPattern(pattern.Pattern, dept.Name, i + 1);
             siteName = NormalizeSiteName(siteName, dept.Name);
             siteName = EnsureUniqueSiteName(siteNameUsage, siteName);
             var workspaceType = platform == "Teams"
@@ -334,16 +339,16 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             : (string.Equals(site.Platform, "Teams", StringComparison.OrdinalIgnoreCase)
                 ? new List<(string Name, string TemplateType, string Sensitivity)>
                 {
-                    ("Documents", "Documents", "Internal"),
-                    ("Shared", "Shared", "Internal"),
-                    ("Meeting Notes", "Meeting Notes", "Internal")
+                    ("Shared Documents", "Documents", "Internal"),
+                    ("Work in Progress", "Shared", "Internal"),
+                    ("Team Cadence", "Meeting Notes", "Internal")
                 }
                 : new List<(string Name, string TemplateType, string Sensitivity)>
                 {
-                    ("Documents", "Documents", "Internal"),
-                    ("Policies", "Policies", site.PrivacyType == "Private" ? "Confidential" : "Internal"),
-                    ("Templates", "Templates", "Internal"),
-                    ("Projects", "Projects", "Internal")
+                    ("Shared Documents", "Documents", "Internal"),
+                    ("Reference Library", "Policies", site.PrivacyType == "Private" ? "Confidential" : "Internal"),
+                    ("Standard Templates", "Templates", "Internal"),
+                    ("Active Initiatives", "Projects", "Internal")
                 });
         var takeCount = curatedPatterns.Count > 0
             ? libraryTemplates.Count
@@ -395,16 +400,17 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         if (channels.Count == 0)
         {
+            var deptLabel = ExtractPrimaryDepartmentToken(site.Name);
             channels = new List<(string Name, string ChannelType)>
             {
                 ("General", "Standard"),
-                ("Operations", "Standard")
+                ($"{deptLabel} Ops", "Standard")
             };
 
             if (site.Name.Contains("Project", StringComparison.OrdinalIgnoreCase)
                 || site.WorkspaceType == "Project")
             {
-                channels.Add(("Project-Delivery", "Standard"));
+                channels.Add(("Project Delivery", "Standard"));
             }
 
             if (site.PrivacyType == "Private")
@@ -418,7 +424,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
             if (_randomSource.NextDouble() < 0.35)
             {
-                channels.Add(("Partners", "Shared"));
+                channels.Add(("Partner Coordination", "Shared"));
             }
         }
 
@@ -462,9 +468,9 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             ? curatedPages.Select(pattern => (pattern.PageTitle, pattern.PageType, pattern.PromotedState, pattern.AssociatedLibraryName)).ToArray()
             : site.WorkspaceType switch
             {
-                "Project" => new[] { ("Home", "Home", "None", string.Empty), ("Project Charter", "Knowledge", "None", string.Empty), ("Status Dashboard", "Landing", "None", string.Empty), ("Weekly Update", "News", "News", string.Empty) },
-                "Knowledge" => new[] { ("Home", "Home", "None", string.Empty), ("Knowledge Base", "Knowledge", "None", string.Empty), ("How We Work", "Landing", "None", string.Empty) },
-                "Department" => new[] { ("Home", "Home", "None", string.Empty), ("Operations Handbook", "Knowledge", "None", string.Empty), ("Department News", "News", "News", string.Empty) },
+                "Project" => new[] { ("Home", "Home", "None", string.Empty), ("Project Charter", "Knowledge", "None", string.Empty), ("Milestone Tracker", "Landing", "None", string.Empty), ("Weekly Update", "News", "News", string.Empty) },
+                "Knowledge" => new[] { ("Home", "Home", "None", string.Empty), ("Knowledge Base", "Knowledge", "None", string.Empty), ("Working Norms", "Landing", "None", string.Empty) },
+                "Department" => new[] { ("Home", "Home", "None", string.Empty), ("Operating Model", "Knowledge", "None", string.Empty), ("Department News", "News", "News", string.Empty) },
                 _ => new[] { ("Home", "Home", "None", string.Empty), ("Workspace Guide", "Landing", "None", string.Empty), ("Announcements", "News", "News", string.Empty) }
             };
 
@@ -540,11 +546,11 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         var rootTemplates = library.Name switch
         {
-            "Policies" => new[] { "Security", "Human Resources", "Finance" },
-            "Templates" => new[] { "Presentations", "Spreadsheets", "Contracts" },
-            "Projects" => new[] { "Active", "Archive", "PMO" },
-            "Meeting Notes" => new[] { "Steering", "Daily Standup", "Retro" },
-            _ => new[] { "Shared", "Working", "Archive" }
+            "Reference Library" => new[] { "Policies and Standards", "Runbooks and Guides", "Archive" },
+            "Standard Templates" => new[] { "Presentations", "Spreadsheets", "Communications" },
+            "Active Initiatives" => new[] { "In Progress", "Completed", "PMO" },
+            "Team Cadence" => new[] { "Leadership Reviews", "Team Cadence", "Retrospectives" },
+            _ => new[] { "Working Drafts", "Published", "Archive" }
         };
 
         for (var i = 0; i < rootTemplates.Length; i++)
@@ -573,7 +579,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                     CompanyId = company.Id,
                     DocumentLibraryId = library.Id,
                     ParentFolderId = rootFolder.Id,
-                    Name = $"{rootTemplates[i]}-{childIndex + 1:00}",
+                    Name = BuildDefaultChildFolderName(rootTemplates[i], childIndex),
                     FolderType = childIndex == childCount - 1 ? "ArchiveLeaf" : "Working",
                     Depth = "2",
                     ItemCount = (8 + _randomSource.Next(0, 400)).ToString(),
@@ -704,7 +710,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         foreach (var db in world.Databases.Where(d => d.CompanyId == company.Id))
         {
             var group = FindDepartmentGroup(groups, departments, db.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "SG-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
 
             if (group is null)
             {
@@ -727,7 +733,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         foreach (var share in world.FileShares.Where(s => s.CompanyId == company.Id))
         {
-            var broadEmployeeGroup = groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "SG-AllEmployees");
+            var broadEmployeeGroup = FindBroadEmployeeGroup(groups, company.Id);
             var serverAdminGroup = groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "SG-Tier1-ServerAdmins");
 
             if (!string.IsNullOrWhiteSpace(share.OwnerPersonId))
@@ -810,7 +816,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             }
 
             var group = FindDepartmentGroup(groups, departments, share.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "SG-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
 
             if (group is null)
             {
@@ -900,7 +906,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         foreach (var site in world.CollaborationSites.Where(s => s.CompanyId == company.Id))
         {
             var group = FindDepartmentGroup(groups, departments, site.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
 
             if (group is null)
             {
@@ -945,7 +951,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
             if (!string.Equals(site.PrivacyType, "Public", StringComparison.OrdinalIgnoreCase))
             {
-                var broadCollaborationGroup = groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                var broadCollaborationGroup = FindBroadEmployeeGroup(groups, company.Id);
                 if (broadCollaborationGroup is not null && !string.Equals(broadCollaborationGroup.Id, group.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     AddAccessControlEvidence(
@@ -973,7 +979,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             }
 
             var group = FindDepartmentGroup(groups, departments, site.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
 
             if (group is null)
             {
@@ -1001,7 +1007,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
             if (!string.Equals(channel.ChannelType, "Standard", StringComparison.OrdinalIgnoreCase))
             {
-                var broadCollaborationGroup = groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                var broadCollaborationGroup = FindBroadEmployeeGroup(groups, company.Id);
                 if (broadCollaborationGroup is not null && !string.Equals(broadCollaborationGroup.Id, group.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     AddAccessControlEvidence(
@@ -1029,7 +1035,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             }
 
             var group = FindDepartmentGroup(groups, departments, site.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
 
             if (group is null)
             {
@@ -1093,7 +1099,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             }
 
             var group = FindDepartmentGroup(groups, departments, site.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
             if (group is null)
             {
                 continue;
@@ -1129,7 +1135,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                     isInherited: false,
                     notes: "Direct exception granting elevated access to confidential folder");
 
-                var broadCollaborationGroup = groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                var broadCollaborationGroup = FindBroadEmployeeGroup(groups, company.Id);
                 if (broadCollaborationGroup is not null && !string.Equals(broadCollaborationGroup.Id, group.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     AddAccessControlEvidence(
@@ -1168,7 +1174,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             }
 
             var group = FindDepartmentGroup(groups, departments, site.OwnerDepartmentId)
-                ?? groups.FirstOrDefault(g => g.CompanyId == company.Id && g.Name == "M365-AllEmployees");
+                ?? FindBroadEmployeeGroup(groups, company.Id);
             if (group is null)
             {
                 continue;
@@ -1313,8 +1319,121 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             return null;
         }
 
-        var expected = $"SG-{Slug(dept.Name)}-Users";
-        return groups.FirstOrDefault(g => string.Equals(g.Name, expected, StringComparison.OrdinalIgnoreCase));
+        var expectedNames = new[]
+        {
+            $"GG {dept.Name} Users",
+            $"SG-{Slug(dept.Name)}-Users"
+        };
+        return groups.FirstOrDefault(group => expectedNames.Any(expected => string.Equals(group.Name, expected, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static DirectoryGroup? FindBroadEmployeeGroup(IReadOnlyList<DirectoryGroup> groups, string companyId)
+    {
+        var expectedNames = new[]
+        {
+            "GG All Employees",
+            "SG-AllEmployees",
+            "M365-AllEmployees"
+        };
+
+        return groups.FirstOrDefault(group =>
+            string.Equals(group.CompanyId, companyId, StringComparison.OrdinalIgnoreCase)
+            && expectedNames.Any(expected => string.Equals(group.Name, expected, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static string DetermineDepartmentSharePurpose(int index)
+        => (index % 5) switch
+        {
+            0 => "DepartmentWorking",
+            1 => "DepartmentLeadership",
+            2 => "DepartmentProjects",
+            3 => "DepartmentReference",
+            _ => "DepartmentArchive"
+        };
+
+    private static string BuildDepartmentShareName(string departmentName, string sharePurpose, IDictionary<string, int> usage)
+    {
+        var stem = BuildShareStem(departmentName);
+        var baseName = sharePurpose switch
+        {
+            "DepartmentLeadership" => $"{stem}-leadership",
+            "DepartmentProjects" => $"{stem}-projects",
+            "DepartmentReference" => $"{stem}-reference",
+            "DepartmentArchive" => $"{stem}-archive",
+            _ => $"{stem}-shared"
+        };
+
+        if (!usage.TryGetValue(baseName, out var count))
+        {
+            usage[baseName] = 1;
+            return baseName;
+        }
+
+        count++;
+        usage[baseName] = count;
+        return $"{baseName}-{count}";
+    }
+
+    private static string BuildDefaultSiteName(string departmentName, int index, string platform)
+    {
+        if (string.Equals(platform, "Teams", StringComparison.OrdinalIgnoreCase))
+        {
+            return (index % 3) switch
+            {
+                0 => $"{departmentName} Team Hub",
+                1 => $"{departmentName} Working Session",
+                _ => $"{departmentName} Leadership Hub"
+            };
+        }
+
+        return (index % 3) switch
+        {
+            0 => $"{departmentName} Knowledge Center",
+            1 => $"{departmentName} Operations Hub",
+            _ => $"{departmentName} Project Workspace"
+        };
+    }
+
+    private static string ExtractPrimaryDepartmentToken(string siteName)
+    {
+        var separators = new[] { " Team Hub", " Working Session", " Leadership Hub", " Knowledge Center", " Operations Hub", " Project Workspace" };
+        foreach (var separator in separators)
+        {
+            if (siteName.EndsWith(separator, StringComparison.OrdinalIgnoreCase))
+            {
+                return siteName[..^separator.Length];
+            }
+        }
+
+        return siteName.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "Operations";
+    }
+
+    private static string BuildDefaultChildFolderName(string rootName, int childIndex)
+        => rootName switch
+        {
+            "Leadership Reviews" => childIndex == 0 ? "Monthly Review" : "Quarterly Business Review",
+            "Team Cadence" => childIndex == 0 ? "Weekly Notes" : "Action Tracker",
+            "Retrospectives" => childIndex == 0 ? "Current Quarter" : "Prior Quarters",
+            "In Progress" => childIndex == 0 ? "Ready for Review" : "Blocked Items",
+            "Completed" => childIndex == 0 ? "Recently Closed" : "Archived Deliverables",
+            "PMO" => childIndex == 0 ? "Governance" : "Status Reporting",
+            "Policies and Standards" => childIndex == 0 ? "Policies" : "Procedures",
+            "Runbooks and Guides" => childIndex == 0 ? "Playbooks" : "Guides",
+            "Archive" => childIndex == 0 ? "Current Year" : "Prior Years",
+            "Working Drafts" => childIndex == 0 ? "In Progress" : "Pending Review",
+            "Published" => childIndex == 0 ? "Current Quarter" : "Prior Quarters",
+            _ => childIndex == 0 ? "Current" : "Archive"
+        };
+
+    private static string BuildShareStem(string departmentName)
+    {
+        var tokens = departmentName
+            .Split(new[] { ' ', '-', '/', '&' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(token => new string(token.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant())
+            .Where(token => token.Length > 0)
+            .ToArray();
+
+        return tokens.Length == 0 ? "team" : string.Join('-', tokens);
     }
 
     private static string Slug(string value)
@@ -1436,6 +1555,21 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         if (shareName.Contains("archive", StringComparison.OrdinalIgnoreCase))
         {
             return "DepartmentArchive";
+        }
+
+        if (shareName.Contains("leadership", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DepartmentLeadership";
+        }
+
+        if (shareName.Contains("project", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DepartmentProjects";
+        }
+
+        if (shareName.Contains("reference", StringComparison.OrdinalIgnoreCase))
+        {
+            return "DepartmentReference";
         }
 
         if (shareName.Contains("drop", StringComparison.OrdinalIgnoreCase))

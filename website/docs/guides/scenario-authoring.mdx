@@ -8,12 +8,13 @@ description: Author DataGen scenarios with templates, overlays, JSON, and valida
 DataGen scenarios can be authored in several ways:
 
 - archetype-first with `New-SEScenarioFromArchetype`
-- template-first with `New-SEScenarioFromTemplate`
+- persona-first with `New-SEScenarioFromPersonaPreset`
 - guided interactive authoring with `New-SEScenarioWizard`
+- compatibility-oriented template-first with `New-SEScenarioFromTemplate`
 - JSON files checked into source control
 - pipeline object editing and validation
 
-For most new scenarios, start with an archetype or the wizard. The wizard now leads with archetypes, recommends overlays, and can suggest bundled domain packs such as `FirstParty.ITSM`, `FirstParty.SecOps`, and `FirstParty.BusinessOps` based on the archetype and overlays you choose.
+For most new scenarios, start with an archetype, a persona preset, or the wizard. The wizard now leads with archetypes, recommends overlays, and can suggest bundled domain packs such as `FirstParty.ITSM`, `FirstParty.SecOps`, and `FirstParty.BusinessOps` based on the archetype and overlays you choose.
 
 ## Archetypes
 
@@ -42,7 +43,7 @@ Templates remain available as a compatibility-oriented alias for the legacy star
 - `GlobalSaaS`
 - `HealthcareNetwork`
 
-Use templates when you want a strong starting point with reasonable defaults.
+Use templates when you need compatibility with existing workflows. For new scenario authoring, prefer archetypes, personas, or the wizard.
 
 ```powershell
 Get-SEScenarioTemplate
@@ -167,6 +168,28 @@ $resolved = Resolve-SEScenario -Path .\scenario.json
 $validation = Test-SEScenario -Scenario $resolved
 $validation
 ```
+
+## Quality and realism loop
+
+Scenario authoring is not just about getting to a valid JSON shape. The current workflow should usually end with a quality review as well:
+
+```powershell
+$world = New-SEEnterpriseWorld -Scenario $resolved -Seed 4242
+$world.Quality
+```
+
+For repeatable review runs, use the realism review script:
+
+```powershell
+.\scripts\invoke-realism-review.ps1 `
+  -ScenarioPath .\scenario.json `
+  -Seed 4242 `
+  -OutputFormat Both `
+  -OutputPath .\artifacts\quality\scenario-review.md `
+  -JsonOutputPath .\artifacts\quality\scenario-review.json
+```
+
+That gives you both operator-readable notes and CI-friendly validation output.
 
 ## Deviation profile
 

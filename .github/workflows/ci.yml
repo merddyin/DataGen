@@ -38,6 +38,10 @@ jobs:
         shell: pwsh
         run: .\scripts\validate-first-party-packs.ps1
 
+      - name: Run quality validation review
+        shell: pwsh
+        run: .\scripts\invoke-realism-review.ps1 -OutputPath artifacts\quality\realism-review.md -JsonOutputPath artifacts\quality\realism-review.json -OutputFormat Both -FailOnStatus Fail
+
       - name: Run solution tests
         run: dotnet test .\DataGen.slnx -v minimal /p:UseSharedCompilation=false -m:1 --no-restore
 
@@ -56,6 +60,12 @@ jobs:
         with:
           name: catalogs-sqlite-ci
           path: artifacts/catalog/catalogs.sqlite
+
+      - name: Upload quality validation artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: quality-validation-ci
+          path: artifacts/quality/**
 
   docs-validation:
     name: Build Docs Site

@@ -1,5 +1,7 @@
 namespace SyntheticEnterprise.Core.Generation.Infrastructure;
 
+using System.Security.Cryptography;
+using System.Text;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
@@ -35,10 +37,10 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var people = world.People.Where(p => p.CompanyId == company.Id).ToList();
             var offices = world.Offices.Where(o => o.CompanyId == company.Id).ToList();
             var teams = world.Teams.Where(t => t.CompanyId == company.Id).ToList();
-            var userAccounts = world.Accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "User").ToList();
             var privilegedAccounts = world.Accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "Privileged").ToList();
             var ous = world.OrganizationalUnits.Where(o => o.CompanyId == company.Id).ToList();
 
+            var userAccounts = world.Accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "User").ToList();
             CreateWorkstations(world, company, definition, people, userAccounts, privilegedAccounts, ous);
             CreateServers(world, company, definition, offices, teams, ous);
             CreateNetworkAssets(world, company, definition, offices);
@@ -137,6 +139,17 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var account = userAccounts.FirstOrDefault(a => a.PersonId == person.Id);
             var model = models[i % models.Length];
             var hostname = BuildHostname(company.Name, person.LastName, i + 1, "WS");
+            var joinProfile = ResolveWorkstationJoinProfile(model.Item3, contextSupportsHybridDirectory: world.IdentityStores.Any(store =>
+                store.CompanyId == company.Id &&
+                string.Equals(store.StoreType, "EntraTenant", StringComparison.OrdinalIgnoreCase)));
+            var accountLinks = CreateMachineAccounts(
+                world,
+                company,
+                hostname,
+                workstationOu,
+                administrativeTier: null,
+                createOnPremAccount: joinProfile.CreateOnPremAccount,
+                createCloudAccount: joinProfile.CreateCloudAccount);
 
             world.Devices.Add(new ManagedDevice
             {
@@ -153,9 +166,11 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 AssignedPersonId = person.Id,
                 AssignedOfficeId = person.OfficeId,
                 DirectoryAccountId = account?.Id,
+                OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
+                CloudDirectoryAccountId = accountLinks.CloudAccountId,
                 OuId = workstationOu?.Id,
                 DistinguishedName = workstationOu is null ? null : $"CN={hostname},{workstationOu.DistinguishedName}",
-                DomainJoined = model.Item3.StartsWith("Windows", StringComparison.OrdinalIgnoreCase),
+                DomainJoined = joinProfile.CreateOnPremAccount,
                 ComplianceState = _randomSource.NextDouble() < 0.92 ? "Compliant" : "NonCompliant",
                 LastSeen = _clock.UtcNow.AddDays(-_randomSource.Next(0, 45))
             });
@@ -175,7 +190,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             })
             .Where(entry => entry.Person is not null)
             .DistinctBy(entry => entry.Person!.Id)
-            .Take(Math.Max(1, privilegedAccounts.Count / 2))
+            .Take(Math.Clamp((int)Math.Ceiling(privilegedAccounts.Count / 8.0), 1, Math.Max(1, privilegedAccounts.Count)))
             .ToList();
 
         for (var i = 0; i < privilegedPeople.Count; i++)
@@ -183,6 +198,14 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var privilegedPerson = privilegedPeople[i].Person!;
             var privilegedAccount = privilegedPeople[i].Account;
             var hostname = BuildHostname(company.Name, privilegedPerson.LastName, i + 1, "PAW");
+            var accountLinks = CreateMachineAccounts(
+                world,
+                company,
+                hostname,
+                privilegedAccessWorkstationOu,
+                administrativeTier: "Tier1",
+                createOnPremAccount: true,
+                createCloudAccount: true);
 
             world.Devices.Add(new ManagedDevice
             {
@@ -199,6 +222,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 AssignedPersonId = privilegedPerson.Id,
                 AssignedOfficeId = privilegedPerson.OfficeId,
                 DirectoryAccountId = privilegedAccount.Id,
+                OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
+                CloudDirectoryAccountId = accountLinks.CloudAccountId,
                 OuId = privilegedAccessWorkstationOu.Id,
                 DistinguishedName = $"CN={hostname},{privilegedAccessWorkstationOu.DistinguishedName}",
                 DomainJoined = true,
@@ -216,24 +241,35 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         IReadOnlyList<Team> teams,
         IReadOnlyList<DirectoryOrganizationalUnit> ous)
     {
-        var roles = new[] { "Domain Controller", "File Server", "SQL Server", "Web Server", "Application Server", "Jump Host", "Print Server" };
-        var envs = new[] { "Production", "Production", "Production", "Staging", "Development" };
         var serverEnvironments = ous
             .Where(ou => ou.ParentOuId is not null)
             .GroupBy(ou => ou.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var serversOu = ous.FirstOrDefault(ou => ou.Name == "Servers");
+        var targetServerCount = Math.Max(1, definition.ServerCount);
+        var jumpHostCount = targetServerCount >= 10 ? 1 : 0;
+        var primaryServerCount = Math.Max(1, targetServerCount - jumpHostCount);
+        var officePlan = BuildServerOfficePlan(offices, primaryServerCount);
+        var rolePlan = BuildServerRolePlan(primaryServerCount, offices.Count);
 
-        for (var i = 0; i < Math.Max(1, definition.ServerCount); i++)
+        for (var i = 0; i < primaryServerCount; i++)
         {
-            var office = offices.Count > 0 ? offices[i % offices.Count] : null;
-            var team = teams.Count > 0 ? teams[i % teams.Count] : null;
-            var environment = envs[i % envs.Length];
+            var office = officePlan.Count > 0 ? officePlan[i % officePlan.Count] : null;
+            var role = rolePlan[i % rolePlan.Count];
+            var team = SelectServerOwnerTeam(teams, role);
+            var environment = ResolveServerEnvironment(role, i, primaryServerCount);
             var targetOu = serverEnvironments.TryGetValue(environment, out var environmentOu)
                 ? environmentOu
                 : serversOu;
-            var role = roles[i % roles.Length];
             var hostname = BuildServerHostname(company.Name, role, i + 1);
+            var accountLinks = CreateMachineAccounts(
+                world,
+                company,
+                hostname,
+                targetOu,
+                administrativeTier: string.Equals(role, "Domain Controller", StringComparison.OrdinalIgnoreCase) ? "Tier0" : "Tier1",
+                createOnPremAccount: true,
+                createCloudAccount: false);
 
             world.Servers.Add(new ServerAsset
             {
@@ -245,6 +281,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 OperatingSystem = "Windows Server",
                 OperatingSystemVersion = i % 3 == 0 ? "2022" : "2019",
                 OfficeId = office?.Id ?? "",
+                DirectoryAccountId = accountLinks.PrimaryAccountId,
+                OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
+                CloudDirectoryAccountId = accountLinks.CloudAccountId,
                 OuId = targetOu?.Id,
                 DistinguishedName = targetOu is null ? null : $"CN={hostname},{targetOu.DistinguishedName}",
                 DomainJoined = true,
@@ -252,6 +291,222 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 Criticality = i % 5 == 0 ? "High" : "Medium"
             });
         }
+
+        if (jumpHostCount == 1)
+        {
+            var office = offices.FirstOrDefault();
+            var team = teams.FirstOrDefault();
+            var targetOu = serverEnvironments.TryGetValue("Production", out var productionOu)
+                ? productionOu
+                : serversOu;
+            var hostname = BuildServerHostname(company.Name, "Jump Host", targetServerCount);
+            var accountLinks = CreateMachineAccounts(
+                world,
+                company,
+                hostname,
+                targetOu,
+                administrativeTier: "Tier1",
+                createOnPremAccount: true,
+                createCloudAccount: false);
+
+            world.Servers.Add(new ServerAsset
+            {
+                Id = _idFactory.Next("SRV"),
+                CompanyId = company.Id,
+                Hostname = hostname,
+                ServerRole = "Jump Host",
+                Environment = "Production",
+                OperatingSystem = "Windows Server",
+                OperatingSystemVersion = "2022",
+                OfficeId = office?.Id ?? "",
+                DirectoryAccountId = accountLinks.PrimaryAccountId,
+                OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
+                CloudDirectoryAccountId = accountLinks.CloudAccountId,
+                OuId = targetOu?.Id,
+                DistinguishedName = targetOu is null ? null : $"CN={hostname},{targetOu.DistinguishedName}",
+                DomainJoined = true,
+                OwnerTeamId = team?.Id ?? "",
+                Criticality = "High"
+            });
+        }
+    }
+
+    private List<string> BuildServerRolePlan(int serverCount, int officeCount)
+    {
+        if (serverCount <= 0)
+        {
+            return new();
+        }
+
+        var plan = new List<string>();
+        AddServerRoles(plan, "Domain Controller", Math.Max(2, Math.Min(4, 1 + officeCount / 3)));
+        AddServerRoles(plan, "Application Server", Math.Max(1, serverCount / 4));
+        AddServerRoles(plan, "SQL Server", Math.Max(1, serverCount / 6));
+        AddServerRoles(plan, "File Server", Math.Max(1, officeCount / 2));
+        AddServerRoles(plan, "Web Server", Math.Max(1, serverCount / 7));
+        AddServerRoles(plan, "Print Server", officeCount >= 2 ? 1 : 0);
+        AddServerRoles(plan, "Management Server", serverCount >= 8 ? Math.Max(1, serverCount / 12) : 0);
+        AddServerRoles(plan, "Remote Access Server", officeCount >= 3 && serverCount >= 12 ? 1 : 0);
+
+        while (plan.Count < serverCount)
+        {
+            AddServerRoles(plan, "Application Server", 1);
+            if (plan.Count < serverCount)
+            {
+                AddServerRoles(plan, "Web Server", 1);
+            }
+
+            if (plan.Count < serverCount)
+            {
+                AddServerRoles(plan, "SQL Server", 1);
+            }
+        }
+
+        return InterleaveServerRoles(plan.Take(serverCount).ToList());
+    }
+
+    private static void AddServerRoles(List<string> plan, string role, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            plan.Add(role);
+        }
+    }
+
+    private static List<string> InterleaveServerRoles(IReadOnlyList<string> plan)
+    {
+        var counts = plan
+            .GroupBy(role => role, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        var order = plan
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var interleaved = new List<string>(plan.Count);
+
+        while (interleaved.Count < plan.Count)
+        {
+            foreach (var role in order)
+            {
+                if (!counts.TryGetValue(role, out var remaining) || remaining <= 0)
+                {
+                    continue;
+                }
+
+                interleaved.Add(role);
+                counts[role] = remaining - 1;
+            }
+        }
+
+        return interleaved;
+    }
+
+    private static Team? SelectServerOwnerTeam(IReadOnlyList<Team> teams, string role)
+    {
+        if (teams.Count == 0)
+        {
+            return null;
+        }
+
+        static bool Matches(Team team, params string[] tokens)
+            => tokens.Any(token => team.Name.Contains(token, StringComparison.OrdinalIgnoreCase));
+
+        return role switch
+        {
+            "Domain Controller" => teams.FirstOrDefault(team => Matches(team, "Identity", "Directory"))
+                                  ?? teams.FirstOrDefault(team => Matches(team, "Platform", "Infrastructure")),
+            "SQL Server" => teams.FirstOrDefault(team => Matches(team, "Data", "Database", "Analytics"))
+                            ?? teams.FirstOrDefault(team => Matches(team, "Platform")),
+            "Web Server" => teams.FirstOrDefault(team => Matches(team, "Platform", "Engineering", "Digital"))
+                            ?? teams.FirstOrDefault(team => Matches(team, "Application")),
+            "Application Server" => teams.FirstOrDefault(team => Matches(team, "Application", "Platform", "Engineering"))
+                                    ?? teams.FirstOrDefault(team => Matches(team, "Automation")),
+            "Management Server" => teams.FirstOrDefault(team => Matches(team, "Infrastructure", "Platform", "Operations"))
+                                   ?? teams.FirstOrDefault(team => Matches(team, "Service Desk")),
+            "Remote Access Server" => teams.FirstOrDefault(team => Matches(team, "Infrastructure", "Security", "Platform")),
+            "File Server" or "Print Server" => teams.FirstOrDefault(team => Matches(team, "Infrastructure", "Service Desk", "Operations")),
+            _ => teams.FirstOrDefault()
+        };
+    }
+
+    private static string ResolveServerEnvironment(string role, int index, int totalCount)
+    {
+        if (string.Equals(role, "Domain Controller", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Production";
+        }
+
+        if (index >= Math.Max(4, totalCount - 2))
+        {
+            return "Development";
+        }
+
+        if (index >= Math.Max(3, totalCount - 5))
+        {
+            return "Staging";
+        }
+
+        return "Production";
+    }
+
+    private List<Office> BuildServerOfficePlan(IReadOnlyList<Office> offices, int serverCount)
+    {
+        if (offices.Count == 0 || serverCount <= 0)
+        {
+            return new();
+        }
+
+        var weights = offices
+            .Select(office => new
+            {
+                Office = office,
+                Weight = office.IsHeadquarters
+                    ? 7.0
+                    : string.Equals(office.Country, offices[0].Country, StringComparison.OrdinalIgnoreCase)
+                        ? 2.5
+                        : 1.0
+            })
+            .ToList();
+
+        var totalWeight = weights.Sum(item => item.Weight);
+        var allocations = offices.ToDictionary(office => office.Id, _ => 0, StringComparer.OrdinalIgnoreCase);
+        foreach (var item in weights)
+        {
+            allocations[item.Office.Id] = Math.Max(
+                item.Office.IsHeadquarters ? 1 : 0,
+                (int)Math.Floor((item.Weight / totalWeight) * serverCount));
+        }
+
+        var allocated = allocations.Values.Sum();
+        var index = 0;
+        while (allocated < serverCount)
+        {
+            var office = weights[index % weights.Count].Office;
+            allocations[office.Id] = allocations[office.Id] + 1;
+            allocated++;
+            index++;
+        }
+
+        while (allocated > serverCount)
+        {
+            var office = weights
+                .OrderBy(item => item.Office.IsHeadquarters ? 1 : 0)
+                .ThenByDescending(item => allocations[item.Office.Id])
+                .FirstOrDefault(item => allocations[item.Office.Id] > (item.Office.IsHeadquarters ? 1 : 0))
+                ?.Office;
+            if (office is null)
+            {
+                break;
+            }
+
+            allocations[office.Id] = allocations[office.Id] - 1;
+            allocated--;
+        }
+
+        return weights
+            .OrderByDescending(item => item.Office.IsHeadquarters)
+            .ThenByDescending(item => item.Weight)
+            .SelectMany(item => Enumerable.Repeat(item.Office, allocations[item.Office.Id]))
+            .ToList();
     }
 
     private void CreateNetworkAssets(
@@ -380,16 +635,16 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         var devices = world.Devices.Where(device => device.CompanyId == company.Id).ToList();
         var servers = world.Servers.Where(server => server.CompanyId == company.Id).ToList();
 
-        var tier1WorkstationAdmins = FindGroup(groups, "SG-Tier1-WorkstationAdmins");
-        var tier1ServerAdmins = FindGroup(groups, "SG-Tier1-ServerAdmins");
-        var tier2Helpdesk = FindGroup(groups, "SG-Tier2-Helpdesk");
-        var tier0PawUsers = FindGroup(groups, "SG-Tier0-PAW-Users");
-        var tier1PawUsers = FindGroup(groups, "SG-Tier1-PAW-Users");
-        var tier0PawDevices = FindGroup(groups, "SG-Tier0-PAW-Devices");
-        var tier1PawDevices = FindGroup(groups, "SG-Tier1-PAW-Devices");
-        var tier1ManagedWorkstations = FindGroup(groups, "SG-Tier1-ManagedWorkstations");
-        var tier1ManagedServers = FindGroup(groups, "SG-Tier1-ManagedServers");
-        var mspOperators = FindGroup(groups, "SG-MSP-Operators");
+        var tier1WorkstationAdmins = FindGroup(groups, "GG Tier1 Workstation Admins");
+        var tier1ServerAdmins = FindGroup(groups, "GG Tier1 Server Admins");
+        var tier2Helpdesk = FindGroup(groups, "GG Tier2 Helpdesk");
+        var tier0PawUsers = FindGroup(groups, "GG Tier0 PAW Users");
+        var tier1PawUsers = FindGroup(groups, "GG Tier1 PAW Users");
+        var tier0PawDevices = FindGroup(groups, "GG Tier0 PAW Devices");
+        var tier1PawDevices = FindGroup(groups, "GG Tier1 PAW Devices");
+        var tier1ManagedWorkstations = FindGroup(groups, "GG Tier1 Managed Workstations");
+        var tier1ManagedServers = FindGroup(groups, "GG Tier1 Managed Servers");
+        var mspOperators = FindGroup(groups, "GG MSP Operations");
         var addedHelpdeskAssignment = false;
         var addedManagedServiceAssignment = false;
 
@@ -403,7 +658,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
             if (string.Equals(device.DeviceType, "PrivilegedAccessWorkstation", StringComparison.OrdinalIgnoreCase))
             {
-                var privilegedAccount = privilegedAccounts.FirstOrDefault(account => account.Id == device.DirectoryAccountId);
+                var privilegedAccount = privilegedAccounts.FirstOrDefault(account =>
+                    !string.IsNullOrWhiteSpace(device.AssignedPersonId)
+                    && string.Equals(account.PersonId, device.AssignedPersonId, StringComparison.OrdinalIgnoreCase));
                 var deviceTierGroup = string.Equals(privilegedAccount?.AdministrativeTier, "Tier0", StringComparison.OrdinalIgnoreCase)
                     ? tier0PawDevices
                     : tier1PawDevices;
@@ -519,10 +776,60 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
     private void AddComputerMembership(SyntheticEnterpriseWorld world, string groupId, string memberObjectId, string memberObjectType)
     {
+        var resolvedMemberType = memberObjectType;
+        var resolvedMemberId = memberObjectId;
+
+        if (string.Equals(memberObjectType, "Device", StringComparison.OrdinalIgnoreCase))
+        {
+            var device = world.Devices.FirstOrDefault(candidate => string.Equals(candidate.Id, memberObjectId, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(device?.OnPremDirectoryAccountId))
+            {
+                resolvedMemberType = "Account";
+                resolvedMemberId = device.OnPremDirectoryAccountId!;
+            }
+            else if (!string.IsNullOrWhiteSpace(device?.CloudDirectoryAccountId))
+            {
+                resolvedMemberType = "Account";
+                resolvedMemberId = device.CloudDirectoryAccountId!;
+            }
+            else if (!string.IsNullOrWhiteSpace(device?.DirectoryAccountId))
+            {
+                resolvedMemberType = "Account";
+                resolvedMemberId = device.DirectoryAccountId!;
+            }
+            else
+            {
+                return;
+            }
+        }
+        else if (string.Equals(memberObjectType, "Server", StringComparison.OrdinalIgnoreCase))
+        {
+            var server = world.Servers.FirstOrDefault(candidate => string.Equals(candidate.Id, memberObjectId, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(server?.OnPremDirectoryAccountId))
+            {
+                resolvedMemberType = "Account";
+                resolvedMemberId = server.OnPremDirectoryAccountId!;
+            }
+            else if (!string.IsNullOrWhiteSpace(server?.CloudDirectoryAccountId))
+            {
+                resolvedMemberType = "Account";
+                resolvedMemberId = server.CloudDirectoryAccountId!;
+            }
+            else if (!string.IsNullOrWhiteSpace(server?.DirectoryAccountId))
+            {
+                resolvedMemberType = "Account";
+                resolvedMemberId = server.DirectoryAccountId!;
+            }
+            else
+            {
+                return;
+            }
+        }
+
         if (world.GroupMemberships.Any(membership =>
                 string.Equals(membership.GroupId, groupId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(membership.MemberObjectId, memberObjectId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(membership.MemberObjectType, memberObjectType, StringComparison.OrdinalIgnoreCase)))
+                && string.Equals(membership.MemberObjectId, resolvedMemberId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(membership.MemberObjectType, resolvedMemberType, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -531,10 +838,190 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         {
             Id = _idFactory.Next("MEM"),
             GroupId = groupId,
-            MemberObjectId = memberObjectId,
-            MemberObjectType = memberObjectType
+            MemberObjectId = resolvedMemberId,
+            MemberObjectType = resolvedMemberType
         });
     }
+
+    private MachineAccountLinks CreateMachineAccounts(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string hostname,
+        DirectoryOrganizationalUnit? onPremOu,
+        string? administrativeTier,
+        bool createOnPremAccount,
+        bool createCloudAccount)
+    {
+        string? onPremAccountId = null;
+        string? cloudAccountId = null;
+        var existingSamNames = world.Accounts
+            .Select(account => account.SamAccountName)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var existingUpns = world.Accounts
+            .Select(account => account.UserPrincipalName)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (createOnPremAccount)
+        {
+            var sam = BuildUniqueMachineSamAccountName(hostname, existingSamNames, appendDollarSign: true);
+            var upn = BuildUniqueMachineUpn(hostname, company.PrimaryDomain, existingUpns, appendDollarSign: true);
+            var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 30));
+            var account = new DirectoryAccount
+            {
+                Id = BuildMachineAccountId(company.Name, hostname, "AD"),
+                CompanyId = company.Id,
+                AccountType = "Device",
+                SamAccountName = sam,
+                UserPrincipalName = upn,
+                Mail = null,
+                DistinguishedName = onPremOu is null ? $"CN={EscapeDn(hostname)}" : $"CN={EscapeDn(hostname)},{onPremOu.DistinguishedName}",
+                OuId = onPremOu?.Id ?? string.Empty,
+                Enabled = true,
+                Privileged = false,
+                MfaEnabled = false,
+                GeneratedPassword = CreatePassword(24),
+                PasswordProfile = "MachineManaged",
+                AdministrativeTier = administrativeTier,
+                PasswordLastSet = passwordLastSet,
+                PasswordExpires = null,
+                PasswordNeverExpires = true,
+                MustChangePasswordAtNextLogon = false,
+                UserType = "Member",
+                IdentityProvider = "HybridDirectory",
+                ExternalAccessCategory = "Device"
+            };
+
+            world.Accounts.Add(account);
+            onPremAccountId = account.Id;
+        }
+
+        if (createCloudAccount)
+        {
+            var sam = BuildUniqueMachineSamAccountName(hostname, existingSamNames, appendDollarSign: false);
+            var upn = BuildUniqueMachineUpn(hostname, company.PrimaryDomain, existingUpns, appendDollarSign: false);
+            var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 30));
+            var account = new DirectoryAccount
+            {
+                Id = BuildMachineAccountId(company.Name, hostname, "ENTRA"),
+                CompanyId = company.Id,
+                AccountType = "Device",
+                SamAccountName = sam,
+                UserPrincipalName = upn,
+                Mail = null,
+                DistinguishedName = hostname,
+                OuId = string.Empty,
+                Enabled = true,
+                Privileged = false,
+                MfaEnabled = false,
+                GeneratedPassword = CreatePassword(24),
+                PasswordProfile = "CloudDeviceManaged",
+                AdministrativeTier = administrativeTier,
+                PasswordLastSet = passwordLastSet,
+                PasswordExpires = null,
+                PasswordNeverExpires = true,
+                MustChangePasswordAtNextLogon = false,
+                UserType = "Member",
+                IdentityProvider = "EntraID",
+                ExternalAccessCategory = "Device"
+            };
+
+            world.Accounts.Add(account);
+            cloudAccountId = account.Id;
+        }
+
+        return new MachineAccountLinks(onPremAccountId ?? cloudAccountId, onPremAccountId, cloudAccountId);
+    }
+
+    private JoinProfile ResolveWorkstationJoinProfile(string operatingSystem, bool contextSupportsHybridDirectory)
+    {
+        if (operatingSystem.StartsWith("Windows", StringComparison.OrdinalIgnoreCase))
+        {
+            return contextSupportsHybridDirectory
+                ? new JoinProfile(CreateOnPremAccount: true, CreateCloudAccount: true)
+                : new JoinProfile(CreateOnPremAccount: true, CreateCloudAccount: false);
+        }
+
+        return contextSupportsHybridDirectory
+            ? new JoinProfile(CreateOnPremAccount: false, CreateCloudAccount: true)
+            : new JoinProfile(CreateOnPremAccount: false, CreateCloudAccount: false);
+    }
+
+    private static string BuildUniqueMachineSamAccountName(string hostname, ISet<string> existingSamNames, bool appendDollarSign)
+    {
+        var sanitized = hostname.Replace(" ", string.Empty, StringComparison.Ordinal).Trim();
+        var stemBudget = appendDollarSign ? 15 : 20;
+        var stem = sanitized[..Math.Min(stemBudget, sanitized.Length)];
+        var candidate = appendDollarSign ? $"{stem}$" : stem;
+        var suffix = 1;
+
+        while (!existingSamNames.Add(candidate))
+        {
+            var suffixText = suffix.ToString("00");
+            var adjustedStemBudget = Math.Max(1, stemBudget - suffixText.Length);
+            stem = sanitized[..Math.Min(adjustedStemBudget, sanitized.Length)];
+            candidate = appendDollarSign ? $"{stem}{suffixText}$" : $"{stem}{suffixText}";
+            suffix++;
+        }
+
+        return candidate;
+    }
+
+    private static string BuildUniqueMachineUpn(string hostname, string domain, ISet<string> existingUpns, bool appendDollarSign)
+    {
+        var localPart = appendDollarSign ? $"{hostname}$" : hostname;
+        var candidate = $"{localPart.ToLowerInvariant()}@{domain}";
+        var suffix = 1;
+
+        while (!existingUpns.Add(candidate))
+        {
+            candidate = $"{hostname.ToLowerInvariant()}{suffix:00}{(appendDollarSign ? "$" : string.Empty)}@{domain}";
+            suffix++;
+        }
+
+        return candidate;
+    }
+
+    private static string BuildMachineAccountId(string companyName, string hostname, string providerCode)
+    {
+        var company = Slug(companyName);
+        var host = Slug(hostname);
+        var payload = $"{companyName.ToUpperInvariant()}|{hostname.ToUpperInvariant()}|{providerCode.ToUpperInvariant()}";
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        var suffix = Convert.ToHexString(digest[..6]);
+        return $"ACT-{company[..Math.Min(6, company.Length)]}-{host[..Math.Min(8, host.Length)]}-{providerCode}-{suffix}".ToUpperInvariant();
+    }
+
+    private string CreatePassword(int length)
+    {
+        const string lower = "abcdefghijklmnopqrstuvwxyz";
+        const string upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const string digits = "0123456789";
+        const string symbols = "!@#$%^&*()_-+=[]{}";
+        var all = lower + upper + digits + symbols;
+        var buffer = new char[length];
+        buffer[0] = lower[_randomSource.Next(lower.Length)];
+        buffer[1] = upper[_randomSource.Next(upper.Length)];
+        buffer[2] = digits[_randomSource.Next(digits.Length)];
+        buffer[3] = symbols[_randomSource.Next(symbols.Length)];
+
+        for (var i = 4; i < buffer.Length; i++)
+        {
+            buffer[i] = all[_randomSource.Next(all.Length)];
+        }
+
+        for (var i = buffer.Length - 1; i > 0; i--)
+        {
+            var swapIndex = _randomSource.Next(i + 1);
+            (buffer[i], buffer[swapIndex]) = (buffer[swapIndex], buffer[i]);
+        }
+
+        return new string(buffer);
+    }
+
+    private static string EscapeDn(string value)
+        => value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace(",", "\\,", StringComparison.Ordinal);
 
     private static DirectoryGroup? FindGroup(IReadOnlyList<DirectoryGroup> groups, string name)
         => groups.FirstOrDefault(group => string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -579,16 +1066,6 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             }
         }
 
-        foreach (var device in world.Devices.Where(device => device.CompanyId == company.Id))
-        {
-            AddBuiltInLocalGroupMember(world, company.Id, "Device", device.Id, "Administrators", "BUILTIN\\Administrator", "BuiltIn", ResolveEndpointTier(device.DeviceType));
-        }
-
-        foreach (var server in world.Servers.Where(server => server.CompanyId == company.Id))
-        {
-            AddBuiltInLocalGroupMember(world, company.Id, "Server", server.Id, "Administrators", "BUILTIN\\Administrator", "BuiltIn", "Tier1");
-            AddBuiltInLocalGroupMember(world, company.Id, "Server", server.Id, "Remote Desktop Users", "BUILTIN\\Remote Desktop Users", "BuiltIn", "Tier1");
-        }
     }
 
     private void AddPolicyBaseline(
@@ -637,31 +1114,6 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         });
     }
 
-    private void AddBuiltInLocalGroupMember(
-        SyntheticEnterpriseWorld world,
-        string companyId,
-        string endpointType,
-        string endpointId,
-        string localGroupName,
-        string principalName,
-        string membershipSource,
-        string administrativeTier)
-    {
-        world.EndpointLocalGroupMembers.Add(new EndpointLocalGroupMember
-        {
-            Id = _idFactory.Next("ELG"),
-            CompanyId = companyId,
-            EndpointType = endpointType,
-            EndpointId = endpointId,
-            LocalGroupName = localGroupName,
-            PrincipalObjectId = null,
-            PrincipalType = "BuiltIn",
-            PrincipalName = principalName,
-            MembershipSource = membershipSource,
-            AdministrativeTier = administrativeTier
-        });
-    }
-
     private static string ResolvePrincipalName(SyntheticEnterpriseWorld world, string principalType, string principalObjectId)
     {
         if (string.Equals(principalType, "Account", StringComparison.OrdinalIgnoreCase))
@@ -682,8 +1134,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
     private static string BuildHostname(string companyName, string seed, int index, string prefix)
     {
         var company = Slug(companyName);
-        var part = Slug(seed);
-        return $"{prefix}-{company[..Math.Min(6, company.Length)]}-{part[..Math.Min(6, part.Length)]}-{index:000}".ToUpperInvariant();
+        return $"{prefix}-{company[..Math.Min(6, company.Length)]}-{index:000}".ToUpperInvariant();
     }
 
     private static string BuildServerHostname(string companyName, string role, int index)
@@ -697,6 +1148,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             "Web Server" => "WEB",
             "Application Server" => "APP",
             "Jump Host" => "JMP",
+            "Management Server" => "MGT",
+            "Remote Access Server" => "RAS",
             "Print Server" => "PRN",
             _ => Slug(role)[..Math.Min(4, Slug(role).Length)].ToUpperInvariant()
         };
@@ -715,6 +1168,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         => new string(value.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
 
     private sealed record NetworkAssetProfile(string AssetType, string Vendor, string Model, string HostPrefix);
+    private sealed record JoinProfile(bool CreateOnPremAccount, bool CreateCloudAccount);
+    private sealed record MachineAccountLinks(string? PrimaryAccountId, string? OnPremAccountId, string? CloudAccountId);
 
     private static string Read(Dictionary<string, string?> row, string key)
         => row.TryGetValue(key, out var value) ? value ?? "" : "";

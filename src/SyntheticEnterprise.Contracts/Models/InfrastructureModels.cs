@@ -24,6 +24,8 @@ public record ManagedDevice
     public string? AssignedPersonId { get; init; }
     public string? AssignedOfficeId { get; init; }
     public string? DirectoryAccountId { get; init; }
+    public string? OnPremDirectoryAccountId { get; init; }
+    public string? CloudDirectoryAccountId { get; init; }
     public string? OuId { get; init; }
     public string? DistinguishedName { get; init; }
     public bool DomainJoined { get; init; } = true;
@@ -41,6 +43,9 @@ public record ServerAsset
     public string OperatingSystem { get; init; } = "";
     public string OperatingSystemVersion { get; init; } = "";
     public string OfficeId { get; init; } = "";
+    public string? DirectoryAccountId { get; init; }
+    public string? OnPremDirectoryAccountId { get; init; }
+    public string? CloudDirectoryAccountId { get; init; }
     public string? OuId { get; init; }
     public string? DistinguishedName { get; init; }
     public bool DomainJoined { get; init; } = true;

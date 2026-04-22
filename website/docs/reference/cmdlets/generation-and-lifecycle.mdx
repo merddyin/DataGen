@@ -5,6 +5,10 @@ description: Reference for world generation, summary, anomaly, and selective lay
 
 # Generation and Lifecycle Cmdlets
 
+## `Get-SEModuleCommandSurface`
+
+Returns the categorized module command surface so you can discover the preferred workflow areas without scanning a flat command list.
+
 ## `New-SEEnterpriseWorld`
 
 The main generation entry point.
@@ -20,6 +24,8 @@ Additional controls include:
 - `-CatalogRootPath`
 - `-Seed`
 - plugin execution and trust parameters
+
+The returned generation result now also carries a structured `Quality` report for realism, completeness, consistency, exportability, and operational coverage.
 
 ## `Get-SEWorldSummary`
 

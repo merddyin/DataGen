@@ -20,7 +20,10 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         foreach (var company in world.Companies)
         {
             var applications = world.Applications
-                .Where(application => application.CompanyId == company.Id && application.HostingModel == "SaaS")
+                .Where(application =>
+                    application.CompanyId == company.Id
+                    && application.HostingModel == "SaaS"
+                    && IsTenantEligibleApplication(company, application))
                 .ToList();
             if (applications.Count == 0)
             {
@@ -102,15 +105,12 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
                                 && string.Equals(container.ContainerType, "AzureResourceGroup", StringComparison.OrdinalIgnoreCase)
                                 && string.Equals(container.CloudTenantId, tenant.Id, StringComparison.OrdinalIgnoreCase))
             .ToList();
-        var allEmployeesGroup = world.Groups.FirstOrDefault(group =>
-            group.CompanyId == company.Id
-            && string.Equals(group.Name, "M365-AllEmployees", StringComparison.OrdinalIgnoreCase));
+        var allEmployeesGroup = FindGroup(world, company.Id, "GG All Employees", "M365 All Employees", "GG Microsoft 365 Users");
         var guestCollaborationGroup = world.Groups.FirstOrDefault(group =>
             group.CompanyId == company.Id
-            && string.Equals(group.Name, "M365-GuestCollaboration", StringComparison.OrdinalIgnoreCase));
-        var privilegedAccessGroup = world.Groups.FirstOrDefault(group =>
-            group.CompanyId == company.Id
-            && string.Equals(group.Name, "SG-PrivilegedAccess", StringComparison.OrdinalIgnoreCase));
+            && (string.Equals(group.Name, "M365-GuestCollaboration", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(group.Name, "M365 Guest Collaboration", StringComparison.OrdinalIgnoreCase)));
+        var privilegedAccessGroup = FindGroup(world, company.Id, "UG Privileged Access", "GG Privileged Access");
 
         var compliancePolicy = EnsurePolicy(
             world,
@@ -248,14 +248,15 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
 
     private IdentityStore? AddIdentityStore(SyntheticEnterpriseWorld world, Company company, CloudTenant tenant)
     {
-        if (!string.Equals(tenant.Provider, "Microsoft", StringComparison.OrdinalIgnoreCase))
+        var storeType = ResolveIdentityStoreType(tenant.Provider);
+        if (string.IsNullOrWhiteSpace(storeType))
         {
             return null;
         }
 
         var existing = world.IdentityStores.FirstOrDefault(store =>
             string.Equals(store.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(store.StoreType, "EntraTenant", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(store.StoreType, storeType, StringComparison.OrdinalIgnoreCase)
             && string.Equals(store.PrimaryDomain, tenant.PrimaryDomain, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
@@ -266,8 +267,8 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         {
             Id = _idFactory.Next("IDS"),
             CompanyId = company.Id,
-            Name = $"{company.Name} Entra ID",
-            StoreType = "EntraTenant",
+            Name = ResolveIdentityStoreName(company.Name, tenant.Provider, storeType),
+            StoreType = storeType,
             Provider = tenant.Provider,
             PrimaryDomain = tenant.PrimaryDomain,
             DirectoryMode = "CloudDirectory",
@@ -654,8 +655,80 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         };
     }
 
+    private static DirectoryGroup? FindGroup(SyntheticEnterpriseWorld world, string companyId, params string[] names)
+        => world.Groups.FirstOrDefault(group =>
+            group.CompanyId == companyId
+            && names.Any(name => string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase)));
+
     private static string BuildTenantName(string companyName, string provider, string tenantType)
         => $"{companyName} {provider} {tenantType}".Trim();
+
+    private static bool IsTenantEligibleApplication(Company company, ApplicationRecord application)
+    {
+        if (!string.Equals(application.HostingModel, "SaaS", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (LooksLikeEndpointSoftware(application))
+        {
+            return false;
+        }
+
+        if (string.Equals(application.Vendor, company.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool LooksLikeEndpointSoftware(ApplicationRecord application)
+    {
+        var name = application.Name ?? string.Empty;
+        var category = application.Category ?? string.Empty;
+
+        if (category is "Browser" or "Utility" or "Backup")
+        {
+            return true;
+        }
+
+        return name.Contains("Agent", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Plugin", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Sync Client", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("VDI", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Browser", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Backup", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Notepad++", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ResolveIdentityStoreType(string? provider)
+    {
+        if (string.IsNullOrWhiteSpace(provider))
+        {
+            return string.Empty;
+        }
+
+        return provider.Trim() switch
+        {
+            var value when value.Equals("Microsoft", StringComparison.OrdinalIgnoreCase) => "EntraTenant",
+            var value when value.Equals("Okta", StringComparison.OrdinalIgnoreCase) => "Okta",
+            var value when value.Equals("Auth0", StringComparison.OrdinalIgnoreCase) => "Auth0",
+            var value when value.Equals("Google", StringComparison.OrdinalIgnoreCase) || value.Equals("Google Workspace", StringComparison.OrdinalIgnoreCase) => "GoogleWorkspace",
+            var value when value.Equals("OneLogin", StringComparison.OrdinalIgnoreCase) => "OneLogin",
+            var value when value.Equals("Ping", StringComparison.OrdinalIgnoreCase) || value.Equals("Ping Identity", StringComparison.OrdinalIgnoreCase) => "PingIdentity",
+            var value when value.Equals("JumpCloud", StringComparison.OrdinalIgnoreCase) => "JumpCloud",
+            _ => string.Empty
+        };
+    }
+
+    private static string ResolveIdentityStoreName(string companyName, string? provider, string storeType)
+        => storeType switch
+        {
+            "EntraTenant" => $"{companyName} Entra ID",
+            "GoogleWorkspace" => $"{companyName} Google Workspace",
+            _ => $"{companyName} {provider}".Trim()
+        };
 
     private static string BuildTenantDomain(Company company, string provider, string domainSuffix)
     {

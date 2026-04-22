@@ -63,6 +63,9 @@ public sealed class RepositoryGenerationTests
         Assert.Contains(result.World.FileShares, share => share.SharePurpose == "UserProfile");
         Assert.Contains(result.World.FileShares, share => !string.IsNullOrWhiteSpace(share.OwnerPersonId));
         Assert.Contains(result.World.FileShares, share => !string.IsNullOrWhiteSpace(share.HostServerId));
+        Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.Contains("-share-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.StartsWith("home-", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.StartsWith("profile-", StringComparison.OrdinalIgnoreCase));
 
         Assert.Contains(result.World.CollaborationSites, site => site.Platform == "Teams");
         Assert.Contains(result.World.CollaborationSites, site => site.Platform == "SharePoint");
@@ -71,6 +74,7 @@ public sealed class RepositoryGenerationTests
         Assert.Contains(result.World.DocumentLibraries, library => library.TemplateType == "Documents");
         Assert.Contains(result.World.SitePages, page => page.PageType == "Home" || page.PageType == "News");
         Assert.Contains(result.World.DocumentFolders, folder => !string.IsNullOrWhiteSpace(folder.ParentFolderId));
+        Assert.DoesNotContain(result.World.DocumentFolders, folder => System.Text.RegularExpressions.Regex.IsMatch(folder.Name, "-\\d{2}$"));
         Assert.Contains(result.World.RepositoryAccessGrants, grant => grant.RepositoryType == "FileShare" && grant.PrincipalType == "Account");
         Assert.Contains(result.World.RepositoryAccessGrants, grant => grant.RepositoryType == "DocumentLibrary");
         Assert.Contains(result.World.RepositoryAccessGrants, grant => grant.RepositoryType == "CollaborationChannel");
@@ -252,6 +256,57 @@ public sealed class RepositoryGenerationTests
         Assert.All(result.World.CollaborationSites, site => Assert.Contains(company.PrimaryDomain, site.Url, StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.FileShares, share => share.UncPath.Contains(".test", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.CollaborationSites, site => site.Url.Contains(".test", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Contextual_Default_Repository_Names()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 7,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Repository Naming Realism Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Repository Naming Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 1,
+                            FileShareCount = 8,
+                            CollaborationSiteCount = 8,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-shared", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-leadership", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-projects", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-archive", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => share.ShareName.StartsWith("Personal Drive - ", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => share.ShareName.StartsWith("Profile Store - ", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.CollaborationSites, site => site.Name.EndsWith("Hub", StringComparison.OrdinalIgnoreCase)
+            || site.Name.EndsWith("Session", StringComparison.OrdinalIgnoreCase)
+            || site.Name.EndsWith("Center", StringComparison.OrdinalIgnoreCase)
+            || site.Name.EndsWith("Workspace", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Meeting Notes", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Projects", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Working Files", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Operating Rhythm", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

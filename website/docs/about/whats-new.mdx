@@ -1,0 +1,62 @@
+---
+title: What's New
+description: Recent release notes and highlights for the current DataGen platform.
+---
+
+# What's New
+
+This page tracks the most recent product-level changes that matter to users of DataGen.
+
+## v0.4.0
+
+This release is the point where DataGen moved from a stronger enterprise generator into a broader synthetic operating environment platform.
+
+### Highlights
+
+- **Bundled domain packs**
+  DataGen now includes first-party packs for ITSM, SecOps, and BusinessOps through the native scenario `packs` model.
+- **Temporal simulation foundations**
+  Generated worlds can now include temporal events, drift, and snapshot-oriented export artifacts.
+- **Productized scenario authoring**
+  Archetypes, persona presets, richer overlays, and an archetype-first wizard now shape the preferred authoring workflow.
+- **Major realism hardening**
+  Recent work improved organization structure, geography, groups, policies, repositories, CMDB artifacts, applications, infrastructure, and external ecosystem modeling.
+- **Built-in quality validation**
+  Generation results now include structured quality reports, and the realism review tooling can emit both markdown and JSON for CI and repeatable review loops.
+
+### Practical impact
+
+For most users, this means:
+
+- easier scenario setup
+- more believable default output
+- better operating-domain coverage
+- stronger validation and demo datasets
+- clearer automation and CI checks around generation quality
+
+### Recommended entry points
+
+If you are starting fresh with the current platform, begin with:
+
+- [Installation](/getting-started/installation)
+- [First World](/getting-started/first-world)
+- [Scenario Authoring](/guides/scenario-authoring)
+- [Product Roadmap](/about/product-roadmap)
+
+If you are extending the platform, also read:
+
+- [Plugin Cmdlets](/reference/cmdlets/plugins)
+- [SDK Overview](/sdk/overview)
+
+## Notes on release scope
+
+DataGen continues to treat downstream import shaping as an external concern.
+
+The work in this release deepens the generated source environment itself:
+
+- richer structure
+- more realistic operating domains
+- temporal behavior
+- stronger quality and realism diagnostics
+
+It does not turn the core product into a collection of consumer-specific adapters.

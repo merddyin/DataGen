@@ -76,45 +76,6 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         CmdbProfile profile,
         IDictionary<string, ConfigurationItem> ciBySourceKey)
     {
-        if (profile.IncludeBusinessServices)
-        {
-            foreach (var process in world.BusinessProcesses.Where(item => item.CompanyId == companyContext.Company.Id))
-            {
-                var department = companyContext.DepartmentsById.GetValueOrDefault(process.OwnerDepartmentId);
-                AddConfigurationItem(
-                    world,
-                    ciBySourceKey,
-                    "BusinessProcess",
-                    process.Id,
-                    new ConfigurationItem
-                    {
-                        Id = _idFactory.Next("CI"),
-                        CompanyId = process.CompanyId,
-                        CiKey = $"business-service:{process.Id}",
-                        Name = process.Name,
-                        DisplayName = process.Name,
-                        CiType = "BusinessService",
-                        CiClass = "BusinessProcessService",
-                        SourceEntityType = "BusinessProcess",
-                        SourceEntityId = process.Id,
-                        Environment = "Production",
-                        OperationalStatus = "Active",
-                        LifecycleStatus = "InService",
-                        BusinessOwnerPersonId = ResolveBusinessOwnerPersonId(companyContext, department),
-                        TechnicalOwnerPersonId = ResolveTechnicalOwnerPersonId(companyContext, department, null),
-                        SupportTeamId = ResolveSupportTeamId(companyContext, department, null),
-                        OwningDepartmentId = department?.Id,
-                        OwningLobId = department?.BusinessUnitId,
-                        ServiceTier = ResolveServiceTier(process.Criticality, "BusinessService"),
-                        ServiceClassification = "BusinessCapability",
-                        BusinessCriticality = process.Criticality,
-                        MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, null), "BusinessService"),
-                        LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(10, 120)),
-                        Notes = process.CustomerFacing ? "Customer-facing process service." : "Internal process service."
-                    });
-            }
-        }
-
         foreach (var store in world.IdentityStores.Where(item => item.CompanyId == companyContext.Company.Id))
         {
             AddConfigurationItem(
@@ -480,7 +441,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     CompanyId = share.CompanyId,
                     CiKey = $"file-share:{share.Id}",
                     Name = share.ShareName,
-                    DisplayName = share.UncPath,
+                    DisplayName = share.ShareName,
                     CiType = "Data",
                     CiClass = "FileShare",
                     SourceEntityType = "FileShare",
@@ -498,7 +459,8 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     BusinessCriticality = ResolveShareCriticality(share),
                     DataSensitivity = share.Sensitivity,
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, ResolveOfficeIdForServer(world, share.HostServerId)), "Data"),
-                    LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(20, 180))
+                    LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(20, 180)),
+                    Notes = share.UncPath
                 });
         }
 
@@ -550,22 +512,6 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         CmdbProfile profile)
     {
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var link in world.ApplicationBusinessProcessLinks.Where(item => item.CompanyId == companyContext.Company.Id))
-        {
-            if (!profile.IncludeBusinessServices)
-            {
-                continue;
-            }
-
-            if (!TryResolveCi(ciBySourceKey, "BusinessProcess", link.BusinessProcessId, out var source)
-                || !TryResolveCi(ciBySourceKey, "Application", link.ApplicationId, out var target))
-            {
-                continue;
-            }
-
-            AddRelationship(world, emitted, companyContext.Company.Id, source.Id, target.Id, "SupportedBy", link.IsPrimary, "High", "ApplicationBusinessProcessLink", null);
-        }
 
         foreach (var dependency in world.ApplicationDependencies.Where(item => item.CompanyId == companyContext.Company.Id))
         {

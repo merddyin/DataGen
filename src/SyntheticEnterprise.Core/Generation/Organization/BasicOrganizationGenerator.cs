@@ -98,11 +98,12 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
 
         foreach (var businessUnit in businessUnits)
         {
-            var preferredNames = templates
-                .Where(template => MatchesAnyHint(businessUnit.Name, template.ParentHints))
-                .Select(template => template.Name)
+            var preferredNames = BuildPreferredDepartmentNames(
+                businessUnit.Name,
+                templates);
+            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.DepartmentCountPerBusinessUnit)
+                .Select(name => EnsureContextualUniqueName(name, usedNames, businessUnit.Name))
                 .ToList();
-            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.DepartmentCountPerBusinessUnit, usedNames);
 
             foreach (var name in names)
             {
@@ -137,11 +138,12 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
 
         foreach (var department in departments)
         {
-            var preferredNames = templates
-                .Where(template => MatchesAnyHint(department.Name, template.ParentHints))
-                .Select(template => template.Name)
+            var preferredNames = BuildPreferredTeamNames(
+                department.Name,
+                templates);
+            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.TeamCountPerDepartment)
+                .Select(name => EnsureContextualUniqueName(name, usedNames, department.Name))
                 .ToList();
-            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.TeamCountPerDepartment, usedNames);
 
             foreach (var name in names)
             {
@@ -156,6 +158,338 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         }
 
         return teams;
+    }
+
+    private static List<string> BuildPreferredDepartmentNames(
+        string businessUnitName,
+        IReadOnlyList<OrganizationTemplate> templates)
+    {
+        var preferred = new List<string>();
+        preferred.AddRange(GetDepartmentBlueprints(businessUnitName));
+        preferred.AddRange(templates
+            .Where(template => MatchesAnyHint(businessUnitName, template.ParentHints))
+            .Select(template => template.Name));
+
+        return preferred
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static List<string> BuildPreferredTeamNames(
+        string departmentName,
+        IReadOnlyList<OrganizationTemplate> templates)
+    {
+        var preferred = new List<string>();
+        preferred.AddRange(GetTeamBlueprints(departmentName));
+        preferred.AddRange(templates
+            .Where(template => MatchesAnyHint(departmentName, template.ParentHints))
+            .Select(template => template.Name));
+
+        return preferred
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> GetDepartmentBlueprints(string businessUnitName)
+    {
+        return NormalizeOrganizationLabel(businessUnitName) switch
+        {
+            "commercial operations" => new[]
+            {
+                "Sales",
+                "Marketing",
+                "Customer Support",
+                "Customer Success"
+            },
+            "revenue operations" => new[]
+            {
+                "Sales",
+                "Marketing",
+                "Customer Success",
+                "Revenue Operations"
+            },
+            "customer and growth" => new[]
+            {
+                "Sales",
+                "Marketing",
+                "Customer Success",
+                "Partnerships"
+            },
+            "product and quality engineering" => new[]
+            {
+                "Product Engineering",
+                "Manufacturing Engineering",
+                "Quality Assurance",
+                "Product Management"
+            },
+            "supply chain and manufacturing" => new[]
+            {
+                "Production Operations",
+                "Procurement",
+                "Logistics and Planning",
+                "Supplier Quality"
+            },
+            "corporate services" => new[]
+            {
+                "Finance",
+                "Human Resources",
+                "Legal",
+                "Corporate Communications"
+            },
+            "digital and technology" or "technology and controls" or "platform operations" => new[]
+            {
+                "Information Technology",
+                "Security",
+                "Enterprise Applications",
+                "Data and Analytics"
+            },
+            "product engineering" => new[]
+            {
+                "Engineering",
+                "Product Management",
+                "Quality Assurance",
+                "Data and Analytics"
+            },
+            "client operations" => new[]
+            {
+                "Operations",
+                "Sales",
+                "Customer Support",
+                "Implementation"
+            },
+            "risk and finance" => new[]
+            {
+                "Finance",
+                "Risk",
+                "Compliance",
+                "Legal"
+            },
+            "clinical and care operations" => new[]
+            {
+                "Operations",
+                "Support",
+                "Clinical Systems",
+                "Patient Access"
+            },
+            "revenue and administration" => new[]
+            {
+                "Finance",
+                "Human Resources",
+                "Procurement",
+                "Revenue Integrity"
+            },
+            _ => Array.Empty<string>()
+        };
+    }
+
+    private static IReadOnlyList<string> GetTeamBlueprints(string departmentName)
+    {
+        return NormalizeOrganizationLabel(departmentName) switch
+        {
+            "sales" => new[]
+            {
+                "Regional Sales",
+                "Account Management",
+                "Sales Operations",
+                "Channel Sales",
+                "Deal Desk"
+            },
+            "marketing" => new[]
+            {
+                "Product Marketing",
+                "Demand Generation",
+                "Marketing Operations",
+                "Brand and Communications",
+                "Digital Marketing"
+            },
+            "customer support" or "support" => new[]
+            {
+                "Technical Support",
+                "Customer Care",
+                "Escalation Management",
+                "Field Service Coordination",
+                "Knowledge Management"
+            },
+            "customer success" => new[]
+            {
+                "Customer Onboarding",
+                "Adoption Programs",
+                "Renewal Operations",
+                "Customer Programs",
+                "Support Readiness"
+            },
+            "revenue operations" => new[]
+            {
+                "Pipeline Operations",
+                "Territory Planning",
+                "Commercial Analytics",
+                "Deal Operations"
+            },
+            "partnerships" => new[]
+            {
+                "Partner Management",
+                "Alliance Operations",
+                "Channel Enablement"
+            },
+            "production operations" or "operations" => new[]
+            {
+                "Production Scheduling",
+                "Warehouse Operations",
+                "Inventory Control",
+                "Logistics Coordination",
+                "Continuous Improvement"
+            },
+            "procurement" => new[]
+            {
+                "Strategic Sourcing",
+                "Supplier Management",
+                "Purchasing Operations",
+                "Vendor Governance"
+            },
+            "logistics and planning" => new[]
+            {
+                "Supply Planning",
+                "Demand Planning",
+                "Transportation Coordination",
+                "Inventory Planning"
+            },
+            "supplier quality" => new[]
+            {
+                "Supplier Quality Engineering",
+                "Incoming Inspection",
+                "Quality Systems"
+            },
+            "product engineering" or "engineering" => new[]
+            {
+                "Product Engineering",
+                "Platform Engineering",
+                "Release Engineering",
+                "Reliability Engineering",
+                "Test Engineering"
+            },
+            "manufacturing engineering" => new[]
+            {
+                "Industrial Automation",
+                "Plant Systems",
+                "Process Engineering",
+                "Reliability Engineering",
+                "Continuous Improvement"
+            },
+            "quality assurance" or "quality" => new[]
+            {
+                "Quality Engineering",
+                "Compliance Validation",
+                "Test and Inspection",
+                "Quality Systems"
+            },
+            "product management" => new[]
+            {
+                "Portfolio Planning",
+                "Product Operations",
+                "Release Management",
+                "Requirements Management"
+            },
+            "finance" => new[]
+            {
+                "Accounts Payable",
+                "Accounts Receivable",
+                "Financial Planning and Analysis",
+                "Treasury Operations",
+                "Payroll"
+            },
+            "human resources" => new[]
+            {
+                "Talent Operations",
+                "Recruiting Operations",
+                "Benefits Administration",
+                "People Operations",
+                "Learning and Development"
+            },
+            "legal" => new[]
+            {
+                "Contracts Management",
+                "Compliance Advisory",
+                "Corporate Governance",
+                "Commercial Counsel"
+            },
+            "corporate communications" => new[]
+            {
+                "Internal Communications",
+                "Executive Communications",
+                "Brand Communications"
+            },
+            "information technology" => new[]
+            {
+                "Endpoint Engineering",
+                "Infrastructure Services",
+                "Service Desk",
+                "Enterprise Applications",
+                "Collaboration Services"
+            },
+            "security" => new[]
+            {
+                "Security Operations",
+                "Identity and Access",
+                "Governance Risk and Compliance",
+                "Vulnerability Management",
+                "Threat Detection"
+            },
+            "enterprise applications" => new[]
+            {
+                "ERP Platform",
+                "HRIS Administration",
+                "CRM Administration",
+                "Integration Services",
+                "Business Applications"
+            },
+            "data and analytics" => new[]
+            {
+                "Data Engineering",
+                "Business Intelligence",
+                "Data Governance",
+                "Reporting Services",
+                "Analytics Engineering"
+            },
+            "risk" => new[]
+            {
+                "Fraud Operations",
+                "Risk Analysis",
+                "Controls Monitoring"
+            },
+            "compliance" => new[]
+            {
+                "Policy Governance",
+                "Audit Coordination",
+                "Regulatory Compliance"
+            },
+            "implementation" => new[]
+            {
+                "Project Delivery",
+                "Solution Onboarding",
+                "Implementation Services"
+            },
+            "clinical systems" => new[]
+            {
+                "Clinical Applications",
+                "Care Systems Support",
+                "Clinical Analytics"
+            },
+            "patient access" => new[]
+            {
+                "Scheduling Operations",
+                "Referral Coordination",
+                "Registration Services"
+            },
+            "revenue integrity" => new[]
+            {
+                "Claims Review",
+                "Billing Controls",
+                "Revenue Assurance"
+            },
+            _ => Array.Empty<string>()
+        };
     }
 
     private List<Person> CreatePeople(
@@ -227,6 +561,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             ? BuildDomain(company.Name)
             : company.PrimaryDomain;
         var issuedUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var issuedDisplayNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var departmentsById = departments.ToDictionary(department => department.Id, department => department, StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < companyDefinition.EmployeeCount; i++)
@@ -244,6 +579,16 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             var curatedFirstPool = isFemale ? curatedFemaleFirstNames : curatedMaleFirstNames;
             var first = SelectFirstNameEntry(firstPool, fallbackFirstPool, curatedFirstPool, title, preferConservativeNames);
             var last = SelectNameEntry(lastNames, fallbackLastNames, preferConservativeNames, fallbackBias: 0.75);
+            var displayName = $"{first.Name} {last.Name}";
+
+            for (var attempt = 0; attempt < 24 && !issuedDisplayNames.Add(displayName); attempt++)
+            {
+                first = SelectFirstNameEntry(firstPool, fallbackFirstPool, curatedFirstPool, title, preferConservativeNames);
+                last = SelectNameEntry(lastNames, fallbackLastNames, preferConservativeNames, fallbackBias: 0.75);
+                displayName = $"{first.Name} {last.Name}";
+            }
+
+            _ = issuedDisplayNames.Add(displayName);
 
             var person = new Person
             {
@@ -253,7 +598,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 DepartmentId = departmentId,
                 FirstName = first.Name,
                 LastName = last.Name,
-                DisplayName = $"{first.Name} {last.Name}",
+                DisplayName = displayName,
                 Title = title,
                 EmployeeId = employeeNumber,
                 Country = !string.IsNullOrWhiteSpace(first.Country) ? first.Country : last.Country,
@@ -382,6 +727,40 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         return fallback;
     }
 
+    private static string EnsureContextualUniqueName(string baseName, ISet<string>? usedNames, params string[] qualifiers)
+    {
+        if (usedNames is null)
+        {
+            return baseName;
+        }
+
+        if (usedNames.Add(baseName))
+        {
+            return baseName;
+        }
+
+        foreach (var qualifier in qualifiers.Where(value => !string.IsNullOrWhiteSpace(value)))
+        {
+            var cleanedQualifier = qualifier.Trim();
+            var candidate = baseName.Contains(cleanedQualifier, StringComparison.OrdinalIgnoreCase)
+                ? baseName
+                : $"{baseName} - {cleanedQualifier}";
+
+            if (usedNames.Add(candidate))
+            {
+                return candidate;
+            }
+
+            candidate = $"{cleanedQualifier} - {baseName}";
+            if (usedNames.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return EnsureUniqueName(baseName, usedNames);
+    }
+
     private static bool MatchesAnyHint(string parentName, IReadOnlyList<string> hints)
     {
         if (hints.Count == 0)
@@ -392,6 +771,20 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         return hints.Any(hint =>
             parentName.Contains(hint, StringComparison.OrdinalIgnoreCase)
             || hint.Contains(parentName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeOrganizationLabel(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return string.Join(
+            ' ',
+            value.Split(new[] { '-', '/', '&', ',', '(', ')' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Trim()
+            .ToLowerInvariant();
     }
 
     private static string ResolvePrimaryCountry(IReadOnlyCollection<string> countries)

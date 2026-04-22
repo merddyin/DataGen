@@ -167,8 +167,13 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.Applications, application => application.Name == "ServiceNow IT Service Management");
         Assert.Contains(result.World.Applications, application => application.Name == "SAP Extended Warehouse Management");
         Assert.Contains(result.World.Applications, application => application.Name == "Databricks Unity Catalog");
-        Assert.Contains(result.World.Applications, application => application.Name == "Chrome Enterprise");
-        Assert.Contains(result.World.Applications, application => application.Name == "Cisco AnyConnect");
+        Assert.DoesNotContain(result.World.Applications, application => application.Name == "Google Chrome");
+        Assert.DoesNotContain(result.World.Applications, application => application.Name == "Cisco AnyConnect");
+        Assert.DoesNotContain(result.World.Applications, application => application.Name == "OneDrive Sync Client");
+        Assert.DoesNotContain(result.World.Applications, application => application.Name == "Windows Server Backup");
+        Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Google Chrome");
+        Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Cisco AnyConnect");
+        Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Windows Server Backup");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Supplier Quality Hub");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Production Planning");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Quality Portal");
@@ -264,7 +269,9 @@ public sealed class ApplicationGenerationTests
             && result.World.Containers.Any(container => container.Id == link.TargetId && container.ContainerType == "CloudTenant"));
         Assert.Contains(result.World.PolicyTargetLinks, link =>
             link.TargetType == "Group"
-            && result.World.Groups.Any(group => group.Id == link.TargetId && group.Name == "M365-AllEmployees"));
+            && result.World.Groups.Any(group =>
+                group.Id == link.TargetId
+                && (group.Name == "GG All Employees" || group.Name == "M365 All Employees" || group.Name == "GG Microsoft 365 Users")));
         Assert.Contains(result.World.PolicyTargetLinks, link =>
             link.TargetType == "Container"
             && link.AssignmentMode == "Scope"
@@ -357,57 +364,58 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.BusinessProcesses, process => process.Name == "Maintain to Operate");
         Assert.Contains(result.World.BusinessProcesses, process => process.Name == "Govern to Comply");
         Assert.Contains(result.World.BusinessProcesses, process => process.Name == "Data to Insight");
-        Assert.DoesNotContain(result.World.ApplicationServices, service => service.Name == "Workday HCM Worker");
-        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Workday HCM Integration" && service.Runtime == "saas");
-        Assert.DoesNotContain(result.World.ApplicationServices, service => service.Name == "Databricks Lakehouse Platform Frontend");
-        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Databricks Lakehouse Platform Worker" && service.Runtime == "spark");
-        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Catalog Manufacturing Supplier Quality Hub Integration" && service.Runtime == "dotnet");
+        Assert.DoesNotContain(result.World.ApplicationServices, service => service.Name == "Workday HCM Windows Service");
+        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Workday HCM Integration Service" && service.Runtime == "saas");
+        Assert.DoesNotContain(result.World.ApplicationServices, service => service.Name == "Databricks Lakehouse Platform Web Portal");
+        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Databricks Lakehouse Platform Spark Jobs" && service.Runtime == "spark");
+        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Catalog Manufacturing Supplier Quality Hub Integration Service" && service.Runtime == "dotnet");
         Assert.Contains(result.World.ApplicationServiceHostings, hosting =>
             hosting.HostType == "Server"
             && string.Equals(hosting.HostingRole, "SQL Server", StringComparison.OrdinalIgnoreCase)
             && result.World.ApplicationServices.Any(service =>
                 service.Id == hosting.ApplicationServiceId
-                && service.Name == "SAP S/4HANA Data Access"));
+                && service.Name == "SAP S/4HANA Database Jobs"));
         Assert.Contains(result.World.ApplicationServiceDependencies, dependency =>
             dependency.DependencyType == "Identity"
             && dependency.InterfaceType == "GraphApi"
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.SourceServiceId
-                && service.Name == "Microsoft Intune Admin Center API")
+                && service.Name == "Microsoft Intune Admin Center API Service")
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.TargetServiceId
-                && service.Name == "Microsoft Entra Admin Center API"));
+                && service.Name == "Microsoft Entra Admin Center API Service"));
         Assert.Contains(result.World.ApplicationServiceDependencies, dependency =>
             dependency.DependencyType == "WarehouseExecution"
             && dependency.InterfaceType == "RFC"
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.SourceServiceId
-                && service.Name == "SAP Extended Warehouse Management Integration")
+                && service.Name == "SAP Extended Warehouse Management Integration Service")
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.TargetServiceId
-                && service.Name == "SAP S/4HANA API"));
+                && service.Name == "SAP S/4HANA API Service"));
         Assert.Contains(result.World.ApplicationServiceDependencies, dependency =>
             dependency.DependencyType == "QualityData"
             && dependency.InterfaceType == "REST"
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.SourceServiceId
-                && service.Name == "Catalog Manufacturing Supplier Quality Hub Integration")
+                && service.Name == "Catalog Manufacturing Supplier Quality Hub Integration Service")
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.TargetServiceId
-                && service.Name == "MasterControl Quality Excellence API"));
+                && service.Name.Contains("MasterControl Quality Excellence", StringComparison.OrdinalIgnoreCase)
+                && service.Name.EndsWith("Service", StringComparison.OrdinalIgnoreCase)));
         Assert.Contains(result.World.ApplicationServiceHostings, hosting =>
             hosting.HostType == "ManagedPlatform"
             && hosting.HostName == "Databricks SQL Warehouse"
             && hosting.HostingRole == "DataPlane"
             && result.World.ApplicationServices.Any(service =>
                 service.Id == hosting.ApplicationServiceId
-                && service.Name == "Databricks Lakehouse Platform Data Access"));
+                && service.Name == "Databricks Lakehouse Platform SQL Warehouse"));
         Assert.Contains(result.World.ApplicationServiceHostings, hosting =>
             hosting.HostType == "SaaSPlatform"
             && hosting.HostName == "Workday Integration Cloud"
             && result.World.ApplicationServices.Any(service =>
                 service.Id == hosting.ApplicationServiceId
-                && service.Name == "Workday HCM Integration"));
+                && service.Name == "Workday HCM Integration Service"));
         Assert.Contains(result.World.Applications, application =>
             application.Name == "SAP Global Trade Services"
             && result.World.Departments.Any(department =>
@@ -532,10 +540,11 @@ public sealed class ApplicationGenerationTests
                 }
             });
 
-        Assert.Contains(result.World.Applications, application =>
-            application.Name == "Cisco AnyConnect"
-            && string.Equals(application.Vendor, "Cisco", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(application.Url, "https://cisco.com/ciscoanyconnect", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Applications, application =>
+            application.Name == "Cisco AnyConnect");
+        Assert.Contains(result.World.SoftwarePackages, package =>
+            package.Name == "Cisco AnyConnect"
+            && string.Equals(package.Vendor, "Cisco", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

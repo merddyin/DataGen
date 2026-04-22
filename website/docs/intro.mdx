@@ -13,6 +13,7 @@ This site is organized around how people actually use the tool:
 
 - author or choose a scenario
 - generate a world
+- review quality and realism
 - inspect or export the output
 - use the data to populate a lab or validate a downstream system
 - extend the generated dataset safely through plugins
@@ -27,15 +28,19 @@ Common use cases include:
 - Active Directory and Entra validation environments
 - CMDB and discovery-tool testing
 - collaboration and repository-heavy tenant simulation
+- operating-domain validation for ITSM, SecOps, and business operations
+- temporal simulation and change-over-time testing
 - export-driven integration testing
 - plugin-driven realism overlays
 
 ## What makes the current product notable
 
-- Scenario-first authoring with templates, overlays, JSON, and a terminal wizard
+- Scenario-first authoring with archetypes, persona presets, overlays, JSON, and a terminal wizard
 - Rich generation across identity, infrastructure, repositories, applications, policies, access evidence, CMDB, and observed views
+- Built-in bundled packs for ITSM, SecOps, and BusinessOps
+- Temporal simulation foundations with event and snapshot export surfaces
 - Configurable realism through deviation profiles such as `Clean`, `Realistic`, and `Aggressive`
-- Normalized export surfaces for downstream tooling
+- Normalized export and quality validation surfaces for downstream tooling and CI
 - A plugin model intentionally constrained to extending the synthetic dataset, not tailoring it for consumer-specific import contracts
 
 ## Recommended path through the docs
@@ -44,7 +49,8 @@ Common use cases include:
 2. Run the [First World](/getting-started/first-world) workflow.
 3. Pick a [Walkthrough](/walkthroughs/general-enterprise-lab) that matches your target lab or validation goal.
 4. Use the [Cmdlet Reference](/reference/cmdlets/scenario-authoring) when you need exact command surfaces.
-5. Read the [Plugin Architecture guide](/sdk/plugin-architecture) before extending the dataset.
+5. Review [What’s New](/about/whats-new) for the latest platform changes and release notes.
+6. Read the [Plugin Architecture guide](/sdk/plugin-architecture) before extending the dataset.
 
 ## Documentation philosophy
 

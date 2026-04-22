@@ -4,6 +4,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
 using SyntheticEnterprise.Core.Plugins;
+using SyntheticEnterprise.Core.Services;
 
 public sealed class DefaultWorldGenerator : IWorldGenerator
 {
@@ -72,41 +73,52 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         warnings.AddRange(qualityAuditResult.Warnings);
         var temporalResult = _temporalSimulationService.Generate(context, world);
 
+        var statistics = new GenerationStatistics
+        {
+            CompanyCount = world.Companies.Count,
+            OfficeCount = world.Offices.Count,
+            PersonCount = world.People.Count,
+            AccountCount = world.Accounts.Count,
+            GroupCount = world.Groups.Count,
+            ApplicationCount = world.Applications.Count,
+            DeviceCount = world.Devices.Count + world.Servers.Count,
+            RepositoryCount = world.Databases.Count
+                + world.FileShares.Count
+                + world.CollaborationSites.Count
+                + world.CollaborationChannels.Count
+                + world.CollaborationChannelTabs.Count
+                + world.DocumentLibraries.Count
+                + world.SitePages.Count
+                + world.DocumentFolders.Count
+        };
+
+        var worldMetadata = new WorldMetadata
+        {
+            Scenario = context.Scenario,
+            Seed = context.Seed,
+            GeneratedAt = context.GeneratedAt,
+            CatalogRootPath = context.Metadata.TryGetValue("CatalogRootPath", out var catalogRootPath) ? catalogRootPath : null,
+            CatalogKeys = new HashSet<string>(
+                catalogs.CsvCatalogs.Keys.Concat(catalogs.JsonCatalogs.Keys),
+                StringComparer.OrdinalIgnoreCase),
+            AppliedLayers = new HashSet<string>(appliedPlugins, StringComparer.OrdinalIgnoreCase),
+            OwnedArtifacts = _layerOwnershipRegistry.GetOwnedArtifacts().ToList()
+        };
+        var quality = WorldQualityReportBuilder.Build(
+            qualityAuditResult,
+            statistics,
+            worldMetadata,
+            temporalResult);
+        warnings.AddRange(quality.Warnings.Where(warning => !warnings.Contains(warning, StringComparer.OrdinalIgnoreCase)));
+
         return new GenerationResult
         {
             World = world,
-            Statistics = new GenerationStatistics
-            {
-                CompanyCount = world.Companies.Count,
-                OfficeCount = world.Offices.Count,
-                PersonCount = world.People.Count,
-                AccountCount = world.Accounts.Count,
-                GroupCount = world.Groups.Count,
-                ApplicationCount = world.Applications.Count,
-                DeviceCount = world.Devices.Count + world.Servers.Count,
-                RepositoryCount = world.Databases.Count
-                    + world.FileShares.Count
-                    + world.CollaborationSites.Count
-                    + world.CollaborationChannels.Count
-                    + world.CollaborationChannelTabs.Count
-                    + world.DocumentLibraries.Count
-                    + world.SitePages.Count
-                    + world.DocumentFolders.Count
-            },
+            Statistics = statistics,
+            Quality = quality,
             Temporal = temporalResult,
             Catalogs = catalogs,
-            WorldMetadata = new WorldMetadata
-            {
-                Scenario = context.Scenario,
-                Seed = context.Seed,
-                GeneratedAt = context.GeneratedAt,
-                CatalogRootPath = context.Metadata.TryGetValue("CatalogRootPath", out var p) ? p : null,
-                CatalogKeys = new HashSet<string>(
-                    catalogs.CsvCatalogs.Keys.Concat(catalogs.JsonCatalogs.Keys),
-                    StringComparer.OrdinalIgnoreCase),
-                AppliedLayers = new HashSet<string>(appliedPlugins, StringComparer.OrdinalIgnoreCase),
-                OwnedArtifacts = _layerOwnershipRegistry.GetOwnedArtifacts().ToList()
-            },
+            WorldMetadata = worldMetadata,
             Warnings = warnings
         };
     }
