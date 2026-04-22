@@ -4,6 +4,11 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.4.1
+
+- replaced non-cryptographic machine-account password generation with cryptographically secure randomness
+- added explicit read-only GitHub Actions workflow permissions so CI and release automation satisfy current security policy
+
 ### v0.4.0
 
 - added first-class bundled domain packs for ITSM, SecOps, and BusinessOps, plus scenario-native pack enablement

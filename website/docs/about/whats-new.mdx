@@ -7,6 +7,17 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.4.1
+
+This patch release focuses on security and release automation hygiene.
+
+### Highlights
+
+- **Secure machine-account password generation**
+  Machine-account passwords now use cryptographically secure randomness instead of the general generator random source.
+- **Explicit CI workflow permissions**
+  The CI workflow now declares explicit read-only permissions to satisfy current GitHub Actions security policy and keep release automation unblocked.
+
 ## v0.4.0
 
 This release is the point where DataGen moved from a stronger enterprise generator into a broader synthetic operating environment platform.
