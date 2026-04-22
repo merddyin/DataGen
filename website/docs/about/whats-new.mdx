@@ -7,6 +7,17 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.4.3
+
+This patch release focuses on release reliability and test portability.
+
+### Highlights
+
+- **Portable flagship acceptance tests**
+  The flagship realism acceptance suite now uses only repo-stable example scenarios, so release builds no longer depend on local generated artifacts.
+- **Hardened portability validation**
+  The repo portability validator no longer self-matches on its own detection pattern, which keeps CI and release workflows from failing on the guardrail itself.
+
 ## v0.4.2
 
 This patch release focuses on release portability and contributor guardrails.

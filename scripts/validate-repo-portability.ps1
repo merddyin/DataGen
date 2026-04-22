@@ -24,6 +24,10 @@ foreach ($relativePath in $trackedFiles) {
     }
 
     $normalizedPath = $relativePath.Replace('\', '/', [StringComparison]::Ordinal)
+    if ($normalizedPath -eq 'scripts/validate-repo-portability.ps1') {
+        continue
+    }
+
     $shouldScan =
         $normalizedPath -eq 'README.md' -or
         $normalizedPath.StartsWith('.github/', [StringComparison]::Ordinal) -or

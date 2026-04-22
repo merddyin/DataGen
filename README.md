@@ -4,6 +4,11 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.4.3
+
+- fixed the flagship realism acceptance test so release builds no longer depend on a local `artifacts\duckburg-subset.scenario.json` file
+- tightened the repo portability validator so it no longer self-matches on its own detection pattern during CI and release runs
+
 ### v0.4.2
 
 - added a repo portability validator and optional pre-push hook to catch machine-specific absolute paths before they break CI or releases

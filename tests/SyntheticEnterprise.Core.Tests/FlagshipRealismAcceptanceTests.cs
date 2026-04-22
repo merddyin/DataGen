@@ -9,7 +9,8 @@ public sealed class FlagshipRealismAcceptanceTests
 {
     public static TheoryData<string, int, int, int, int> ScenarioCases => new()
     {
-        { Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "artifacts", "duckburg-subset.scenario.json"), 4242, 100, 70, 900 },
+        { Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "examples", "regional_manufacturer.scenario.json"), 4242, 100, 70, 900 },
+        { Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "examples", "regional_manufacturer.scenario.json"), 5151, 60, 60, 700 },
         { Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "examples", "regional_manufacturer.scenario.json"), 4242, 60, 60, 700 },
         { Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "examples", "regional_manufacturer.scenario.json"), 7777, 60, 60, 700 }
     };
