@@ -10,10 +10,10 @@ param(
     [string]$InstallPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..')).Path 'catalogs\catalogs.sqlite'),
 
     [Parameter()]
-    [string]$OriginRoot = 'D:\Dev\Codex\DataGen',
+    [string]$OriginRoot,
 
     [Parameter()]
-    [string]$RawNamesRoot = 'F:\Dev\Names',
+    [string]$RawNamesRoot,
 
     [Parameter()]
     [switch]$IncludeRawNamesCache,

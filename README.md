@@ -4,6 +4,12 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.4.2
+
+- added a repo portability validator and optional pre-push hook to catch machine-specific absolute paths before they break CI or releases
+- updated the realism review defaults to use repo-stable scenarios instead of local artifact paths
+- removed remaining local path defaults from the catalog build script and related docs
+
 ### v0.4.1
 
 - replaced non-cryptographic machine-account password generation with cryptographically secure randomness
@@ -77,6 +83,12 @@ That command writes the canonical build output to `artifacts\catalog\catalogs.sq
 
 ```powershell
 dotnet build .\DataGen.slnx -v minimal
+```
+
+To enable the repo-managed pre-push hook that catches machine-specific path leaks before you publish changes:
+
+```powershell
+.\scripts\enable-git-hooks.ps1
 ```
 
 ### 3. Run the tests
@@ -226,6 +238,14 @@ Good contribution targets include:
 - cmdlet help and examples
 - SDK examples that respect the plugin boundary
 - docs site polish and usability improvements
+
+Before pushing changes, enable the repo-managed hooks once:
+
+```powershell
+.\scripts\enable-git-hooks.ps1
+```
+
+That pre-push hook runs `.\scripts\validate-repo-portability.ps1` so local absolute paths do not slip into tracked files.
 
 When contributing, please keep the product boundary clear:
 

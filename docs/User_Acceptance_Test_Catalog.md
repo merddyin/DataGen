@@ -7,7 +7,7 @@ This document defines user acceptance tests for `SyntheticEnterprise` as it exis
 The goal is to verify that the product is usable for two major operator outcomes:
 
 1. Producing realistic enterprise data sets that can drive **lab-population workflows** for environments such as Active Directory, Entra ID, endpoint/device estates, application estates, and collaboration/data repositories.
-2. Producing structured enterprise data that can drive **downstream discovery/graph workflows**, including seeding or adapting data for `DTEnvDiscovery` at `E:\source\DTEnvDiscovery`.
+2. Producing structured enterprise data that can drive **downstream discovery/graph workflows**, including seeding or adapting data for `DTEnvDiscovery` in a local companion checkout.
 
 ## Product Boundary
 
@@ -60,7 +60,7 @@ Each test includes:
 
 ### Environment C: DTEnvDiscovery Validation Environment
 
-- `DTEnvDiscovery` source tree at `E:\source\DTEnvDiscovery`
+- `DTEnvDiscovery` source tree available in a local companion checkout
 - SQL Server available for DTEnvDiscovery ingestion tests
 - Ability to run `Deploy-DTSqlDatabase`, `Import-DTEnvironment`, and `Invoke-DTDataIngestion`
 
@@ -459,7 +459,7 @@ The product should be considered acceptable for its current phase if:
 - `Goal`: Validate that DataGen exports contain enough structure to be transformed into DTEnvDiscovery’s node/edge ingestion format.
 - `Primary Persona`: Discovery platform engineer
 - `Preconditions`:
-  - `DTEnvDiscovery` source available at `E:\source\DTEnvDiscovery`
+- `DTEnvDiscovery` source available in a local companion checkout
   - Normalized DataGen export available
 - `Steps`:
   1. Review DTEnvDiscovery import expectations:

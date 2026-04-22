@@ -21,7 +21,7 @@ npm run build
 
 The repository includes a GitHub Actions workflow at:
 
-- `E:\source\DataGen\.github\workflows\deploy-docs-site.yml`
+- `.github/workflows/deploy-docs-site.yml`
 
 That workflow builds the site from this `website` directory and deploys the static output to GitHub Pages.
 

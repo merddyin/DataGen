@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+pwsh -NoProfile -File "$repo_root/scripts/validate-repo-portability.ps1" -RepoRoot "$repo_root"

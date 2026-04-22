@@ -1,10 +1,6 @@
 [CmdletBinding()]
 param(
-    [string[]]$ScenarioPath = @(
-        (Join-Path (Split-Path -Parent $PSScriptRoot) 'artifacts\duckburg-subset.scenario.json'),
-        (Join-Path (Split-Path -Parent $PSScriptRoot) 'examples\regional_manufacturer.scenario.json'),
-        (Join-Path (Split-Path -Parent $PSScriptRoot) 'examples\regional_manufacturer.scenario.json')
-    ),
+    [string[]]$ScenarioPath = @(),
     [int[]]$Seed = @(4242, 4242, 7777),
     [string]$CatalogRoot,
     [string]$OutputPath,
@@ -20,6 +16,14 @@ Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $modulePath = Join-Path $repoRoot 'src\SyntheticEnterprise.PowerShell\bin\Debug\net8.0\SyntheticEnterprise.PowerShell.dll'
+
+if ($ScenarioPath.Count -eq 0) {
+    $ScenarioPath = @(
+        (Join-Path $repoRoot 'examples\regional_manufacturer.scenario.json'),
+        (Join-Path $repoRoot 'examples\regional_manufacturer.scenario.json'),
+        (Join-Path $repoRoot 'examples\regional_manufacturer.scenario.json')
+    )
+}
 
 if (-not (Test-Path $modulePath)) {
     throw "PowerShell module build output was not found at '$modulePath'. Build the solution before running the realism review."

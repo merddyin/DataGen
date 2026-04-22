@@ -31,6 +31,10 @@ jobs:
         shell: pwsh
         run: .\scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot
 
+      - name: Validate repo portability
+        shell: pwsh
+        run: .\scripts\validate-repo-portability.ps1
+
       - name: Restore solution
         run: dotnet restore .\DataGen.slnx
 

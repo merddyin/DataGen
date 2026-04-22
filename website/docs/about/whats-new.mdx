@@ -7,6 +7,19 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.4.2
+
+This patch release focuses on release portability and contributor guardrails.
+
+### Highlights
+
+- **Repo portability validation**
+  DataGen now includes a validator that checks tracked files for machine-specific absolute paths before they break CI or release workflows.
+- **Optional pre-push hook**
+  Contributors can enable a repo-managed `pre-push` hook to run the portability check automatically before publishing changes.
+- **Stable realism review defaults**
+  The realism review script now defaults only to repo-stable scenario inputs instead of depending on local generated artifacts.
+
 ## v0.4.1
 
 This patch release focuses on security and release automation hygiene.
