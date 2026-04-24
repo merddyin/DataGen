@@ -4,6 +4,12 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.5.1
+
+- removed the vulnerable transitive `uuid` path from the website toolchain by vendoring a patched `sockjs` copy that uses Node's built-in `crypto.randomUUID()`
+- refreshed the website lockfile so `npm audit` is clean again without waiting on an upstream Docusaurus or webpack-dev-server release
+- verified both `docusaurus build` and `docusaurus start` still work with the patched docs dependency tree
+
 ### v0.5.0
 
 - fixed large-scenario person display-name collisions so flagship datasets no longer emit unrealistic repeated identity clusters

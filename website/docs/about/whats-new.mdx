@@ -7,6 +7,19 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.5.1
+
+This patch release focuses on docs toolchain security hygiene.
+
+### Highlights
+
+- **Patched website transitive dependency**
+  The docs stack no longer pulls the vulnerable `uuid` path through `sockjs`; the site now uses a vendored `sockjs` patch backed by Node's built-in `crypto.randomUUID()`.
+- **Clean audit surface**
+  The website lockfile was refreshed so `npm audit` is clean again without waiting on an upstream Docusaurus or webpack-dev-server release.
+- **Verified docs runtime**
+  Both the static site build and the local Docusaurus development server were validated against the patched dependency tree.
+
 ## v0.5.0
 
 This release focuses on source realism and evidence quality for downstream consumers such as DTED, without turning DataGen itself into a consumer-specific adapter.

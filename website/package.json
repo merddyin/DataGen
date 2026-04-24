@@ -1,6 +1,6 @@
 {
   "name": "website",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "private": true,
   "scripts": {
     "docusaurus": "docusaurus",
@@ -32,7 +32,8 @@
     "typescript": "~6.0.2"
   },
   "overrides": {
-    "serialize-javascript": "7.0.5"
+    "serialize-javascript": "7.0.5",
+    "sockjs": "file:vendor/sockjs"
   },
   "browserslist": {
     "production": [
