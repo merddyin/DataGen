@@ -7,6 +7,23 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.5.0
+
+This release focuses on source realism and evidence quality for downstream consumers such as DTED, without turning DataGen itself into a consumer-specific adapter.
+
+### Highlights
+
+- **Identity realism cleanup**
+  Large flagship scenarios no longer emit dense clusters of duplicate person display names, and account/device identity evidence is more coherent across people, devices, and machine accounts.
+- **Stronger export evidence**
+  Normalized exports now carry richer lifecycle and classification signals, including account creation/modification timestamps, application type/deployment type, and improved policy-setting path data.
+- **Identity store and application realism**
+  AD, Entra, and Okta naming/domain surfaces are cleaner and more believable, and application metadata is stronger for downstream typing and relationship construction.
+- **Richer policy corpus**
+  Policy generation now produces a broader, more enterprise-like management surface with better path realism and stronger scope evidence across Group Policy, Intune, and Conditional Access.
+- **Duckburg acquisition scenario**
+  The flagship Duckburg scenarios now include an acquired-company path so downstream discovery and migration tooling can exercise integration-oriented company-to-company relationships.
+
 ## v0.4.4
 
 This patch release corrects the release-tag lineage so GitHub Actions runs the intended fixed revision.

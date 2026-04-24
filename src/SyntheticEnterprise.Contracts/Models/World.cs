@@ -77,6 +77,8 @@ public record ApplicationRecord
     public string Vendor { get; init; } = "";
     public string BusinessCapability { get; init; } = "";
     public string HostingModel { get; init; } = "";
+    public string ApplicationType { get; init; } = "Undefined";
+    public string DeploymentType { get; init; } = "Undefined";
     public string Environment { get; init; } = "Production";
     public string Criticality { get; init; } = "Medium";
     public string DataSensitivity { get; init; } = "Internal";

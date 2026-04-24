@@ -631,6 +631,70 @@ public sealed class RepositoryGenerationTests
         Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(site.Name, "\\b\\d+\\s+(Operations|Workspace|Projects)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
 
+    [Fact]
+    public void WorldGenerator_Aligns_Site_Content_Metrics_And_Restricts_ActiveInitiatives_To_ProjectWorkspaces()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4242,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Repository Metric Alignment Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Repository Metric Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 220,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            CollaborationSiteCount = 18,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        foreach (var site in result.World.CollaborationSites)
+        {
+            var libraries = result.World.DocumentLibraries
+                .Where(library => string.Equals(library.CollaborationSiteId, site.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            Assert.NotEmpty(libraries);
+            Assert.Equal(
+                libraries.Sum(library => int.Parse(library.ItemCount)),
+                int.Parse(site.FileCount));
+            Assert.Equal(
+                libraries.Sum(library => int.Parse(library.TotalSizeGb)),
+                int.Parse(site.TotalSizeGb));
+        }
+
+        Assert.DoesNotContain(
+            result.World.DocumentLibraries,
+            library =>
+                string.Equals(library.Name, "Active Initiatives", StringComparison.OrdinalIgnoreCase)
+                && result.World.CollaborationSites.Any(site =>
+                    string.Equals(site.Id, library.CollaborationSiteId, StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(site.WorkspaceType, "Project", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(
+            result.World.DocumentLibraries,
+            library =>
+                string.Equals(library.Name, "Active Initiatives", StringComparison.OrdinalIgnoreCase)
+                && result.World.CollaborationSites.Any(site =>
+                    string.Equals(site.Id, library.CollaborationSiteId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(site.WorkspaceType, "Project", StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static Dictionary<string, string?> NewRow(params (string Key, string? Value)[] entries)
     {
         var row = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);

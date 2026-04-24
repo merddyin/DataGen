@@ -217,9 +217,20 @@ public sealed class ApplicationGenerationTests
             link.RelationshipType == "AnalyticalWorkspace"
             && result.World.Applications.Any(application => application.Id == link.ApplicationId && application.Name == "Databricks Unity Catalog")
             && result.World.CloudTenants.Any(tenant => tenant.Id == link.CloudTenantId && tenant.Provider == "Databricks"));
+        Assert.Contains(result.World.Applications, application =>
+            application.HostingModel == "SaaS"
+            && application.ApplicationType == "SaaS"
+            && application.DeploymentType == "Automated");
+        Assert.Contains(result.World.Applications, application =>
+            application.ApplicationType is "ClientServer" or "PaaS" or "IaaS"
+            && application.DeploymentType is "Manual" or "Automated");
         Assert.Contains(result.World.IdentityStores, store =>
             store.StoreType == "EntraTenant"
             && store.Provider == "Microsoft"
+            && !store.Name.StartsWith("Catalog Manufacturing", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(store.Name, store.PrimaryDomain, StringComparison.OrdinalIgnoreCase)
+            && store.PrimaryDomain.EndsWith(".onmicrosoft.com", StringComparison.OrdinalIgnoreCase)
+            && !store.PrimaryDomain.Contains(".tenant.onmicrosoft.com", StringComparison.OrdinalIgnoreCase)
             && store.CloudTenantId is not null
             && result.World.CloudTenants.Any(tenant => tenant.Id == store.CloudTenantId));
         Assert.Contains(result.World.Containers, container =>
@@ -264,9 +275,11 @@ public sealed class ApplicationGenerationTests
             setting.SettingName == "LegacyMonitoringAgentAllowed"
             && setting.IsLegacy);
         Assert.Contains(result.World.PolicyTargetLinks, link =>
-            link.TargetType == "Container"
-            && link.LinkEnabled
-            && result.World.Containers.Any(container => container.Id == link.TargetId && container.ContainerType == "CloudTenant"));
+            link.TargetType == "IdentityStore"
+            && link.AssignmentMode == "Scope"
+            && result.World.IdentityStores.Any(store =>
+                store.Id == link.TargetId
+                && store.StoreType == "EntraTenant"));
         Assert.Contains(result.World.PolicyTargetLinks, link =>
             link.TargetType == "Group"
             && result.World.Groups.Any(group =>
@@ -609,5 +622,56 @@ public sealed class ApplicationGenerationTests
         }
 
         return row;
+    }
+
+    [Fact]
+    public void WorldGenerator_Can_Model_Acquired_Companies_For_Flagship_Scenarios()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Acquired Company Test",
+                    IndustryProfile = "Manufacturing",
+                    GeographyProfile = "North-America",
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 8,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Acquired Company Test",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 1500,
+                            BusinessUnitCount = 4,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 4,
+                            AcquiredCompanyCount = 1,
+                            Countries = new() { "United States", "Canada" }
+                        }
+                    }
+                }
+            },
+            catalogs);
+
+        Assert.Contains(result.World.ExternalOrganizations, organization =>
+            organization.RelationshipType == "AcquiredBy"
+            && organization.Segment == "AcquiredSubsidiary"
+            && organization.RelationshipBasis == "AcquisitionIntegration"
+            && organization.RelationshipScope == "Enterprise"
+            && !string.IsNullOrWhiteSpace(organization.PrimaryDomain));
     }
 }

@@ -99,7 +99,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                     companyTeams,
                     world.Offices.Where(office => office.CompanyId == company.Id).ToList(),
                     externalOrganizations,
-                    rootDomain);
+                    rootDomain,
+                    catalogs);
                 if (externalPeople.Count > 0)
                 {
                     world.People.AddRange(externalPeople);
@@ -151,7 +152,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             {
                 Id = _idFactory.Next("IDS"),
                 CompanyId = company.Id,
-                Name = $"{company.Name} Active Directory",
+                Name = rootDomain,
                 StoreType = "ActiveDirectoryDomain",
                 Provider = "Microsoft",
                 PrimaryDomain = rootDomain,
@@ -345,7 +346,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             "UserExperience",
             "Disabled legacy compatibility GPO retained for staged application support.",
             activeDirectoryStore.Id,
-            null);
+            null,
+            status: "Disabled");
         AddPolicySetting(world, company.Id, legacyBrowserPolicy.Id, "InternetExplorerModeSiteList", "LegacyCompatibility", "String", "LegacyLineOfBusinessApps", isLegacy: true, sourceReference: "Typical transitional browser-compatibility holdover");
         AddPolicySetting(world, company.Id, legacyBrowserPolicy.Id, "TrustedSitesZoneAssignments", "LegacyCompatibility", "String", "LegacyVendorPortal", isLegacy: true);
         AddPolicyTarget(world, company.Id, legacyBrowserPolicy.Id, "Container", workstationContainer?.Id, "Linked", false, 2, false);
@@ -686,6 +688,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string activeDirectoryStoreId,
         string? gpoEditorsGroupId)
     {
+        var entraStore = world.IdentityStores.FirstOrDefault(store =>
+            store.CompanyId == company.Id
+            && string.Equals(store.StoreType, "EntraTenant", StringComparison.OrdinalIgnoreCase));
+
         foreach (var department in world.Departments.Where(department => department.CompanyId == company.Id))
         {
             var departmentContainer = world.Containers.FirstOrDefault(container =>
@@ -743,6 +749,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 ("LineOfBusinessAppInstallRing", "AppAssignment", "String", ResolveDepartmentInstallRing(department.Name)),
                 ("DesktopAnalyticsTag", "Telemetry", "String", Slug(department.Name))
             ]);
+            AddPolicyTarget(world, company.Id, applicationPolicy.Id, "IdentityStore", entraStore?.Id, "Scope", false, 1);
             AddPolicyTarget(world, company.Id, applicationPolicy.Id, "Container", departmentContainer.Id, "Scope", true, 1, true);
             AddPolicyTarget(world, company.Id, applicationPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
         }
@@ -1840,6 +1847,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 ? departmentOu
                 : usersOu;
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 90));
+            var lifecycle = CreateAccountLifecycle(passwordLastSet, 120, 1825, 14);
 
             return new DirectoryAccount
             {
@@ -1859,6 +1867,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 GeneratedPassword = CreateUniquePassword(issuedPasswords),
                 PasswordProfile = "EmployeeStandard",
                 AdministrativeTier = null,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = passwordLastSet.AddDays(90),
                 PasswordNeverExpires = false,
@@ -1891,6 +1902,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var targetOu = blueprint.AdministrativeTier is null ? defaultOu : tier1Ou;
             var upn = BuildUniqueDirectoryAccountUpn(blueprint.UserPrincipalNameLocalPart, rootDomain, issuedAccountUpns);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(7, 180));
+            var lifecycle = CreateAccountLifecycle(passwordLastSet, 180, 3650, 30);
             results.Add(new DirectoryAccount
             {
                 Id = _idFactory.Next("ACT"),
@@ -1907,6 +1919,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 GeneratedPassword = CreateUniquePassword(issuedPasswords, 20),
                 PasswordProfile = blueprint.PasswordProfile,
                 AdministrativeTier = blueprint.AdministrativeTier,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = null,
                 PasswordNeverExpires = true,
@@ -1937,6 +1952,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var localPart = mailboxPrefixes[i % mailboxPrefixes.Length];
             var upn = BuildUniqueDirectoryAccountUpn(localPart, rootDomain, issuedAccountUpns);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(14, 180));
+            var lifecycle = CreateAccountLifecycle(passwordLastSet, 90, 2190, 21);
             results.Add(new DirectoryAccount
             {
                 Id = _idFactory.Next("ACT"),
@@ -1953,6 +1969,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 GeneratedPassword = CreateUniquePassword(issuedPasswords, 18),
                 PasswordProfile = "SharedMailbox",
                 AdministrativeTier = null,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = null,
                 PasswordNeverExpires = true,
@@ -1993,6 +2012,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var localPart = $"adm.{Slug(person.FirstName)}.{Slug(person.LastName)}.{employeeSuffix}";
             var upn = BuildUniqueDirectoryAccountUpn(localPart, rootDomain, issuedAccountUpns);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 45));
+            var lifecycle = CreateAccountLifecycle(passwordLastSet, 60, 1460, 7);
 
             return new DirectoryAccount
             {
@@ -2012,6 +2032,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 GeneratedPassword = CreateUniquePassword(issuedPasswords, 20),
                 PasswordProfile = "PrivilegedElevated",
                 AdministrativeTier = tier,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = passwordLastSet.AddDays(45),
                 PasswordNeverExpires = false,
@@ -2022,6 +2045,102 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             };
         }).ToList();
     }
+
+    private AccountLifecycle CreateAccountLifecycle(
+        DateTimeOffset passwordLastSet,
+        int minCreatedAgeDays,
+        int maxCreatedAgeDays,
+        int maxLastLogonAgeDays)
+    {
+        var whenCreated = CreateHistoricalTimestamp(minCreatedAgeDays, maxCreatedAgeDays);
+        if (whenCreated > passwordLastSet)
+        {
+            whenCreated = passwordLastSet.AddDays(-RandomInclusive(7, 120));
+        }
+
+        var lastLogon = CreateLastLogon(whenCreated, maxLastLogonAgeDays);
+        var whenModified = CreateWhenModified(whenCreated, passwordLastSet, lastLogon);
+        return new AccountLifecycle(lastLogon, whenCreated, whenModified);
+    }
+
+    private AccountLifecycle CreateExternalAccountLifecycle(
+        DateTimeOffset passwordLastSet,
+        DateTimeOffset? invitationSentAt,
+        DateTimeOffset? invitationRedeemedAt,
+        DateTimeOffset? lastAccessReviewAt,
+        int minCreatedAgeDays,
+        int maxCreatedAgeDays,
+        int maxLastLogonAgeDays)
+    {
+        var whenCreated = invitationSentAt?.AddDays(-RandomInclusive(1, 30))
+                          ?? CreateHistoricalTimestamp(minCreatedAgeDays, maxCreatedAgeDays);
+        if (whenCreated > passwordLastSet)
+        {
+            whenCreated = passwordLastSet.AddDays(-RandomInclusive(3, 45));
+        }
+
+        DateTimeOffset? lastLogon = invitationSentAt is not null && invitationRedeemedAt is null
+            ? null
+            : CreateLastLogon(whenCreated, maxLastLogonAgeDays);
+        if (invitationRedeemedAt is not null)
+        {
+            var latestPossibleLastLogonAge = Math.Min(
+                maxLastLogonAgeDays,
+                Math.Max(0, (int)Math.Floor((_clock.UtcNow - invitationRedeemedAt.Value).TotalDays)));
+            lastLogon = _clock.UtcNow.AddDays(-RandomInclusive(0, latestPossibleLastLogonAge));
+            if (lastLogon < invitationRedeemedAt)
+            {
+                lastLogon = invitationRedeemedAt;
+            }
+        }
+
+        var whenModified = CreateWhenModified(
+            whenCreated,
+            passwordLastSet,
+            lastLogon,
+            invitationSentAt,
+            invitationRedeemedAt,
+            lastAccessReviewAt);
+        return new AccountLifecycle(lastLogon, whenCreated, whenModified);
+    }
+
+    private DateTimeOffset CreateHistoricalTimestamp(int minAgeDays, int maxAgeDays)
+        => _clock.UtcNow.AddDays(-RandomInclusive(minAgeDays, maxAgeDays));
+
+    private DateTimeOffset CreateLastLogon(DateTimeOffset whenCreated, int maxLastLogonAgeDays)
+    {
+        var lastLogon = _clock.UtcNow.AddDays(-RandomInclusive(0, maxLastLogonAgeDays));
+        if (lastLogon < whenCreated)
+        {
+            var ageWindow = Math.Max(0, (int)Math.Floor((_clock.UtcNow - whenCreated).TotalDays));
+            lastLogon = whenCreated.AddDays(RandomInclusive(0, ageWindow));
+        }
+
+        return lastLogon;
+    }
+
+    private DateTimeOffset CreateWhenModified(DateTimeOffset whenCreated, params DateTimeOffset?[] candidateEvents)
+    {
+        var floor = candidateEvents
+            .Where(value => value is not null)
+            .Select(value => value!.Value)
+            .Append(whenCreated)
+            .Max();
+        var maxTailDays = Math.Min(45, Math.Max(0, (int)Math.Floor((_clock.UtcNow - floor).TotalDays)));
+        return floor.AddDays(RandomInclusive(0, maxTailDays));
+    }
+
+    private int RandomInclusive(int minInclusive, int maxInclusive)
+    {
+        if (maxInclusive <= minInclusive)
+        {
+            return minInclusive;
+        }
+
+        return _randomSource.Next(minInclusive, maxInclusive + 1);
+    }
+
+    private sealed record AccountLifecycle(DateTimeOffset? LastLogon, DateTimeOffset WhenCreated, DateTimeOffset WhenModified);
 
     private List<DirectoryGroup> CreateGroups(
         Company company,
@@ -2495,7 +2614,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Team> teams,
         IReadOnlyList<Office> offices,
         IReadOnlyList<ExternalOrganization> externalOrganizations,
-        string rootDomain)
+        string rootDomain,
+        CatalogSet catalogs)
     {
         var results = new List<Person>();
         if (employees.Count == 0 || departments.Count == 0 || teams.Count == 0)
@@ -2508,13 +2628,20 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var guestOrg = externalOrganizations.FirstOrDefault(org => org.RelationshipType == "Partner")
                        ?? externalOrganizations.FirstOrDefault(org => org.RelationshipType == "Vendor")
                        ?? externalOrganizations.FirstOrDefault();
-        var firstNames = employees.Select(employee => employee.FirstName).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var lastNames = employees.Select(employee => employee.LastName).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var nameCountries = definition.Countries
+            .Concat(externalOrganizations.Select(organization => organization.Country))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var firstNames = BuildExternalFirstNamePool(catalogs, nameCountries, employees);
+        var lastNames = BuildExternalLastNamePool(catalogs, nameCountries, employees);
         var issuedPersonUpns = new HashSet<string>(
             employees.Select(employee => employee.UserPrincipalName).Where(value => !string.IsNullOrWhiteSpace(value)),
             StringComparer.OrdinalIgnoreCase);
-        if (firstNames.Count == 0) firstNames.AddRange(new[] { "Alex", "Jordan", "Taylor", "Morgan" });
-        if (lastNames.Count == 0) lastNames.AddRange(new[] { "Carter", "Patel", "Reed", "Nguyen" });
+        var issuedDisplayNames = new HashSet<string>(
+            employees.Select(employee => employee.DisplayName).Where(value => !string.IsNullOrWhiteSpace(value)),
+            StringComparer.OrdinalIgnoreCase);
 
         if (identityProfile.IncludeExternalWorkforce && contractorOrg is not null)
         {
@@ -2533,7 +2660,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 firstNames,
                 lastNames,
                 new[] { "Analyst", "Specialist", "Engineer", "Project Manager", "Coordinator" },
-                issuedPersonUpns));
+                issuedPersonUpns,
+                issuedDisplayNames));
         }
 
         if (identityProfile.IncludeExternalWorkforce && managedServicesOrg is not null)
@@ -2553,7 +2681,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 firstNames,
                 lastNames,
                 new[] { "Support Engineer", "Identity Administrator", "Platform Operator", "Service Desk Engineer" },
-                issuedPersonUpns));
+                issuedPersonUpns,
+                issuedDisplayNames));
         }
 
         if (identityProfile.IncludeB2BGuests && guestOrg is not null)
@@ -2573,7 +2702,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 firstNames,
                 lastNames,
                 new[] { "Partner Liaison", "Supplier Coordinator", "Customer Success Lead", "Project Consultant" },
-                issuedPersonUpns));
+                issuedPersonUpns,
+                issuedDisplayNames));
         }
 
         return results;
@@ -2593,7 +2723,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<string> firstNames,
         IReadOnlyList<string> lastNames,
         IReadOnlyList<string> titles,
-        ISet<string> issuedPersonUpns)
+        ISet<string> issuedPersonUpns,
+        ISet<string> issuedDisplayNames)
     {
         var results = new List<Person>();
         var preferredDepartmentNames = employmentType switch
@@ -2616,8 +2747,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var department = targetDepartments[i % targetDepartments.Count];
             var team = targetTeams[i % targetTeams.Count];
             var sponsor = employees[_randomSource.Next(employees.Count)];
-            var firstName = firstNames[_randomSource.Next(firstNames.Count)];
-            var lastName = lastNames[_randomSource.Next(lastNames.Count)];
             var workerNumber = employmentType switch
             {
                 "ManagedServiceProvider" => $"MSP-{i + 1:0000}",
@@ -2625,6 +2754,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 _ => $"CNT-{i + 1:0000}"
             };
             var office = SelectExternalOffice(offices, employer.Country, sponsor.OfficeId);
+            var (firstName, lastName, displayName) = BuildUniqueExternalDisplayName(
+                firstNames,
+                lastNames,
+                issuedDisplayNames,
+                sponsor,
+                i,
+                employmentType,
+                employer.Name,
+                workerNumber);
             var personUpn = BuildUniqueExternalPersonUpn(firstName, lastName, employmentType, employer, workerNumber, rootDomain, issuedPersonUpns);
 
             results.Add(new Person
@@ -2635,7 +2773,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 DepartmentId = department.Id,
                 FirstName = firstName,
                 LastName = lastName,
-                DisplayName = $"{firstName} {lastName}",
+                DisplayName = displayName,
                 Title = titles[i % titles.Count],
                 ManagerPersonId = sponsor.Id,
                 EmployeeId = workerNumber,
@@ -2651,6 +2789,137 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
 
         return results;
+    }
+
+    private IReadOnlyList<string> BuildExternalFirstNamePool(
+        CatalogSet catalogs,
+        IReadOnlyCollection<string> countries,
+        IReadOnlyList<Person> employees)
+    {
+        var catalogNames = ReadCatalogNameValues(catalogs, "first_names_country", "Name", countries).ToList();
+        if (catalogNames.Count == 0)
+        {
+            catalogNames.AddRange(ReadCatalogNameValues(catalogs, "first_names_gendered", "Name", Array.Empty<string>()));
+        }
+
+        if (catalogNames.Count == 0)
+        {
+            catalogNames.AddRange(ReadCatalogNameValues(catalogs, "given_names_male", "Name", countries));
+            catalogNames.AddRange(ReadCatalogNameValues(catalogs, "given_names_female", "Name", countries));
+        }
+
+        catalogNames.AddRange(employees.Select(employee => employee.FirstName));
+        catalogNames = catalogNames
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (catalogNames.Count == 0)
+        {
+            catalogNames.AddRange(new[] { "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Avery" });
+        }
+
+        return catalogNames;
+    }
+
+    private IReadOnlyList<string> BuildExternalLastNamePool(
+        CatalogSet catalogs,
+        IReadOnlyCollection<string> countries,
+        IReadOnlyList<Person> employees)
+    {
+        var catalogNames = ReadCatalogNameValues(catalogs, "last_names_country", "Name", countries).ToList();
+        if (catalogNames.Count == 0)
+        {
+            catalogNames.AddRange(ReadCatalogNameValues(catalogs, "surnames_reference", "Value", Array.Empty<string>()));
+        }
+
+        catalogNames.AddRange(employees.Select(employee => employee.LastName));
+        catalogNames = catalogNames
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (catalogNames.Count == 0)
+        {
+            catalogNames.AddRange(new[] { "Carter", "Patel", "Reed", "Nguyen", "Brooks", "Sullivan" });
+        }
+
+        return catalogNames;
+    }
+
+    private static IReadOnlyList<string> ReadCatalogNameValues(
+        CatalogSet catalogs,
+        string catalogName,
+        string fieldName,
+        IReadOnlyCollection<string> countries)
+    {
+        if (!catalogs.CsvCatalogs.TryGetValue(catalogName, out var rows))
+        {
+            return Array.Empty<string>();
+        }
+
+        var countryFilter = countries
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return rows
+            .Where(row => countryFilter.Count == 0
+                          || !row.TryGetValue("Country", out var country)
+                          || string.IsNullOrWhiteSpace(country)
+                          || countryFilter.Contains(country))
+            .Select(row => row.TryGetValue(fieldName, out var value) ? value : null)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private (string FirstName, string LastName, string DisplayName) BuildUniqueExternalDisplayName(
+        IReadOnlyList<string> firstNames,
+        IReadOnlyList<string> lastNames,
+        ISet<string> issuedDisplayNames,
+        Person sponsor,
+        int ordinal,
+        string employmentType,
+        string employerName,
+        string workerNumber)
+    {
+        for (var attempt = 0; attempt < 48; attempt++)
+        {
+            var firstName = firstNames[_randomSource.Next(firstNames.Count)];
+            var lastName = lastNames[_randomSource.Next(lastNames.Count)];
+            var displayName = $"{firstName} {lastName}";
+            if (issuedDisplayNames.Add(displayName))
+            {
+                return (firstName, lastName, displayName);
+            }
+        }
+
+        var firstSeed = Math.Abs(HashCode.Combine(ordinal, employmentType, employerName));
+        var lastSeed = Math.Abs(HashCode.Combine(ordinal, sponsor.Id, employerName));
+
+        for (var firstOffset = 0; firstOffset < firstNames.Count; firstOffset++)
+        {
+            var firstName = firstNames[(firstSeed + firstOffset) % firstNames.Count];
+            for (var lastOffset = 0; lastOffset < lastNames.Count; lastOffset++)
+            {
+                var lastName = lastNames[(lastSeed + lastOffset) % lastNames.Count];
+                var displayName = $"{firstName} {lastName}";
+                if (issuedDisplayNames.Add(displayName))
+                {
+                    return (firstName, lastName, displayName);
+                }
+            }
+        }
+
+        var fallbackFirst = firstNames[firstSeed % firstNames.Count];
+        var fallbackLast = lastNames[lastSeed % lastNames.Count];
+        var fallbackDisplayName = $"{fallbackFirst} {fallbackLast} {workerNumber}";
+        _ = issuedDisplayNames.Add(fallbackDisplayName);
+        return (fallbackFirst, fallbackLast, fallbackDisplayName);
     }
 
     private List<DirectoryAccount> CreateExternalAccounts(
@@ -2773,6 +3042,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 "Guest" => guestsOu,
                 _ => contractorsOu
             };
+            var lifecycle = CreateExternalAccountLifecycle(
+                passwordLastSet,
+                invitationSentAt,
+                invitationRedeemedAt,
+                lastAccessReviewAt,
+                30,
+                1095,
+                accountType == "ManagedServiceProvider" ? 7 : 21);
 
             results.Add(new DirectoryAccount
             {
@@ -2798,6 +3075,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                     _ => "ContractorStandard"
                 },
                 AdministrativeTier = accountType == "ManagedServiceProvider" ? "Tier1" : null,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = accountType == "Guest" ? null : passwordLastSet.AddDays(90),
                 PasswordNeverExpires = accountType == "ManagedServiceProvider",
@@ -3189,7 +3469,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string? identityStoreId,
         string? cloudTenantId,
         string? sourceEntityType = null,
-        string? sourceEntityId = null)
+        string? sourceEntityId = null,
+        string status = "Enabled")
     {
         var existing = world.Policies.FirstOrDefault(policy =>
             policy.CompanyId == companyId
@@ -3205,12 +3486,13 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         {
             Id = _idFactory.Next("POL"),
             CompanyId = companyId,
+            PolicyGuid = CreateStableGuid(companyId, name, policyType, platform, category),
             Name = name,
             PolicyType = policyType,
             Platform = platform,
             Category = category,
             Environment = "Production",
-            Status = "Enabled",
+            Status = status,
             Description = description,
             IdentityStoreId = identityStoreId,
             CloudTenantId = cloudTenantId,
@@ -3231,7 +3513,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string configuredValue,
         bool isLegacy = false,
         bool isConflicting = false,
-        string? sourceReference = null)
+        string? sourceReference = null,
+        string? policyPath = null,
+        string? registryPath = null)
     {
         if (world.PolicySettings.Any(setting =>
                 setting.CompanyId == companyId
@@ -3241,6 +3525,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             return;
         }
 
+        var metadata = ResolvePolicySettingMetadata(
+            world,
+            companyId,
+            policyId,
+            settingName,
+            settingCategory,
+            policyPath,
+            registryPath);
+
         world.PolicySettings.Add(new PolicySettingRecord
         {
             Id = _idFactory.Next("PST"),
@@ -3248,6 +3541,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             PolicyId = policyId,
             SettingName = settingName,
             SettingCategory = settingCategory,
+            PolicyPath = metadata.PolicyPath,
+            RegistryPath = metadata.RegistryPath,
             ValueType = valueType,
             ConfiguredValue = configuredValue,
             IsLegacy = isLegacy,
@@ -3300,6 +3595,419 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             FilterType = filterType,
             FilterValue = filterValue
         });
+    }
+
+    private (string PolicyPath, string? RegistryPath) ResolvePolicySettingMetadata(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string policyId,
+        string settingName,
+        string settingCategory,
+        string? explicitPolicyPath,
+        string? explicitRegistryPath)
+    {
+        if (!string.IsNullOrWhiteSpace(explicitPolicyPath))
+        {
+            return (explicitPolicyPath, explicitRegistryPath);
+        }
+
+        var policy = world.Policies.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, policyId, StringComparison.OrdinalIgnoreCase));
+        var company = world.Companies.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, companyId, StringComparison.OrdinalIgnoreCase));
+
+        if (policy is null)
+        {
+            return (BuildCustomPolicyRegistryPath(company, false, "UnknownPolicy", settingCategory, settingName), explicitRegistryPath);
+        }
+
+        if (string.Equals(policy.PolicyType, "ConditionalAccessPolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Microsoft Entra ID\\Protection\\Conditional Access\\Policies\\{policy.Name}", null);
+        }
+
+        if (string.Equals(policy.Platform, "Intune", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "IntuneConfigurationProfile", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "IntuneCompliancePolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveIntunePolicySettingMetadata(policy, settingName, settingCategory);
+        }
+
+        if (string.Equals(policy.Platform, "EntraID", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(settingCategory, "CrossTenantAccess", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Microsoft Entra ID\\External Identities\\Cross-tenant access settings\\{policy.Name}", null);
+        }
+
+        if (string.Equals(policy.Platform, "ActiveDirectory", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "GroupPolicyObject", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveGroupPolicySettingMetadata(policy, company, settingName, settingCategory);
+        }
+
+        var fallbackRegistryPath = BuildCustomPolicyRegistryPath(company, IsUserScopedPolicySetting(policy, settingCategory, settingName), policy.Name, settingCategory, settingName);
+        return (fallbackRegistryPath, fallbackRegistryPath);
+    }
+
+    private (string PolicyPath, string? RegistryPath) ResolveGroupPolicySettingMetadata(
+        PolicyRecord policy,
+        Company? company,
+        string settingName,
+        string settingCategory)
+    {
+        if (string.Equals(policy.Name, "Default Domain Policy", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.Name, "Windows Account and Lockout Hardening", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(settingCategory, "PasswordPolicy", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Windows Settings\\Account Policies\\Password Policy", null);
+            }
+
+            if (string.Equals(settingCategory, "LockoutPolicy", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Windows Settings\\Account Policies\\Account Lockout Policy", null);
+            }
+
+            if (settingName.StartsWith("Kerberos", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Windows Settings\\Local Policies\\Kerberos Policy", null);
+            }
+
+            if (string.Equals(settingCategory, "InteractiveLogon", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(settingCategory, "IdentityLifecycle", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("InteractiveLogon", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("Rename", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("Accounts", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("NetworkSecurity", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("MicrosoftNetwork", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("DomainMember", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("CachedLogons", StringComparison.OrdinalIgnoreCase)
+                || settingName.StartsWith("BlockMicrosoftAccounts", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Windows Settings\\Security Settings\\Local Policies\\Security Options", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            return ("Computer Configuration\\Windows Settings\\Security Settings\\Local Policies\\Security Options", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Windows User Rights Assignment Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.Name, "Delegated Administration Controls", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Windows Settings\\Security Settings\\Local Policies\\User Rights Assignment", null);
+        }
+
+        if (string.Equals(policy.Name, "Windows Security Options Baseline", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Windows Settings\\Security Settings\\Local Policies\\Security Options", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Windows Advanced Audit Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.Name, "Security Audit and Logging Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            if (settingName.Contains("PowerShell", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Administrative Templates\\Windows Components\\Windows PowerShell", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            return ("Computer Configuration\\Windows Settings\\Security Settings\\Advanced Audit Policy Configuration\\Audit Policies", null);
+        }
+
+        if (string.Equals(policy.Name, "Windows Defender and ASR Baseline", StringComparison.OrdinalIgnoreCase))
+        {
+            if (settingName.Contains("AttackSurfaceReduction", StringComparison.OrdinalIgnoreCase)
+                || settingName.Contains("ExploitGuard", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Administrative Templates\\Windows Components\\Microsoft Defender Antivirus\\Microsoft Defender Exploit Guard\\Attack Surface Reduction", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            return ("Computer Configuration\\Administrative Templates\\Windows Components\\Microsoft Defender Antivirus", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Windows Network and Firewall Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.Name, "Workstation Security Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.Name, "Server Security Baseline", StringComparison.OrdinalIgnoreCase))
+        {
+            if (settingName.Contains("Firewall", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Windows Settings\\Security Settings\\Windows Defender Firewall with Advanced Security", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            if (settingName.Contains("Defender", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(settingCategory, "EndpointProtection", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(settingCategory, "CredentialProtection", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(settingCategory, "ApplicationControl", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Administrative Templates\\Windows Components\\Microsoft Defender Antivirus", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            if (string.Equals(settingCategory, "RemoteManagement", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(settingCategory, "RemoteAccess", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Administrative Templates\\System\\Remote Assistance", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            if (string.Equals(settingCategory, "DeviceControl", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("Computer Configuration\\Administrative Templates\\System\\Removable Storage Access", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            return ("Computer Configuration\\Windows Settings\\Security Settings\\Local Policies\\Security Options", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Corporate Desktop Experience", StringComparison.OrdinalIgnoreCase))
+        {
+            if (settingName.Contains("Wallpaper", StringComparison.OrdinalIgnoreCase)
+                || settingName.Contains("LockScreen", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("User Configuration\\Administrative Templates\\Desktop\\Desktop", ResolveRegistryPath(policy, settingName, settingCategory));
+            }
+
+            return ("User Configuration\\Administrative Templates\\Start Menu and Taskbar", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Enterprise Browser Controls", StringComparison.OrdinalIgnoreCase)
+            || settingName.StartsWith("Chrome", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveBrowserPolicyPath(policy, settingName, settingCategory);
+        }
+
+        if (string.Equals(policy.Name, "User Logon and Drive Mapping", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(settingCategory, "LogonScripts", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("User Configuration\\Windows Settings\\Scripts (Logon/Logoff)", null);
+            }
+
+            if (string.Equals(settingCategory, "DriveMappings", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("User Configuration\\Preferences\\Windows Settings\\Drive Maps", null);
+            }
+
+            if (string.Equals(settingCategory, "Printers", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("User Configuration\\Preferences\\Control Panel Settings\\Printers", null);
+            }
+
+            if (string.Equals(settingCategory, "Shortcuts", StringComparison.OrdinalIgnoreCase))
+            {
+                return ("User Configuration\\Preferences\\Windows Settings\\Shortcuts", null);
+            }
+
+            return ("User Configuration\\Preferences\\Windows Settings", null);
+        }
+
+        if (string.Equals(policy.Name, "Office Productivity Controls", StringComparison.OrdinalIgnoreCase)
+            || policy.Name.Contains("Office", StringComparison.OrdinalIgnoreCase))
+        {
+            return ResolveOfficePolicyPath(policy, settingName, settingCategory);
+        }
+
+        if (string.Equals(policy.Name, "Windows Update Enterprise Ring", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Administrative Templates\\Windows Components\\Windows Update\\Manage updates offered from Windows Update", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Remote Access and VPN Controls", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Administrative Templates\\Network\\Network Connections", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (string.Equals(policy.Name, "Removable Media and Device Control", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Administrative Templates\\System\\Removable Storage Access", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (policy.Name.StartsWith("Location Desktop Experience - ", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("User Configuration\\Administrative Templates\\Desktop\\Desktop", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        if (policy.Name.StartsWith("Department Collaboration - ", StringComparison.OrdinalIgnoreCase)
+            || policy.Name.StartsWith("Department App Defaults - ", StringComparison.OrdinalIgnoreCase))
+        {
+            var customRegistryPath = BuildCustomPolicyRegistryPath(company, true, policy.Name, settingCategory, settingName);
+            return (customRegistryPath, customRegistryPath);
+        }
+
+        if (policy.Name.EndsWith("Controls", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Administrative Templates", ResolveRegistryPath(policy, settingName, settingCategory));
+        }
+
+        var fallbackRegistry = BuildCustomPolicyRegistryPath(company, IsUserScopedPolicySetting(policy, settingCategory, settingName), policy.Name, settingCategory, settingName);
+        return (fallbackRegistry, fallbackRegistry);
+    }
+
+    private static (string PolicyPath, string? RegistryPath) ResolveBrowserPolicyPath(
+        PolicyRecord policy,
+        string settingName,
+        string settingCategory)
+    {
+        if (settingName.StartsWith("Chrome", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Administrative Templates\\Google\\Google Chrome", $@"HKLM\Software\Policies\Google\Chrome\{settingName}");
+        }
+
+        if (string.Equals(settingCategory, "BrowserConfiguration", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("Computer Configuration\\Administrative Templates\\Microsoft Edge\\Startup, home page and new tab page", $@"HKLM\Software\Policies\Microsoft\Edge\{settingName}");
+        }
+
+        return ("Computer Configuration\\Administrative Templates\\Microsoft Edge", $@"HKLM\Software\Policies\Microsoft\Edge\{settingName}");
+    }
+
+    private static (string PolicyPath, string? RegistryPath) ResolveOfficePolicyPath(
+        PolicyRecord policy,
+        string settingName,
+        string settingCategory)
+    {
+        if (settingName.Contains("Macro", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "OfficeSecurity", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("User Configuration\\Administrative Templates\\Microsoft Office 2016\\Security Settings\\Trust Center", $@"HKCU\Software\Policies\Microsoft\Office\16.0\Common\Security\{settingName}");
+        }
+
+        if (string.Equals(settingCategory, "OfficePrivacy", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("User Configuration\\Administrative Templates\\Microsoft Office 2016\\Privacy", $@"HKCU\Software\Policies\Microsoft\Office\16.0\Common\Privacy\{settingName}");
+        }
+
+        if (settingName.Contains("Update", StringComparison.OrdinalIgnoreCase))
+        {
+            return ("User Configuration\\Administrative Templates\\Microsoft Office 2016\\Updates", $@"HKCU\Software\Policies\Microsoft\Office\16.0\Common\OfficeUpdate\{settingName}");
+        }
+
+        return ("User Configuration\\Administrative Templates\\Microsoft Office 2016\\Common", $@"HKCU\Software\Policies\Microsoft\Office\16.0\Common\{settingName}");
+    }
+
+    private static (string PolicyPath, string? RegistryPath) ResolveIntunePolicySettingMetadata(
+        PolicyRecord policy,
+        string settingName,
+        string settingCategory)
+    {
+        if (policy.Name.Contains("BitLocker", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "DiskEncryption", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}\\Endpoint security\\Disk encryption", $"./Device/Vendor/MSFT/BitLocker/{settingName}");
+        }
+
+        if (policy.Name.Contains("Windows Security Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "EndpointProtection", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "DeviceHealth", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "Compliance", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}\\Settings catalog\\Windows Security", $"./Device/Vendor/MSFT/Policy/Config/{settingCategory}/{settingName}");
+        }
+
+        if (string.Equals(settingCategory, "AppAssignment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "ApplicationConfiguration", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}\\Apps", $"./Device/Vendor/MSFT/EnterpriseAppManagement/{settingName}");
+        }
+
+        if (string.Equals(settingCategory, "RemoteSupport", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}\\Remote help", $"./Device/Vendor/MSFT/RemoteHelp/{settingName}");
+        }
+
+        if (string.Equals(settingCategory, "SharedDevice", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}\\Shared multi-user device", $"./Device/Vendor/MSFT/SharedPC/{settingName}");
+        }
+
+        return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}\\Settings catalog", $"./Device/Vendor/MSFT/Policy/Config/{settingCategory}/{settingName}");
+    }
+
+    private static string? ResolveRegistryPath(
+        PolicyRecord policy,
+        string settingName,
+        string settingCategory)
+    {
+        if (string.Equals(policy.Name, "Corporate Desktop Experience", StringComparison.OrdinalIgnoreCase))
+        {
+            return settingName.Contains("Wallpaper", StringComparison.OrdinalIgnoreCase)
+                || settingName.Contains("LockScreen", StringComparison.OrdinalIgnoreCase)
+                ? $@"HKCU\Software\Policies\Microsoft\Windows\Personalization\{settingName}"
+                : $@"HKCU\Software\Policies\Microsoft\Windows\Explorer\{settingName}";
+        }
+
+        if (string.Equals(policy.Name, "Enterprise Browser Controls", StringComparison.OrdinalIgnoreCase))
+        {
+            return settingName.StartsWith("Chrome", StringComparison.OrdinalIgnoreCase)
+                ? $@"HKLM\Software\Policies\Google\Chrome\{settingName}"
+                : $@"HKLM\Software\Policies\Microsoft\Edge\{settingName}";
+        }
+
+        if (policy.Name.Contains("Office", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(settingCategory, "OfficePrivacy", StringComparison.OrdinalIgnoreCase)
+                ? $@"HKCU\Software\Policies\Microsoft\Office\16.0\Common\Privacy\{settingName}"
+                : $@"HKCU\Software\Policies\Microsoft\Office\16.0\Common\{settingName}";
+        }
+
+        if (string.Equals(policy.Name, "Windows Update Enterprise Ring", StringComparison.OrdinalIgnoreCase))
+        {
+            return $@"HKLM\Software\Policies\Microsoft\Windows\WindowsUpdate\{settingName}";
+        }
+
+        if (string.Equals(policy.Name, "Windows Defender and ASR Baseline", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "EndpointProtection", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "ApplicationControl", StringComparison.OrdinalIgnoreCase))
+        {
+            return $@"HKLM\Software\Policies\Microsoft\Windows Defender\{settingName}";
+        }
+
+        if (string.Equals(policy.Name, "Removable Media and Device Control", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "DeviceControl", StringComparison.OrdinalIgnoreCase))
+        {
+            return $@"HKLM\Software\Policies\Microsoft\Windows\RemovableStorageDevices\{settingName}";
+        }
+
+        if (string.Equals(policy.Name, "Remote Access and VPN Controls", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "RemoteAccess", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "RemoteManagement", StringComparison.OrdinalIgnoreCase))
+        {
+            return $@"HKLM\Software\Policies\Microsoft\Windows\NetworkConnections\{settingName}";
+        }
+
+        return null;
+    }
+
+    private static bool IsUserScopedPolicySetting(PolicyRecord policy, string settingCategory, string settingName)
+    {
+        return settingCategory is "OfficePrivacy" or "OfficeSecurity" or "OfficeConfiguration" or "BrowserConfiguration" or "DriveMappings" or "LogonScripts" or "Printers" or "Shortcuts" or "Messaging" or "Collaboration"
+               || string.Equals(policy.Name, "Corporate Desktop Experience", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(policy.Name, "User Logon and Drive Mapping", StringComparison.OrdinalIgnoreCase)
+               || policy.Name.StartsWith("Department Collaboration - ", StringComparison.OrdinalIgnoreCase)
+               || settingName.Contains("Wallpaper", StringComparison.OrdinalIgnoreCase)
+               || settingName.Contains("HomeSite", StringComparison.OrdinalIgnoreCase)
+               || settingName.Contains("Logon", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string BuildCustomPolicyRegistryPath(
+        Company? company,
+        bool userScoped,
+        string policyName,
+        string settingCategory,
+        string settingName)
+    {
+        var rootHive = userScoped ? "HKCU" : "HKLM";
+        var vendorNode = string.IsNullOrWhiteSpace(company?.PrimaryDomain)
+            ? "SyntheticEnterprise"
+            : company.PrimaryDomain.Replace(".", "_", StringComparison.OrdinalIgnoreCase);
+
+        return $@"{rootHive}\Software\Policies\{vendorNode}\{Slug(policyName)}\{Slug(settingCategory)}\{Slug(settingName)}";
+    }
+
+    private static string CreateStableGuid(params string[] components)
+    {
+        var seed = string.Join("|", components.Where(component => !string.IsNullOrWhiteSpace(component)));
+        var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(seed));
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes[..16]).ToString();
     }
 
     private void AddAccessControlEvidence(

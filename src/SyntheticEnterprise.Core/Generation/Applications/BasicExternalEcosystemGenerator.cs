@@ -1,6 +1,7 @@
 namespace SyntheticEnterprise.Core.Generation.Applications;
 
 using SyntheticEnterprise.Contracts.Abstractions;
+using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
 
@@ -19,6 +20,8 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
     {
         foreach (var company in world.Companies)
         {
+            var companyDefinition = context.Scenario.Companies.FirstOrDefault(definition =>
+                string.Equals(definition.Name, company.Name, StringComparison.OrdinalIgnoreCase));
             var departments = world.Departments.Where(department => department.CompanyId == company.Id).ToList();
             var applications = world.Applications.Where(application => application.CompanyId == company.Id).ToList();
             var processes = world.BusinessProcesses.Where(process => process.CompanyId == company.Id).ToList();
@@ -30,7 +33,7 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
             var processCounterpartyPatterns = ReadProcessCounterpartyPatterns(catalogs, company.Industry ?? string.Empty, taxonomy, people.Count);
 
             var vendors = CreateVendors(company, departments, applications, processes, country, people.Count, catalogs, taxonomy);
-            var counterparties = CreateCounterparties(company, departments, country, people.Count, catalogs, taxonomy, vendors);
+            var counterparties = CreateCounterparties(company, companyDefinition, departments, country, people.Count, catalogs, taxonomy, vendors);
 
             world.ExternalOrganizations.AddRange(vendors);
             world.ExternalOrganizations.AddRange(counterparties);
@@ -135,6 +138,7 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
 
     private List<ExternalOrganization> CreateCounterparties(
         Company company,
+        ScenarioCompanyDefinition? companyDefinition,
         IReadOnlyList<Department> departments,
         string country,
         int peopleCount,
@@ -157,9 +161,46 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
         var domainSuffixes = ReadCatalogValues(catalogs, "domain_suffixes", "Value", new[] { "com", "net", "org", "global" });
         var taglines = ReadCatalogValues(catalogs, "taglines", "Value", new[] { "Deliver measurable outcomes", "Operate with trusted precision" });
         var counterpartyPatterns = ReadCounterpartyPatterns(catalogs, company.Industry, taxonomy, peopleCount);
+        var acquiredCompanyCount = Math.Max(0, companyDefinition?.AcquiredCompanyCount ?? 0);
 
         var results = new List<ExternalOrganization>();
-        for (var i = 0; i < count; i++)
+        for (var i = 0; i < acquiredCompanyCount; i++)
+        {
+            var profile = fakeCompanyProfiles.Count > 0 ? TakeRandom(fakeCompanyProfiles) : null;
+            var name = profile?.Name ?? BuildCatalogCompanyName(i, counterpartyPrefixes, counterpartyTerms, companyTerms, companySuffixes);
+            name = EnsureUniqueOrganizationName(name, usedNames, count + i + 1);
+            var organizationIndustry = FirstNonEmpty(
+                company.Industry,
+                InferCounterpartyIndustry(company.Industry, taxonomy, "AcquiredSubsidiary", i));
+            var primaryDomain = BuildPrimaryDomain(name, "AcquiredBy", country, domainSuffixes, profile?.PrimaryDomain, catalogs);
+            var contactEmail = FirstNonEmpty(profile?.ContactEmail, BuildContactEmail("AcquiredBy", primaryDomain));
+            var tagline = FirstNonEmpty(profile?.Tagline, "Integrating products, teams, and operations into the broader enterprise.");
+            var description = FirstNonEmpty(profile?.Description, $"Acquired subsidiary in {organizationIndustry} being integrated into {company.Name}.");
+            var taxIdentifier = FirstNonEmpty(profile?.TaxIdentifier, BuildSyntheticTaxIdentifier(country, count + i));
+            var ownerDepartmentId = ResolveOwnerDepartmentId(departments, "Corporate Services", "Finance", "Information Technology", "People Operations");
+
+            results.Add(CreateExternalOrganization(
+                company,
+                name,
+                "AcquiredBy",
+                organizationIndustry,
+                country,
+                ownerDepartmentId,
+                "AcquiredSubsidiary",
+                "High",
+                "MidMarket",
+                legalName: name,
+                description: description,
+                tagline: tagline,
+                primaryDomain: primaryDomain,
+                contactEmail: contactEmail,
+                taxIdentifier: taxIdentifier,
+                relationshipBasis: "AcquisitionIntegration",
+                relationshipScope: "Enterprise",
+                relationshipDefinition: $"{name} is an acquired company being integrated into {company.Name}."));
+        }
+
+        for (var i = acquiredCompanyCount; i < count; i++)
         {
             var pattern = i < counterpartyPatterns.Count ? counterpartyPatterns[i] : null;
             var segment = pattern?.Segment ?? (i % 4) switch

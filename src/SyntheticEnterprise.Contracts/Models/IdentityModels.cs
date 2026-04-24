@@ -45,6 +45,9 @@ public record DirectoryAccount
     public string? GeneratedPassword { get; init; }
     public string PasswordProfile { get; init; } = "Standard";
     public string? AdministrativeTier { get; init; }
+    public DateTimeOffset? LastLogon { get; init; }
+    public DateTimeOffset? WhenCreated { get; init; }
+    public DateTimeOffset? WhenModified { get; init; }
     public DateTimeOffset? PasswordLastSet { get; init; }
     public DateTimeOffset? PasswordExpires { get; init; }
     public bool PasswordNeverExpires { get; init; }

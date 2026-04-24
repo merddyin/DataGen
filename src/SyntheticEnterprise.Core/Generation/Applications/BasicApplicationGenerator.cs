@@ -182,6 +182,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         var ownerDepartment = SelectOwnerDepartment(template.Category, departments, null, template.Vendor, vendorProfiles);
         var hostingModel = SelectHostingModel(template.Category, profile);
         var vendorProfile = ResolveVendorProfile(template.Vendor, vendorProfiles);
+        var applicationType = ResolveApplicationType(hostingModel, template.Category, template.Vendor, company.Name);
+        var deploymentType = ResolveDeploymentType(hostingModel, applicationType, template.Vendor, company.Name);
 
         return new ApplicationRecord
         {
@@ -192,6 +194,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             Vendor = template.Vendor,
             BusinessCapability = InferBusinessCapability(template.Category, template.Name),
             HostingModel = hostingModel,
+            ApplicationType = applicationType,
+            DeploymentType = deploymentType,
             Environment = "Production",
             Criticality = InferCriticality(template.Category, template.Name),
             DataSensitivity = InferDataSensitivity(template.Category, template.Name),
@@ -690,6 +694,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         string hostingModel,
         Department ownerDepartment)
     {
+        var applicationType = ResolveApplicationType(hostingModel, category, company.Name, company.Name);
+        var deploymentType = ResolveDeploymentType(hostingModel, applicationType, company.Name, company.Name);
         return new ApplicationRecord
         {
             Id = _idFactory.Next("APP"),
@@ -699,6 +705,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             Vendor = company.Name,
             BusinessCapability = InferBusinessCapability(category, applicationName),
             HostingModel = hostingModel,
+            ApplicationType = applicationType,
+            DeploymentType = deploymentType,
             Environment = "Production",
             Criticality = InferCriticality(category, applicationName),
             DataSensitivity = InferDataSensitivity(category, applicationName),
@@ -719,6 +727,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         var ownerDepartment = SelectOwnerDepartment(template.Category, departments, template.OwnerHints, template.Vendor, vendorProfiles);
         var applicationName = template.Name.Replace("{Company}", company.Name, StringComparison.OrdinalIgnoreCase);
         var vendorProfile = ResolveVendorProfile(template.Vendor, vendorProfiles);
+        var applicationType = ResolveApplicationType(template.HostingModel, template.Category, template.Vendor, company.Name);
+        var deploymentType = ResolveDeploymentType(template.HostingModel, applicationType, template.Vendor, company.Name);
 
         return new ApplicationRecord
         {
@@ -731,6 +741,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
                 ? InferBusinessCapability(template.Category, applicationName)
                 : template.BusinessCapability,
             HostingModel = template.HostingModel,
+            ApplicationType = applicationType,
+            DeploymentType = deploymentType,
             Environment = "Production",
             Criticality = string.IsNullOrWhiteSpace(template.Criticality) ? InferCriticality(template.Category, applicationName) : template.Criticality,
             DataSensitivity = string.IsNullOrWhiteSpace(template.DataSensitivity) ? InferDataSensitivity(template.Category, applicationName) : template.DataSensitivity,
@@ -749,6 +761,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
     {
         var ownerDepartment = SelectOwnerDepartment(pattern.Category, departments, pattern.OwnerHints);
         var applicationName = pattern.Name.Replace("{Company}", company.Name, StringComparison.OrdinalIgnoreCase);
+        var applicationType = ResolveApplicationType(pattern.HostingModel, pattern.Category, company.Name, company.Name);
+        var deploymentType = ResolveDeploymentType(pattern.HostingModel, applicationType, company.Name, company.Name);
 
         return new ApplicationRecord
         {
@@ -761,6 +775,8 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
                 ? InferBusinessCapability(pattern.Category, applicationName)
                 : pattern.BusinessCapability,
             HostingModel = pattern.HostingModel,
+            ApplicationType = applicationType,
+            DeploymentType = deploymentType,
             Environment = "Production",
             Criticality = string.IsNullOrWhiteSpace(pattern.Criticality)
                 ? InferCriticality(pattern.Category, applicationName)
@@ -954,6 +970,54 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             "Database" or "Web" => _randomSource.NextDouble() >= 0.5 ? "OnPrem" : "Hybrid",
             _ => _randomSource.NextDouble() >= 0.6 ? "SaaS" : "Hybrid"
         };
+    }
+
+    private static string ResolveApplicationType(string hostingModel, string category, string vendor, string companyName)
+    {
+        if (string.Equals(hostingModel, "SaaS", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SaaS";
+        }
+
+        if (string.Equals(hostingModel, "OnPrem", StringComparison.OrdinalIgnoreCase))
+        {
+            return category is "Database" or "Web" ? "IaaS" : "ClientServer";
+        }
+
+        if (string.Equals(hostingModel, "Hybrid", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(vendor, companyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return "ClientServer";
+            }
+
+            return category is "Security" or "Analytics" or "Infrastructure"
+                ? "PaaS"
+                : "ClientServer";
+        }
+
+        return "Undefined";
+    }
+
+    private static string ResolveDeploymentType(string hostingModel, string applicationType, string vendor, string companyName)
+    {
+        if (applicationType is "SaaS" or "PaaS")
+        {
+            return "Automated";
+        }
+
+        if (string.Equals(vendor, companyName, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(hostingModel, "Hybrid", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Automated";
+        }
+
+        if (applicationType is "ClientServer" or "IaaS")
+        {
+            return "Manual";
+        }
+
+        return "Undefined";
     }
 
     private List<SoftwareTemplate> SelectSoftwareTemplates(

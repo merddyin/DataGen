@@ -4,6 +4,7 @@ public record PolicyRecord
 {
     public string Id { get; init; } = "";
     public string CompanyId { get; init; } = "";
+    public string PolicyGuid { get; init; } = "";
     public string Name { get; init; } = "";
     public string PolicyType { get; init; } = "";
     public string Platform { get; init; } = "";
@@ -24,6 +25,8 @@ public record PolicySettingRecord
     public string PolicyId { get; init; } = "";
     public string SettingName { get; init; } = "";
     public string SettingCategory { get; init; } = "";
+    public string PolicyPath { get; init; } = "";
+    public string? RegistryPath { get; init; }
     public string ValueType { get; init; } = "";
     public string ConfiguredValue { get; init; } = "";
     public bool IsLegacy { get; init; }

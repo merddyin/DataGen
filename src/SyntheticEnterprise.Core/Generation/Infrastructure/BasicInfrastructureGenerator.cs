@@ -868,6 +868,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var sam = BuildUniqueMachineSamAccountName(hostname, existingSamNames, appendDollarSign: true);
             var upn = BuildUniqueMachineUpn(hostname, company.PrimaryDomain, existingUpns, appendDollarSign: true);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 30));
+            var lifecycle = CreateMachineAccountLifecycle(passwordLastSet);
             var account = new DirectoryAccount
             {
                 Id = BuildMachineAccountId(company.Name, hostname, "AD"),
@@ -884,6 +885,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 GeneratedPassword = CreatePassword(24),
                 PasswordProfile = "MachineManaged",
                 AdministrativeTier = administrativeTier,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = null,
                 PasswordNeverExpires = true,
@@ -902,6 +906,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var sam = BuildUniqueMachineSamAccountName(hostname, existingSamNames, appendDollarSign: false);
             var upn = BuildUniqueMachineUpn(hostname, company.PrimaryDomain, existingUpns, appendDollarSign: false);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 30));
+            var lifecycle = CreateMachineAccountLifecycle(passwordLastSet);
             var account = new DirectoryAccount
             {
                 Id = BuildMachineAccountId(company.Name, hostname, "ENTRA"),
@@ -918,6 +923,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 GeneratedPassword = CreatePassword(24),
                 PasswordProfile = "CloudDeviceManaged",
                 AdministrativeTier = administrativeTier,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
                 PasswordLastSet = passwordLastSet,
                 PasswordExpires = null,
                 PasswordNeverExpires = true,
@@ -932,6 +940,37 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         }
 
         return new MachineAccountLinks(onPremAccountId ?? cloudAccountId, onPremAccountId, cloudAccountId);
+    }
+
+    private AccountLifecycle CreateMachineAccountLifecycle(DateTimeOffset passwordLastSet)
+    {
+        var whenCreated = _clock.UtcNow.AddDays(-RandomInclusive(30, 1460));
+        if (whenCreated > passwordLastSet)
+        {
+            whenCreated = passwordLastSet.AddDays(-RandomInclusive(7, 120));
+        }
+
+        var lastLogon = _clock.UtcNow.AddDays(-RandomInclusive(0, 10));
+        if (lastLogon < whenCreated)
+        {
+            var ageWindow = Math.Max(0, (int)Math.Floor((_clock.UtcNow - whenCreated).TotalDays));
+            lastLogon = whenCreated.AddDays(RandomInclusive(0, ageWindow));
+        }
+
+        var floor = new[] { whenCreated, passwordLastSet, lastLogon }.Max();
+        var maxTailDays = Math.Min(30, Math.Max(0, (int)Math.Floor((_clock.UtcNow - floor).TotalDays)));
+        var whenModified = floor.AddDays(RandomInclusive(0, maxTailDays));
+        return new AccountLifecycle(lastLogon, whenCreated, whenModified);
+    }
+
+    private int RandomInclusive(int minInclusive, int maxInclusive)
+    {
+        if (maxInclusive <= minInclusive)
+        {
+            return minInclusive;
+        }
+
+        return _randomSource.Next(minInclusive, maxInclusive + 1);
     }
 
     private JoinProfile ResolveWorkstationJoinProfile(string operatingSystem, bool contextSupportsHybridDirectory)
@@ -1169,6 +1208,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
     private sealed record NetworkAssetProfile(string AssetType, string Vendor, string Model, string HostPrefix);
     private sealed record JoinProfile(bool CreateOnPremAccount, bool CreateCloudAccount);
+    private sealed record AccountLifecycle(DateTimeOffset LastLogon, DateTimeOffset WhenCreated, DateTimeOffset WhenModified);
     private sealed record MachineAccountLinks(string? PrimaryAccountId, string? OnPremAccountId, string? CloudAccountId);
 
     private static string Read(Dictionary<string, string?> row, string key)

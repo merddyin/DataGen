@@ -15,9 +15,14 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "offices_missing_geocode", "office records are missing postal/geocode details.");
         AppendMetricWarning(warnings, metrics, "offices_missing_contact_metadata", "office records are missing business phone numbers or headquarters markers.");
         AppendMetricWarning(warnings, metrics, "people_office_country_mismatch", "people have country values that do not match their assigned office.");
+        AppendMetricWarning(warnings, metrics, "duplicate_person_display_names", "duplicate person display names were generated.");
+        AppendMetricWarning(warnings, metrics, "max_person_display_name_repeat_over_limit", "a person display name is repeating more often than the realism limit allows.");
         AppendMetricWarning(warnings, metrics, "duplicate_person_upns", "duplicate person user principal names were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_account_upns", "duplicate directory account user principal names were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_generated_passwords", "duplicate generated passwords were detected.");
+        AppendMetricWarning(warnings, metrics, "accounts_missing_temporal_identity_evidence", "accounts are missing temporal identity evidence such as last logon or created/modified timestamps.");
+        AppendMetricWarning(warnings, metrics, "workstations_missing_identity_evidence", "workstations are missing both assigned-user and directory-account evidence.");
+        AppendMetricWarning(warnings, metrics, "servers_missing_directory_account_evidence", "servers are missing directory-account evidence.");
         AppendMetricWarning(warnings, metrics, "external_people_missing_employer", "external workforce people are missing an employer organization reference.");
         AppendMetricWarning(warnings, metrics, "guest_accounts_missing_metadata", "guest or B2B accounts are missing invitation, tenant, sponsor, or invited-organization metadata.");
         AppendMetricWarning(warnings, metrics, "application_counterparty_links_missing_org", "application counterparty links reference missing external organizations.");
@@ -33,6 +38,11 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "generic_channel_names", "collaboration channel names still use generic template labels.");
         AppendMetricWarning(warnings, metrics, "business_process_configuration_items", "business processes are surfacing as configuration items.");
         AppendMetricWarning(warnings, metrics, "undersized_policy_surface", "policy and policy-setting counts are below the minimum realism threshold for this scenario.");
+        AppendMetricWarning(warnings, metrics, "policies_missing_guid", "policies are missing stable directory or platform identifiers.");
+        AppendMetricWarning(warnings, metrics, "policy_settings_missing_path", "policy settings are missing realistic policy or registry paths.");
+        AppendMetricWarning(warnings, metrics, "group_policies_without_linked_container", "group policy objects are missing linked container targets.");
+        AppendMetricWarning(warnings, metrics, "intune_policies_without_scope_or_assignment", "Intune policies are missing identity-store scope or assignment targets.");
+        AppendMetricWarning(warnings, metrics, "conditional_access_policies_without_scope_or_assignment", "conditional access policies are missing identity-store scope or assignment targets.");
         AppendMetricWarning(warnings, metrics, "office_region_country_mismatch", "office region labels do not match the office country for known international mappings.");
         AppendMetricWarning(warnings, metrics, "office_phone_country_mismatch", "office business phone formats do not align with the office country for known international mappings.");
 
@@ -52,9 +62,15 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["offices_missing_geocode"] = CountOfficesMissingGeocode(world),
             ["offices_missing_contact_metadata"] = CountOfficesMissingContactMetadata(world),
             ["people_office_country_mismatch"] = CountPeopleWithOfficeCountryMismatch(world),
+            ["duplicate_person_display_names"] = CountDuplicateValues(world.People.Select(person => person.DisplayName)),
+            ["max_person_display_name_repeat"] = CountMaxRepeat(world.People.Select(person => person.DisplayName)),
+            ["max_person_display_name_repeat_over_limit"] = Math.Max(0, CountMaxRepeat(world.People.Select(person => person.DisplayName)) - 3),
             ["duplicate_person_upns"] = CountDuplicateValues(world.People.Select(person => person.UserPrincipalName)),
             ["duplicate_account_upns"] = CountDuplicateValues(world.Accounts.Select(account => account.UserPrincipalName)),
             ["duplicate_generated_passwords"] = CountDuplicateValues(world.Accounts.Select(account => account.GeneratedPassword)),
+            ["accounts_missing_temporal_identity_evidence"] = CountAccountsMissingTemporalEvidence(world),
+            ["workstations_missing_identity_evidence"] = CountWorkstationsMissingIdentityEvidence(world),
+            ["servers_missing_directory_account_evidence"] = CountServersMissingDirectoryAccountEvidence(world),
             ["external_people_missing_employer"] = CountExternalWorkforceWithoutEmployer(world),
             ["guest_accounts_missing_metadata"] = CountGuestAccountsMissingMetadata(world),
             ["application_counterparty_links_missing_org"] = CountLinksMissingOrganization(
@@ -76,6 +92,11 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
                 string.Equals(item.CiType, "BusinessProcessService", StringComparison.OrdinalIgnoreCase)
                 || world.BusinessProcesses.Any(process => string.Equals(process.Name, item.DisplayName, StringComparison.OrdinalIgnoreCase))),
             ["undersized_policy_surface"] = HasUndersizedPolicySurface(world) ? 1 : 0,
+            ["policies_missing_guid"] = world.Policies.Count(policy => string.IsNullOrWhiteSpace(policy.PolicyGuid)),
+            ["policy_settings_missing_path"] = world.PolicySettings.Count(setting => string.IsNullOrWhiteSpace(setting.PolicyPath)),
+            ["group_policies_without_linked_container"] = CountPoliciesMissingTarget(world, "GroupPolicyObject", "Container", "Linked"),
+            ["intune_policies_without_scope_or_assignment"] = CountModernPoliciesMissingScopeOrAssignment(world, "Intune"),
+            ["conditional_access_policies_without_scope_or_assignment"] = CountModernPoliciesMissingScopeOrAssignment(world, "ConditionalAccessPolicy"),
             ["office_region_country_mismatch"] = CountOfficeRegionCountryMismatches(world),
             ["office_phone_country_mismatch"] = CountOfficePhoneCountryMismatches(world),
             ["company_count"] = world.Companies.Count,
@@ -110,10 +131,12 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["document_folders"] = Sample(world.DocumentFolders.Select(folder => folder.Name)),
             ["groups"] = Sample(world.Groups.Select(group => group.Name)),
             ["policies"] = Sample(world.Policies.Select(policy => policy.Name)),
-            ["policy_settings"] = Sample(world.PolicySettings.Select(setting => setting.SettingName)),
+            ["policy_settings"] = Sample(world.PolicySettings.Select(setting => $"{setting.SettingName} [{setting.PolicyPath}]")),
             ["configuration_items"] = Sample(world.ConfigurationItems.Select(item => item.DisplayName)),
             ["cmdb_sources"] = Sample(world.CmdbSourceRecords.Select(record => record.DisplayName)),
             ["applications"] = Sample(world.Applications.Select(application => application.Name)),
+            ["people"] = Sample(world.People.Select(person => person.DisplayName)),
+            ["accounts"] = Sample(world.Accounts.Select(account => $"{account.SamAccountName} [{account.AccountType} | {account.IdentityProvider}]")),
             ["servers"] = Sample(world.Servers.Select(server => server.Hostname)),
             ["offices"] = Sample(world.Offices.Select(office => $"{office.Name} [{office.Country} | {office.Region} | {office.BusinessPhone}]")),
             ["identity_stores"] = Sample(world.IdentityStores.Select(store => $"{store.Name} [{store.DirectoryMode} | {store.PrimaryDomain}]")),
@@ -171,6 +194,38 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             !string.Equals(person.EmploymentType, "Employee", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(person.PersonType, "Guest", StringComparison.OrdinalIgnoreCase)
             && string.IsNullOrWhiteSpace(person.EmployerOrganizationId));
+
+    private static int CountAccountsMissingTemporalEvidence(SyntheticEnterpriseWorld world)
+        => world.Accounts.Count(account =>
+            account.WhenCreated is null
+            || account.WhenModified is null
+            || (ShouldExpectLastLogon(account) && account.LastLogon is null));
+
+    private static int CountWorkstationsMissingIdentityEvidence(SyntheticEnterpriseWorld world)
+        => world.Devices.Count(device =>
+            (string.Equals(device.DeviceType, "Workstation", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(device.DeviceType, "PrivilegedAccessWorkstation", StringComparison.OrdinalIgnoreCase))
+            && string.IsNullOrWhiteSpace(device.AssignedPersonId)
+            && string.IsNullOrWhiteSpace(device.DirectoryAccountId)
+            && string.IsNullOrWhiteSpace(device.OnPremDirectoryAccountId)
+            && string.IsNullOrWhiteSpace(device.CloudDirectoryAccountId));
+
+    private static int CountServersMissingDirectoryAccountEvidence(SyntheticEnterpriseWorld world)
+        => world.Servers.Count(server =>
+            string.IsNullOrWhiteSpace(server.DirectoryAccountId)
+            && string.IsNullOrWhiteSpace(server.OnPremDirectoryAccountId)
+            && string.IsNullOrWhiteSpace(server.CloudDirectoryAccountId));
+
+    private static bool ShouldExpectLastLogon(DirectoryAccount account)
+    {
+        if (!account.Enabled)
+        {
+            return false;
+        }
+
+        return !string.Equals(account.UserType, "Guest", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(account.InvitationStatus, "Accepted", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static int CountGuestAccountsMissingMetadata(SyntheticEnterpriseWorld world)
     {
@@ -307,11 +362,60 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
                || world.Policies.Count < expectedMinimumPolicies;
     }
 
+    private static int CountPoliciesMissingTarget(
+        SyntheticEnterpriseWorld world,
+        string policyType,
+        string targetType,
+        string assignmentMode)
+    {
+        return world.Policies.Count(policy =>
+            string.Equals(policy.PolicyType, policyType, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(policy.Status, "Disabled", StringComparison.OrdinalIgnoreCase)
+            && !world.PolicyTargetLinks.Any(link =>
+                string.Equals(link.PolicyId, policy.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.TargetType, targetType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.AssignmentMode, assignmentMode, StringComparison.OrdinalIgnoreCase)
+                && link.LinkEnabled));
+    }
+
+    private static int CountModernPoliciesMissingScopeOrAssignment(SyntheticEnterpriseWorld world, string policyTypeOrPlatform)
+    {
+        return world.Policies.Count(policy =>
+        {
+            var matches = string.Equals(policy.PolicyType, policyTypeOrPlatform, StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(policy.Platform, policyTypeOrPlatform, StringComparison.OrdinalIgnoreCase);
+            if (!matches)
+            {
+                return false;
+            }
+
+            var hasScope = world.PolicyTargetLinks.Any(link =>
+                string.Equals(link.PolicyId, policy.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.TargetType, "IdentityStore", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.AssignmentMode, "Scope", StringComparison.OrdinalIgnoreCase));
+
+            var hasAssignment = world.PolicyTargetLinks.Any(link =>
+                string.Equals(link.PolicyId, policy.Id, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(link.TargetType, "IdentityStore", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(link.AssignmentMode, "DelegatedAdministration", StringComparison.OrdinalIgnoreCase));
+
+            return !hasScope || !hasAssignment;
+        });
+    }
+
     private static int CountDuplicateValues(IEnumerable<string?> values)
         => values
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .GroupBy(value => value!, StringComparer.OrdinalIgnoreCase)
             .Count(group => group.Count() > 1);
+
+    private static int CountMaxRepeat(IEnumerable<string?> values)
+        => values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .GroupBy(value => value!, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Count())
+            .DefaultIfEmpty(0)
+            .Max();
 
     private static IReadOnlyList<string> Sample(IEnumerable<string?> values, int take = 6)
         => values

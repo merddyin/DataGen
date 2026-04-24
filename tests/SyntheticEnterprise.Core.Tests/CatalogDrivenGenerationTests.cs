@@ -141,6 +141,49 @@ public sealed class CatalogDrivenGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Avoids_Person_Display_Name_Collisions_At_Flagship_Scale()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogLoader = services.GetRequiredService<ICatalogLoader>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4242,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Display Name Collision Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Display Name Collision Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 12000,
+                            BusinessUnitCount = 6,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 8,
+                            Countries = { "United States" }
+                        }
+                    }
+                }
+            },
+            catalogLoader.LoadDefault());
+
+        var duplicateDisplayNames = result.World.People
+            .GroupBy(person => person.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => new { group.Key, Count = group.Count() })
+            .ToList();
+
+        Assert.Empty(duplicateDisplayNames);
+    }
+
+    [Fact]
     public void WorldGenerator_Uses_CityReferenceCatalog_For_PopulationAware_OfficePlacement()
     {
         var services = new ServiceCollection()
@@ -814,6 +857,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Fallback Name Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -874,6 +922,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Name Catalog Sanitization Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -927,6 +980,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Surname Leakage Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -981,6 +1039,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated US Name Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1043,6 +1106,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated US Career Stage Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1095,6 +1163,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated UK Name Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1141,6 +1214,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated Canada Name Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1187,6 +1265,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated Australia Name Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1233,6 +1316,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated New Zealand Name Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1279,6 +1367,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated New Zealand Surname Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition
@@ -1330,6 +1423,11 @@ public sealed class CatalogDrivenGenerationTests
                 Scenario = new ScenarioDefinition
                 {
                     Name = "Curated UK Surname Catalog Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
                     Companies =
                     {
                         new ScenarioCompanyDefinition

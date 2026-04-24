@@ -513,6 +513,9 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var curatedLastNames = string.IsNullOrWhiteSpace(curatedSurnameCatalog)
             ? new List<(string Name, string Country)>()
             : ReadSimpleNameCatalog(catalogs, curatedSurnameCatalog, companyDefinition.Countries, "Value");
+        var usedStaticMaleFallback = false;
+        var usedStaticFemaleFallback = false;
+        var usedStaticLastNameFallback = false;
 
         if (maleFirstNames.Count == 0) maleFirstNames = ReadFilteredNameCatalog(catalogs, "first_names_country", "Male", companyDefinition.Countries);
         if (femaleFirstNames.Count == 0) femaleFirstNames = ReadFilteredNameCatalog(catalogs, "first_names_country", "Female", companyDefinition.Countries);
@@ -521,33 +524,52 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         if (maleFirstNames.Count == 0) maleFirstNames = ReadSimpleNameCatalog(catalogs, "given_names_male", companyDefinition.Countries);
         if (femaleFirstNames.Count == 0) femaleFirstNames = ReadSimpleNameCatalog(catalogs, "given_names_female", companyDefinition.Countries);
 
-        if (maleFirstNames.Count == 0) maleFirstNames = GetFallbackFirstNames("Male", companyDefinition.Countries);
-        if (femaleFirstNames.Count == 0) femaleFirstNames = GetFallbackFirstNames("Female", companyDefinition.Countries);
-        if (lastNames.Count == 0) lastNames = GetFallbackLastNames(companyDefinition.Countries);
+        if (maleFirstNames.Count == 0)
+        {
+            maleFirstNames = GetFallbackFirstNames("Male", companyDefinition.Countries);
+            usedStaticMaleFallback = true;
+        }
+
+        if (femaleFirstNames.Count == 0)
+        {
+            femaleFirstNames = GetFallbackFirstNames("Female", companyDefinition.Countries);
+            usedStaticFemaleFallback = true;
+        }
+
+        if (lastNames.Count == 0)
+        {
+            lastNames = GetFallbackLastNames(companyDefinition.Countries);
+            usedStaticLastNameFallback = true;
+        }
+
+        if (usedStaticMaleFallback && curatedMaleFirstNames.Count > 0)
+        {
+            maleFirstNames = curatedMaleFirstNames
+                .Select(entry => (entry.Name, entry.Country))
+                .Distinct()
+                .ToList();
+        }
+
+        if (usedStaticFemaleFallback && curatedFemaleFirstNames.Count > 0)
+        {
+            femaleFirstNames = curatedFemaleFirstNames
+                .Select(entry => (entry.Name, entry.Country))
+                .Distinct()
+                .ToList();
+        }
+
+        if (usedStaticLastNameFallback && curatedLastNames.Count > 0)
+        {
+            lastNames = curatedLastNames
+                .Distinct()
+                .ToList();
+        }
 
         lastNames = FilterLastNames(lastNames, maleFirstNames, femaleFirstNames, companyDefinition.Countries);
         var preferConservativeNames = ShouldPreferConservativeNames(companyDefinition.Countries);
-        if (preferConservativeNames)
-        {
-            if (curatedMaleFirstNames.Count > 0)
-            {
-                maleFirstNames = curatedMaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList();
-            }
-
-            if (curatedFemaleFirstNames.Count > 0)
-            {
-                femaleFirstNames = curatedFemaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList();
-            }
-
-            if (curatedLastNames.Count > 0)
-            {
-                lastNames = curatedLastNames;
-            }
-        }
-
-        var fallbackMaleFirstNames = curatedMaleFirstNames.Count > 0 ? curatedMaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList() : GetFallbackFirstNames("Male", companyDefinition.Countries);
-        var fallbackFemaleFirstNames = curatedFemaleFirstNames.Count > 0 ? curatedFemaleFirstNames.Select(entry => (entry.Name, entry.Country)).ToList() : GetFallbackFirstNames("Female", companyDefinition.Countries);
-        var fallbackLastNames = curatedLastNames.Count > 0 ? curatedLastNames : GetFallbackLastNames(companyDefinition.Countries);
+        var fallbackMaleFirstNames = GetFallbackFirstNames("Male", companyDefinition.Countries);
+        var fallbackFemaleFirstNames = GetFallbackFirstNames("Female", companyDefinition.Countries);
+        var fallbackLastNames = GetFallbackLastNames(companyDefinition.Countries);
 
         var fallbackTitles = ReadCatalogValues(catalogs, "titles", "Title", new[]
         {
@@ -563,10 +585,11 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var issuedUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var issuedDisplayNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var departmentsById = departments.ToDictionary(department => department.Id, department => department, StringComparer.OrdinalIgnoreCase);
+        var genderOffset = Math.Abs(HashCode.Combine(company.Id)) % 2;
 
         for (var i = 0; i < companyDefinition.EmployeeCount; i++)
         {
-            var isFemale = _randomSource.NextDouble() >= 0.5;
+            var isFemale = ((i + genderOffset) % 2) == 0;
             var team = teams[i % teams.Count];
             var departmentId = team.DepartmentId;
             var employeeNumber = (100000 + i).ToString();
@@ -578,17 +601,35 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             var fallbackFirstPool = isFemale ? fallbackFemaleFirstNames : fallbackMaleFirstNames;
             var curatedFirstPool = isFemale ? curatedFemaleFirstNames : curatedMaleFirstNames;
             var first = SelectFirstNameEntry(firstPool, fallbackFirstPool, curatedFirstPool, title, preferConservativeNames);
-            var last = SelectNameEntry(lastNames, fallbackLastNames, preferConservativeNames, fallbackBias: 0.75);
+            var last = SelectLastNameEntry(lastNames, fallbackLastNames, curatedLastNames, preferConservativeNames);
             var displayName = $"{first.Name} {last.Name}";
 
-            for (var attempt = 0; attempt < 24 && !issuedDisplayNames.Add(displayName); attempt++)
+            for (var attempt = 0; attempt < 24 && issuedDisplayNames.Contains(displayName); attempt++)
             {
                 first = SelectFirstNameEntry(firstPool, fallbackFirstPool, curatedFirstPool, title, preferConservativeNames);
-                last = SelectNameEntry(lastNames, fallbackLastNames, preferConservativeNames, fallbackBias: 0.75);
+                last = SelectLastNameEntry(lastNames, fallbackLastNames, curatedLastNames, preferConservativeNames);
                 displayName = $"{first.Name} {last.Name}";
             }
 
-            _ = issuedDisplayNames.Add(displayName);
+            if (!issuedDisplayNames.Contains(displayName))
+            {
+                _ = issuedDisplayNames.Add(displayName);
+            }
+            else
+            {
+                (first, last, displayName) = EnsureUniqueDisplayName(
+                    first,
+                    last,
+                    firstPool,
+                    fallbackFirstPool,
+                    curatedFirstPool,
+                    lastNames,
+                    fallbackLastNames,
+                    curatedLastNames,
+                    issuedDisplayNames,
+                    i,
+                    title);
+            }
 
             var person = new Person
             {
@@ -1366,12 +1407,115 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
 
             if (stagePool.Count > 0)
             {
-                var selected = stagePool[_randomSource.Next(stagePool.Count)];
-                return (selected.Name, selected.Country);
+                if (primaryPool.Count == 0 || _randomSource.NextDouble() < 0.72)
+                {
+                    var selected = stagePool[_randomSource.Next(stagePool.Count)];
+                    return (selected.Name, selected.Country);
+                }
             }
         }
 
-        return SelectNameEntry(primaryPool, fallbackPool, preferConservativeNames, fallbackBias: 0.55);
+        return SelectNameEntry(primaryPool, fallbackPool, preferFallback: false, fallbackBias: 0.0);
+    }
+
+    private (string Name, string Country) SelectLastNameEntry(
+        IReadOnlyList<(string Name, string Country)> primaryPool,
+        IReadOnlyList<(string Name, string Country)> fallbackPool,
+        IReadOnlyList<(string Name, string Country)> curatedPool,
+        bool preferConservativeNames)
+    {
+        if (preferConservativeNames && curatedPool.Count > 0)
+        {
+            if (primaryPool.Count == 0 || _randomSource.NextDouble() < 0.18)
+            {
+                return curatedPool[_randomSource.Next(curatedPool.Count)];
+            }
+        }
+
+        return SelectNameEntry(primaryPool, fallbackPool, preferFallback: false, fallbackBias: 0.0);
+    }
+
+    private ((string Name, string Country) First, (string Name, string Country) Last, string DisplayName) EnsureUniqueDisplayName(
+        (string Name, string Country) first,
+        (string Name, string Country) last,
+        IReadOnlyList<(string Name, string Country)> primaryFirstPool,
+        IReadOnlyList<(string Name, string Country)> fallbackFirstPool,
+        IReadOnlyList<CuratedFirstNameEntry> curatedFirstPool,
+        IReadOnlyList<(string Name, string Country)> primaryLastPool,
+        IReadOnlyList<(string Name, string Country)> fallbackLastPool,
+        IReadOnlyList<(string Name, string Country)> curatedLastPool,
+        HashSet<string> issuedDisplayNames,
+        int personIndex,
+        string title)
+    {
+        var allLastNames = BuildScopedNamePool(primaryLastPool, curatedLastPool, fallbackLastPool);
+        if (allLastNames.Count > 0)
+        {
+            var lastSeed = Math.Abs(HashCode.Combine(personIndex, title, first.Name));
+            for (var offset = 0; offset < allLastNames.Count; offset++)
+            {
+                var candidateLast = allLastNames[(lastSeed + offset) % allLastNames.Count];
+                var candidateDisplayName = $"{first.Name} {candidateLast.Name}";
+                if (issuedDisplayNames.Add(candidateDisplayName))
+                {
+                    return (first, candidateLast, candidateDisplayName);
+                }
+            }
+        }
+
+        var allFirstNames = BuildScopedNamePool(
+            primaryFirstPool,
+            curatedFirstPool.Select(entry => (entry.Name, entry.Country)).ToList(),
+            fallbackFirstPool);
+        if (allFirstNames.Count > 0 && allLastNames.Count > 0)
+        {
+            var firstSeed = Math.Abs(HashCode.Combine(personIndex, title));
+            var lastSeed = Math.Abs(HashCode.Combine(personIndex, title, last.Name));
+            for (var firstOffset = 0; firstOffset < allFirstNames.Count; firstOffset++)
+            {
+                var candidateFirst = allFirstNames[(firstSeed + firstOffset) % allFirstNames.Count];
+                for (var lastOffset = 0; lastOffset < allLastNames.Count; lastOffset++)
+                {
+                    var candidateLast = allLastNames[(lastSeed + lastOffset) % allLastNames.Count];
+                    var candidateDisplayName = $"{candidateFirst.Name} {candidateLast.Name}";
+                    if (issuedDisplayNames.Add(candidateDisplayName))
+                    {
+                        return (candidateFirst, candidateLast, candidateDisplayName);
+                    }
+                }
+            }
+        }
+
+        var duplicateDisplayName = $"{first.Name} {last.Name}";
+        return (first, last, duplicateDisplayName);
+    }
+
+    private static List<(string Name, string Country)> BuildScopedNamePool(
+        params IEnumerable<(string Name, string Country)>[] pools)
+    {
+        foreach (var pool in pools)
+        {
+            var values = pool
+                .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .Distinct()
+                .ToList();
+
+            if (values.Count > 0)
+            {
+                return values;
+            }
+        }
+
+        return new();
+    }
+
+    private static List<(string Name, string Country)> CombineDistinctNameEntries(params IEnumerable<(string Name, string Country)>[] pools)
+    {
+        return pools
+            .SelectMany(pool => pool)
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+            .Distinct()
+            .ToList();
     }
 
     private static bool ShouldPreferConservativeNames(IReadOnlyCollection<string> countries)

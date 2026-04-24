@@ -92,6 +92,7 @@ public sealed class WorldExportCoordinatorTests
                             {
                                 Id = "POL-001",
                                 CompanyId = "CO-001",
+                                PolicyGuid = "11111111-2222-5333-8444-555555555555",
                                 Name = "Default Domain Policy",
                                 PolicyType = "GroupPolicyObject",
                                 Platform = "ActiveDirectory",
@@ -111,6 +112,8 @@ public sealed class WorldExportCoordinatorTests
                                 PolicyId = "POL-001",
                                 SettingName = "MinimumPasswordLength",
                                 SettingCategory = "PasswordPolicy",
+                                PolicyPath = @"Computer Configuration\Windows Settings\Account Policies\Password Policy",
+                                RegistryPath = null,
                                 ValueType = "Integer",
                                 ConfiguredValue = "14",
                                 IsLegacy = false,
@@ -203,6 +206,8 @@ public sealed class WorldExportCoordinatorTests
                                 Vendor = "Contoso",
                                 BusinessCapability = "Enterprise Resource Planning",
                                 HostingModel = "Hybrid",
+                                ApplicationType = "ClientServer",
+                                DeploymentType = "Automated",
                                 Environment = "Production",
                                 Criticality = "High",
                                 DataSensitivity = "Confidential",
@@ -221,6 +226,8 @@ public sealed class WorldExportCoordinatorTests
                                 Vendor = "Contoso",
                                 BusinessCapability = "Identity and Access",
                                 HostingModel = "Hybrid",
+                                ApplicationType = "PaaS",
+                                DeploymentType = "Automated",
                                 Environment = "Production",
                                 Criticality = "High",
                                 DataSensitivity = "Restricted",
@@ -319,7 +326,7 @@ public sealed class WorldExportCoordinatorTests
                             {
                                 Id = "IDS-001",
                                 CompanyId = "CO-001",
-                                Name = "Contoso Active Directory",
+                                Name = "contoso.com",
                                 StoreType = "ActiveDirectoryDomain",
                                 Provider = "Microsoft",
                                 PrimaryDomain = "contoso.com",
@@ -339,7 +346,7 @@ public sealed class WorldExportCoordinatorTests
                                 Provider = "Microsoft",
                                 TenantType = "ProductivitySuite",
                                 Name = "Contoso Microsoft ProductivitySuite",
-                                PrimaryDomain = "contoso-microsoft.tenant.onmicrosoft.com",
+                                PrimaryDomain = "contoso.onmicrosoft.com",
                                 Region = "North America",
                                 AuthenticationModel = "Federated",
                                 Environment = "Production",
@@ -524,6 +531,9 @@ public sealed class WorldExportCoordinatorTests
                                 EmployeeId = "EMP-001",
                                 GeneratedPassword = "Abc!2345Def$",
                                 PasswordProfile = "EmployeeStandard",
+                                LastLogon = DateTimeOffset.Parse("2026-04-12T08:30:00Z"),
+                                WhenCreated = DateTimeOffset.Parse("2024-06-15T00:00:00Z"),
+                                WhenModified = DateTimeOffset.Parse("2026-04-12T09:00:00Z"),
                                 PasswordLastSet = DateTimeOffset.Parse("2026-04-01T00:00:00Z"),
                                 PasswordExpires = DateTimeOffset.Parse("2026-06-30T00:00:00Z"),
                                 PasswordNeverExpires = false,
@@ -886,11 +896,21 @@ public sealed class WorldExportCoordinatorTests
             var policyTargetsJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "links", "policy_target_links.json"));
 
             Assert.Contains("entitlement_package_name", accountsJson);
+            Assert.Contains("last_logon", accountsJson);
+            Assert.Contains("when_created", accountsJson);
+            Assert.Contains("when_modified", accountsJson);
+            Assert.Contains("application_type", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "applications.json")));
+            Assert.Contains("deployment_type", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "applications.json")));
             Assert.Contains("DirectoryDomain", containersJson);
             Assert.Contains("blocks_policy_inheritance", containersJson);
-            Assert.Contains("Contoso Active Directory", identityStoresJson);
+            Assert.Contains("contoso.com", identityStoresJson);
+            Assert.Contains("contoso.onmicrosoft.com", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "cloud_tenants.json")));
             Assert.Contains("Default Domain Policy", policiesJson);
+            Assert.Contains("policy_guid", policiesJson);
+            Assert.Contains("11111111-2222-5333-8444-555555555555", policiesJson);
             Assert.Contains("MinimumPasswordLength", policySettingsJson);
+            Assert.Contains("policy_path", policySettingsJson);
+            Assert.Contains(@"Computer Configuration\\Windows Settings\\Account Policies\\Password Policy", policySettingsJson);
             Assert.Contains("Linked", policyTargetsJson);
             Assert.Contains("WmiQuery", policyTargetsJson);
             Assert.Contains("false", policyTargetsJson);

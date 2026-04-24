@@ -80,6 +80,31 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Equal(result.World.Accounts.Count, distinctAccountIds);
         Assert.Equal(result.World.People.Count, distinctPersonUpns);
         Assert.Equal(result.World.Accounts.Count, distinctAccountUpns);
+        Assert.All(result.World.Accounts, account =>
+        {
+            Assert.NotNull(account.WhenCreated);
+            Assert.NotNull(account.WhenModified);
+            var whenCreated = account.WhenCreated!.Value;
+            var whenModified = account.WhenModified!.Value;
+            Assert.True(whenModified >= whenCreated);
+            Assert.True(
+                !string.Equals(account.UserType, "Guest", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(account.InvitationStatus, "PendingAcceptance", StringComparison.OrdinalIgnoreCase)
+                || account.LastLogon is null
+                || account.LastLogon >= whenCreated);
+            if (!string.Equals(account.UserType, "Guest", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(account.InvitationStatus, "Accepted", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.NotNull(account.LastLogon);
+                Assert.True(account.LastLogon >= whenCreated);
+            }
+
+            if (account.PasswordLastSet is not null)
+            {
+                Assert.True(account.PasswordLastSet >= whenCreated);
+                Assert.True(whenModified >= account.PasswordLastSet);
+            }
+        });
         Assert.Contains(result.World.GroupMemberships, membership => membership.MemberObjectType == "Group");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Computers");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Workstations");
@@ -119,6 +144,16 @@ public sealed class IdentityInfrastructureGenerationTests
             account.AccountType == "Device"
             && string.Equals(account.IdentityProvider, "EntraID", StringComparison.OrdinalIgnoreCase)
             && !account.SamAccountName.EndsWith("$", StringComparison.Ordinal));
+        Assert.All(
+            result.World.Accounts.Where(account => account.AccountType == "Device"),
+            account =>
+            {
+                Assert.NotNull(account.LastLogon);
+                Assert.NotNull(account.WhenCreated);
+                Assert.NotNull(account.WhenModified);
+                Assert.True(account.LastLogon >= account.WhenCreated!.Value);
+                Assert.True(account.WhenModified!.Value >= account.LastLogon);
+            });
         Assert.DoesNotContain(result.World.GroupMemberships, membership => membership.MemberObjectType == "Device");
         Assert.DoesNotContain(result.World.GroupMemberships, membership => membership.MemberObjectType == "Server");
         var accountlessEndpointIds = result.World.Devices
@@ -228,31 +263,45 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.Policies, policy => policy.Name == "Office Privacy and Update Baseline");
         Assert.Contains(result.World.Policies, policy => policy.Name == "Intune Windows Security Baseline");
         Assert.Contains(result.World.Policies, policy => policy.Name == "Conditional Access - Admin MFA");
+        Assert.DoesNotContain(result.World.Policies, policy => string.IsNullOrWhiteSpace(policy.PolicyGuid));
         Assert.Contains(result.World.PolicySettings, setting =>
             setting.SettingName == "MinimumPasswordLength"
-            && setting.ConfiguredValue == "14");
+            && setting.ConfiguredValue == "14"
+            && setting.PolicyPath == @"Computer Configuration\Windows Settings\Account Policies\Password Policy");
         Assert.Contains(result.World.PolicySettings, setting =>
             setting.SettingName == "LanManCompatibilityLevel"
-            && setting.IsLegacy);
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "DesktopWallpaperPath");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "BrowserPasswordManagerAllowed");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "PrimaryLogonScript");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeMacroPolicy");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "WindowsUpdateDeferralDays");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "AuditLogonEvents");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "UsbStorageReadPolicy");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "LapsPasswordReadScope");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "EnforcePasswordHistory");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "AllowLogOnThroughRemoteDesktopServices");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "UserAccountControlRunAllAdministratorsInAdminApprovalMode");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "AuditKerberosAuthenticationService");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "ExploitGuardAttackSurfaceReductionOfficeChildProcess");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "WindowsFirewallDomainProfileState");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "ChromeSafeBrowsingProtectionLevel");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "ChromeExtensionInstallForcelist");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeBlockMacrosFromInternet");
-        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeEnableAutomaticUpdates");
+            && setting.IsLegacy
+            && setting.PolicyPath == @"Computer Configuration\Windows Settings\Security Settings\Local Policies\Security Options");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "DesktopWallpaperPath" && setting.PolicyPath == @"User Configuration\Administrative Templates\Desktop\Desktop");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "BrowserPasswordManagerAllowed" && setting.PolicyPath.Contains("Microsoft Edge", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "PrimaryLogonScript" && setting.PolicyPath == @"User Configuration\Windows Settings\Scripts (Logon/Logoff)");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeMacroPolicy" && setting.PolicyPath.Contains(@"Microsoft Office 2016\Security Settings\Trust Center", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "WindowsUpdateDeferralDays" && setting.PolicyPath.Contains(@"Windows Components\Windows Update", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "AuditLogonEvents" && setting.PolicyPath.Contains(@"Advanced Audit Policy Configuration\Audit Policies", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "UsbStorageReadPolicy" && setting.PolicyPath.Contains(@"System\Removable Storage Access", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "LapsPasswordReadScope" && setting.PolicyPath == @"Computer Configuration\Windows Settings\Security Settings\Local Policies\User Rights Assignment");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "EnforcePasswordHistory" && setting.PolicyPath == @"Computer Configuration\Windows Settings\Account Policies\Password Policy");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "AllowLogOnThroughRemoteDesktopServices" && setting.PolicyPath == @"Computer Configuration\Windows Settings\Security Settings\Local Policies\User Rights Assignment");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "UserAccountControlRunAllAdministratorsInAdminApprovalMode" && setting.PolicyPath == @"Computer Configuration\Windows Settings\Security Settings\Local Policies\Security Options");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "AuditKerberosAuthenticationService" && setting.PolicyPath.Contains(@"Advanced Audit Policy Configuration\Audit Policies", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "ExploitGuardAttackSurfaceReductionOfficeChildProcess" && setting.PolicyPath.Contains(@"Attack Surface Reduction", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "WindowsFirewallDomainProfileState" && setting.PolicyPath.Contains(@"Windows Defender Firewall with Advanced Security", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "ChromeSafeBrowsingProtectionLevel" && setting.PolicyPath == @"Computer Configuration\Administrative Templates\Google\Google Chrome");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "ChromeExtensionInstallForcelist" && setting.PolicyPath == @"Computer Configuration\Administrative Templates\Google\Google Chrome");
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeBlockMacrosFromInternet" && setting.PolicyPath.Contains(@"Microsoft Office 2016\Security Settings\Trust Center", StringComparison.Ordinal));
+        Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeEnableAutomaticUpdates" && setting.PolicyPath.Contains(@"Microsoft Office 2016\Updates", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.World.PolicySettings, setting => string.IsNullOrWhiteSpace(setting.PolicyPath));
         Assert.True(result.World.PolicySettings.Count >= 800);
+        Assert.DoesNotContain(result.World.Policies.Where(policy =>
+                policy.PolicyType == "GroupPolicyObject"
+                && !string.Equals(policy.Status, "Disabled", StringComparison.OrdinalIgnoreCase)), policy =>
+            !result.World.PolicyTargetLinks.Any(link =>
+                link.PolicyId == policy.Id
+                && link.TargetType == "Container"
+                && link.AssignmentMode == "Linked"
+                && link.LinkEnabled));
+        Assert.DoesNotContain(result.World.Policies.Where(policy => policy.Platform == "Intune" || policy.PolicyType == "ConditionalAccessPolicy"), policy =>
+            !result.World.PolicyTargetLinks.Any(link => link.PolicyId == policy.Id && link.TargetType == "IdentityStore" && link.AssignmentMode == "Scope"));
         Assert.Contains(result.World.PolicyTargetLinks, link =>
             link.TargetType == "Container"
             && link.AssignmentMode == "Linked"
@@ -583,7 +632,9 @@ public sealed class IdentityInfrastructureGenerationTests
             .AddSyntheticEnterpriseCore()
             .BuildServiceProvider();
 
+        var catalogLoader = services.GetRequiredService<ICatalogLoader>();
         var generator = services.GetRequiredService<IWorldGenerator>();
+        var auditService = services.GetRequiredService<IWorldQualityAuditService>();
         var result = generator.Generate(
             new GenerationContext
             {
@@ -625,7 +676,8 @@ public sealed class IdentityInfrastructureGenerationTests
                     }
                 }
             },
-            new CatalogSet());
+            catalogLoader.LoadDefault());
+        var audit = auditService.Audit(result.World);
 
         var distinctAccountUpns = result.World.Accounts
             .Select(account => account.UserPrincipalName)
@@ -634,8 +686,13 @@ public sealed class IdentityInfrastructureGenerationTests
             .Count();
 
         Assert.Equal(result.World.Accounts.Count, distinctAccountUpns);
+        Assert.Equal(0, audit.Metrics["duplicate_person_display_names"]);
+        Assert.True(audit.Metrics["max_person_display_name_repeat"] <= 1);
         Assert.DoesNotContain(
             result.Warnings,
             warning => warning.Contains("duplicate directory account user principal", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            result.Warnings,
+            warning => warning.Contains("duplicate person display names", StringComparison.OrdinalIgnoreCase));
     }
 }

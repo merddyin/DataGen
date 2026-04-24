@@ -283,9 +283,10 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 PrivacyType = DeterminePrivacyType(pattern?.AccessModel, i),
                 WorkspaceType = workspaceType
             };
+            var libraries = CreateLibrariesAndFoldersForSite(world, company, site, documentLibraryPatterns, documentFolderPatterns);
+            site = AlignSiteContentMetrics(site, libraries);
             world.CollaborationSites.Add(site);
 
-            var libraries = CreateLibrariesAndFoldersForSite(world, company, site, documentLibraryPatterns, documentFolderPatterns);
             CreatePagesForSite(world, company, site, owner, libraries, sitePagePatterns);
             if (string.Equals(site.Platform, "Teams", StringComparison.OrdinalIgnoreCase))
             {
@@ -336,20 +337,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             .ToList();
         var libraryTemplates = curatedPatterns.Count > 0
             ? curatedPatterns.Select(pattern => (Name: pattern.LibraryName, TemplateType: pattern.TemplateType, Sensitivity: pattern.Sensitivity)).ToList()
-            : (string.Equals(site.Platform, "Teams", StringComparison.OrdinalIgnoreCase)
-                ? new List<(string Name, string TemplateType, string Sensitivity)>
-                {
-                    ("Shared Documents", "Documents", "Internal"),
-                    ("Work in Progress", "Shared", "Internal"),
-                    ("Team Cadence", "Meeting Notes", "Internal")
-                }
-                : new List<(string Name, string TemplateType, string Sensitivity)>
-                {
-                    ("Shared Documents", "Documents", "Internal"),
-                    ("Reference Library", "Policies", site.PrivacyType == "Private" ? "Confidential" : "Internal"),
-                    ("Standard Templates", "Templates", "Internal"),
-                    ("Active Initiatives", "Projects", "Internal")
-                });
+            : GetDefaultLibraryTemplates(site);
         var takeCount = curatedPatterns.Count > 0
             ? libraryTemplates.Count
             : string.Equals(site.Platform, "Teams", StringComparison.OrdinalIgnoreCase) ? 2 + _randomSource.Next(0, 2) : 2 + _randomSource.Next(1, 3);
@@ -358,6 +346,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         for (var i = 0; i < Math.Min(libraryTemplates.Count, takeCount); i++)
         {
             var template = libraryTemplates[i];
+            var metrics = CreateLibraryMetrics(site, template.Name, template.TemplateType);
             var library = new DocumentLibrary
             {
                 Id = _idFactory.Next("LIB"),
@@ -365,8 +354,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 CollaborationSiteId = site.Id,
                 Name = template.Name,
                 TemplateType = template.TemplateType,
-                ItemCount = (60 + _randomSource.Next(0, 4000)).ToString(),
-                TotalSizeGb = (1 + _randomSource.Next(0, 240)).ToString(),
+                ItemCount = metrics.ItemCount.ToString(),
+                TotalSizeGb = metrics.TotalSizeGb.ToString(),
                 Sensitivity = string.IsNullOrWhiteSpace(template.Sensitivity)
                     ? site.PrivacyType == "Private" ? "Confidential" : "Internal"
                     : template.Sensitivity
@@ -382,6 +371,128 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         return libraries;
     }
+
+    private CollaborationSite AlignSiteContentMetrics(CollaborationSite site, IReadOnlyList<DocumentLibrary> libraries)
+    {
+        if (libraries.Count == 0)
+        {
+            return site;
+        }
+
+        var fileCount = libraries.Sum(library => ParseWholeNumber(library.ItemCount));
+        var totalSizeGb = libraries.Sum(library => ParseWholeNumber(library.TotalSizeGb));
+
+        return site with
+        {
+            FileCount = fileCount.ToString(),
+            TotalSizeGb = totalSizeGb.ToString()
+        };
+    }
+
+    private List<(string Name, string TemplateType, string Sensitivity)> GetDefaultLibraryTemplates(CollaborationSite site)
+    {
+        var internalSensitivity = site.PrivacyType == "Private" ? "Confidential" : "Internal";
+
+        if (string.Equals(site.Platform, "Teams", StringComparison.OrdinalIgnoreCase))
+        {
+            return site.WorkspaceType switch
+            {
+                "Project" => new List<(string Name, string TemplateType, string Sensitivity)>
+                {
+                    ("Shared Documents", "Documents", internalSensitivity),
+                    ("Active Initiatives", "Projects", internalSensitivity),
+                    ("Team Cadence", "Meeting Notes", "Internal")
+                },
+                "Department" => new List<(string Name, string TemplateType, string Sensitivity)>
+                {
+                    ("Shared Documents", "Documents", internalSensitivity),
+                    ("Reference Library", "Policies", internalSensitivity),
+                    ("Team Cadence", "Meeting Notes", "Internal")
+                },
+                _ => new List<(string Name, string TemplateType, string Sensitivity)>
+                {
+                    ("Shared Documents", "Documents", internalSensitivity),
+                    ("Work in Progress", "Shared", "Internal"),
+                    ("Team Cadence", "Meeting Notes", "Internal")
+                }
+            };
+        }
+
+        return site.WorkspaceType switch
+        {
+            "Project" => new List<(string Name, string TemplateType, string Sensitivity)>
+            {
+                ("Shared Documents", "Documents", internalSensitivity),
+                ("Reference Library", "Policies", internalSensitivity),
+                ("Active Initiatives", "Projects", internalSensitivity)
+            },
+            "Knowledge" => new List<(string Name, string TemplateType, string Sensitivity)>
+            {
+                ("Shared Documents", "Documents", internalSensitivity),
+                ("Reference Library", "Policies", internalSensitivity),
+                ("Standard Templates", "Templates", "Internal")
+            },
+            _ => new List<(string Name, string TemplateType, string Sensitivity)>
+            {
+                ("Shared Documents", "Documents", internalSensitivity),
+                ("Reference Library", "Policies", internalSensitivity)
+            }
+        };
+    }
+
+    private RepositoryMetrics CreateLibraryMetrics(CollaborationSite site, string libraryName, string templateType)
+    {
+        var itemRange = (Min: 80, Max: 1200);
+        var sizeRange = (Min: 4, Max: 120);
+
+        if (string.Equals(libraryName, "Active Initiatives", StringComparison.OrdinalIgnoreCase))
+        {
+            itemRange = site.WorkspaceType == "Project" ? (24, 240) : (12, 80);
+            sizeRange = site.WorkspaceType == "Project" ? (4, 80) : (2, 24);
+        }
+        else if (string.Equals(libraryName, "Standard Templates", StringComparison.OrdinalIgnoreCase))
+        {
+            itemRange = (120, 1200);
+            sizeRange = (4, 64);
+        }
+        else if (string.Equals(libraryName, "Reference Library", StringComparison.OrdinalIgnoreCase))
+        {
+            itemRange = (120, 2200);
+            sizeRange = (8, 160);
+        }
+        else if (string.Equals(libraryName, "Team Cadence", StringComparison.OrdinalIgnoreCase))
+        {
+            itemRange = (40, 320);
+            sizeRange = (2, 18);
+        }
+        else if (string.Equals(libraryName, "Work in Progress", StringComparison.OrdinalIgnoreCase))
+        {
+            itemRange = (30, 280);
+            sizeRange = (2, 20);
+        }
+        else if (string.Equals(templateType, "Documents", StringComparison.OrdinalIgnoreCase))
+        {
+            itemRange = site.WorkspaceType == "Project" ? (120, 1800) : (80, 1400);
+            sizeRange = site.WorkspaceType == "Project" ? (8, 160) : (6, 120);
+        }
+
+        return new RepositoryMetrics(
+            RandomWholeNumber(itemRange.Min, itemRange.Max),
+            RandomWholeNumber(sizeRange.Min, sizeRange.Max));
+    }
+
+    private int RandomWholeNumber(int minInclusive, int maxInclusive)
+    {
+        if (maxInclusive <= minInclusive)
+        {
+            return minInclusive;
+        }
+
+        return minInclusive + _randomSource.Next(0, maxInclusive - minInclusive + 1);
+    }
+
+    private static int ParseWholeNumber(string? value)
+        => int.TryParse(value, out var parsed) ? parsed : 0;
 
     private List<CollaborationChannel> CreateChannelsForSite(
         SyntheticEnterpriseWorld world,
@@ -2102,4 +2213,5 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         int Depth,
         IReadOnlyList<string> IndustryTags,
         int MinimumEmployees);
+    private sealed record RepositoryMetrics(int ItemCount, int TotalSizeGb);
 }

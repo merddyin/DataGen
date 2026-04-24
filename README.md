@@ -4,6 +4,15 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.5.0
+
+- fixed large-scenario person display-name collisions so flagship datasets no longer emit unrealistic repeated identity clusters
+- added stronger account and device evidence, including exported account lifecycle timestamps and explicit application classification fields
+- improved identity store realism with cleaner AD, Entra, and Okta naming/domain surfaces
+- expanded policy realism to richer enterprise-scale policy families, path metadata, and identity-store scope evidence
+- added acquired-company scenario support for Duckburg and related flagship scenarios
+- tightened repository and collaboration realism so site and library metrics align with generated child content
+
 ### v0.4.4
 
 - corrected the release tag lineage so the GitHub release workflow runs from the fixed flagship acceptance test revision
@@ -118,8 +127,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.4.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.4.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.5.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.5.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### 5. Generate a first world

@@ -1,5 +1,7 @@
 namespace SyntheticEnterprise.Core.Generation.Applications;
 
+using System.Security.Cryptography;
+using System.Text;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
@@ -61,6 +63,7 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
                 world.CloudTenants.Add(tenant);
                 var identityStore = AddIdentityStore(world, company, tenant);
                 AddContainers(world, company, tenant, identityStore, offices);
+                BackfillModernPolicyIdentityStoreScope(world, company, tenant, identityStore);
                 CreateCloudPolicies(world, company, tenant, identityStore);
 
                 foreach (var application in providerGroup)
@@ -125,7 +128,7 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         AddPolicySetting(world, company.Id, compliancePolicy.Id, "MinimumOsVersion", "DeviceCompliance", "String", "10.0.22621");
         AddPolicySetting(world, company.Id, compliancePolicy.Id, "RequireBitLocker", "DeviceCompliance", "Boolean", "true");
         AddPolicySetting(world, company.Id, compliancePolicy.Id, "ScreenLockTimeoutMinutes", "DeviceCompliance", "Integer", "10", isConflicting: true, sourceReference: "Overlaps with workstation GPO timeout");
-        AddPolicyTarget(world, company.Id, compliancePolicy.Id, "Container", tenantContainer?.Id, "Scope", false, 1, true);
+        AddPolicyTarget(world, company.Id, compliancePolicy.Id, "IdentityStore", identityStore?.Id, "Scope", false, 1);
         AddPolicyTarget(world, company.Id, compliancePolicy.Id, "Group", allEmployeesGroup?.Id, "Include", false, 1);
         AddAccessControlEvidence(world, company.Id, allEmployeesGroup?.Id, "Group", "Policy", compliancePolicy.Id, "AssignPolicy", "Allow", false, "Intune");
 
@@ -142,7 +145,7 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         AddPolicySetting(world, company.Id, configurationProfile.Id, "DefenderRealtimeMonitoring", "EndpointSecurity", "Boolean", "true");
         AddPolicySetting(world, company.Id, configurationProfile.Id, "UsbStorageAccess", "DeviceControl", "String", "BlockWrite");
         AddPolicySetting(world, company.Id, configurationProfile.Id, "ScreenLockTimeoutMinutes", "EndpointConfiguration", "Integer", "10", isConflicting: true, sourceReference: "Overlaps with workstation GPO timeout");
-        AddPolicyTarget(world, company.Id, configurationProfile.Id, "Container", tenantContainer?.Id, "Scope", false, 1, true);
+        AddPolicyTarget(world, company.Id, configurationProfile.Id, "IdentityStore", identityStore?.Id, "Scope", false, 1);
         foreach (var administrativeUnit in administrativeUnits)
         {
             AddPolicyTarget(world, company.Id, configurationProfile.Id, "Container", administrativeUnit.Id, "AdministrativeUnitScope", false, 2, true);
@@ -241,9 +244,54 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         AddPolicySetting(world, company.Id, guestAccess.Id, "RequireTermsOfUse", "ConditionalAccess", "Boolean", "true");
         AddPolicySetting(world, company.Id, guestAccess.Id, "SessionControls", "ConditionalAccess", "String", "Limited");
         AddPolicySetting(world, company.Id, guestAccess.Id, "SharePointExternalSharingMode", "Collaboration", "String", "ExistingGuestsOnly", isLegacy: true);
-        AddPolicyTarget(world, company.Id, guestAccess.Id, "Container", tenantContainer?.Id, "Scope", false, 1, true);
+        AddPolicyTarget(world, company.Id, guestAccess.Id, "IdentityStore", identityStore?.Id, "Scope", false, 1);
         AddPolicyTarget(world, company.Id, guestAccess.Id, "Group", guestCollaborationGroup?.Id, "Include", false, 1);
         AddAccessControlEvidence(world, company.Id, guestCollaborationGroup?.Id, "Group", "Policy", guestAccess.Id, "ApplyPolicy", "Allow", false, "EntraID");
+    }
+
+    private void BackfillModernPolicyIdentityStoreScope(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        CloudTenant tenant,
+        IdentityStore? identityStore)
+    {
+        if (identityStore is null)
+        {
+            return;
+        }
+
+        var matchingPolicies = world.Policies
+            .Where(policy =>
+                string.Equals(policy.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(policy.Platform, "Intune", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(policy.PolicyType, "ConditionalAccessPolicy", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var policy in matchingPolicies)
+        {
+            if (string.IsNullOrWhiteSpace(policy.IdentityStoreId) || string.IsNullOrWhiteSpace(policy.CloudTenantId))
+            {
+                var index = world.Policies.FindIndex(existing => string.Equals(existing.Id, policy.Id, StringComparison.OrdinalIgnoreCase));
+                if (index >= 0)
+                {
+                    world.Policies[index] = policy with
+                    {
+                        IdentityStoreId = string.IsNullOrWhiteSpace(policy.IdentityStoreId) ? identityStore.Id : policy.IdentityStoreId,
+                        CloudTenantId = string.IsNullOrWhiteSpace(policy.CloudTenantId) ? tenant.Id : policy.CloudTenantId
+                    };
+                }
+            }
+
+            var hasIdentityStoreScope = world.PolicyTargetLinks.Any(link =>
+                string.Equals(link.PolicyId, policy.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.TargetType, "IdentityStore", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.AssignmentMode, "Scope", StringComparison.OrdinalIgnoreCase));
+
+            if (!hasIdentityStoreScope)
+            {
+                AddPolicyTarget(world, company.Id, policy.Id, "IdentityStore", identityStore.Id, "Scope", false, 1);
+            }
+        }
     }
 
     private IdentityStore? AddIdentityStore(SyntheticEnterpriseWorld world, Company company, CloudTenant tenant)
@@ -267,7 +315,7 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         {
             Id = _idFactory.Next("IDS"),
             CompanyId = company.Id,
-            Name = ResolveIdentityStoreName(company.Name, tenant.Provider, storeType),
+            Name = ResolveIdentityStoreName(tenant.PrimaryDomain, tenant.Provider, storeType),
             StoreType = storeType,
             Provider = tenant.Provider,
             PrimaryDomain = tenant.PrimaryDomain,
@@ -500,6 +548,7 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         {
             Id = _idFactory.Next("POL"),
             CompanyId = companyId,
+            PolicyGuid = CreateStableGuid(companyId, name, policyType, platform, category),
             Name = name,
             PolicyType = policyType,
             Platform = platform,
@@ -534,6 +583,10 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
             return;
         }
 
+        var policy = world.Policies.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, policyId, StringComparison.OrdinalIgnoreCase));
+        var metadata = ResolvePolicySettingMetadata(policy, settingName, settingCategory);
+
         world.PolicySettings.Add(new PolicySettingRecord
         {
             Id = _idFactory.Next("PST"),
@@ -541,12 +594,54 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
             PolicyId = policyId,
             SettingName = settingName,
             SettingCategory = settingCategory,
+            PolicyPath = metadata.PolicyPath,
+            RegistryPath = metadata.RegistryPath,
             ValueType = valueType,
             ConfiguredValue = configuredValue,
             IsLegacy = isLegacy,
             IsConflicting = isConflicting,
             SourceReference = sourceReference
         });
+    }
+
+    private static (string PolicyPath, string? RegistryPath) ResolvePolicySettingMetadata(
+        PolicyRecord? policy,
+        string settingName,
+        string settingCategory)
+    {
+        if (policy is null)
+        {
+            return ($@"HKLM\Software\Policies\SyntheticEnterprise\CloudPolicies\Unknown\{settingCategory}\{settingName}", null);
+        }
+
+        if (string.Equals(policy.Platform, "Intune", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "IntuneConfigurationProfile", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "IntuneCompliancePolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(settingCategory, "Compliance", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(policy.PolicyType, "IntuneCompliancePolicy", StringComparison.OrdinalIgnoreCase))
+            {
+                return ($"Devices\\Windows\\Compliance policies\\{policy.Name}", $"./Device/Vendor/MSFT/Policy/Config/Compliance/{settingName}");
+            }
+
+            return ($"Devices\\Windows\\Configuration profiles\\{policy.Name}", $"./Device/Vendor/MSFT/Policy/Config/{settingCategory}/{settingName}");
+        }
+
+        if (string.Equals(policy.Platform, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"Azure Policy\\Assignments\\{policy.Name}", $"/providers/Microsoft.Authorization/policyAssignments/{settingName}");
+        }
+
+        return ($@"HKLM\Software\Policies\SyntheticEnterprise\CloudPolicies\{policy.Name.Replace(' ', '_')}\{settingCategory}\{settingName}", null);
+    }
+
+    private static string CreateStableGuid(params string[] components)
+    {
+        var seed = string.Join("|", components.Where(component => !string.IsNullOrWhiteSpace(component)));
+        var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(seed));
+        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes[..16]).ToString();
     }
 
     private void AddPolicyTarget(
@@ -722,12 +817,12 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         };
     }
 
-    private static string ResolveIdentityStoreName(string companyName, string? provider, string storeType)
+    private static string ResolveIdentityStoreName(string primaryDomain, string? provider, string storeType)
         => storeType switch
         {
-            "EntraTenant" => $"{companyName} Entra ID",
-            "GoogleWorkspace" => $"{companyName} Google Workspace",
-            _ => $"{companyName} {provider}".Trim()
+            "EntraTenant" or "GoogleWorkspace" or "Okta" or "Auth0" or "OneLogin" or "PingIdentity" or "JumpCloud"
+                => primaryDomain,
+            _ => string.IsNullOrWhiteSpace(primaryDomain) ? provider?.Trim() ?? storeType : primaryDomain
         };
 
     private static string BuildTenantDomain(Company company, string provider, string domainSuffix)
@@ -735,8 +830,27 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         var companySlug = !string.IsNullOrWhiteSpace(company.PrimaryDomain)
             ? company.PrimaryDomain.Split('.', StringSplitOptions.RemoveEmptyEntries)[0]
             : Slug(company.Name);
-        var providerSlug = Slug(provider);
         var suffix = domainSuffix.TrimStart('.');
+
+        if (string.Equals(provider, "Microsoft", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(suffix, "tenant.onmicrosoft.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{companySlug}.onmicrosoft.com";
+        }
+
+        if (string.Equals(provider, "Okta", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(suffix, "okta.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{companySlug}.okta.com";
+        }
+
+        if (string.Equals(provider, "Auth0", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(suffix, "auth0.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{companySlug}.auth0.com";
+        }
+
+        var providerSlug = Slug(provider);
 
         return suffix.Contains('/')
             ? $"{companySlug}-{providerSlug}.{suffix.Replace("/", ".")}"

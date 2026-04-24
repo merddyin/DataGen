@@ -68,6 +68,7 @@ public record ScenarioCompanyDefinition
     public int DatabaseCount { get; init; } = 18;
     public int FileShareCount { get; init; } = 12;
     public int CollaborationSiteCount { get; init; } = 20;
+    public int AcquiredCompanyCount { get; init; }
     public List<string> Countries { get; init; } = new();
 }
 
