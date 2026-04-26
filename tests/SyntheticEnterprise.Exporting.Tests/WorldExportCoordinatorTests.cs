@@ -48,6 +48,83 @@ public sealed class WorldExportCoordinatorTests
     }
 
     [Fact]
+    public void ResolveRoot_Uses_Normalized_Output_Directory_As_Root_When_Prefix_Is_Omitted()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName(), "normalized");
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var resolver = new ExportPathResolver();
+            var resolved = resolver.ResolveRoot(temp, artifactPrefix: null);
+
+            Assert.Equal(Path.GetFullPath(temp), resolved);
+        }
+        finally
+        {
+            Directory.Delete(Path.GetDirectoryName(temp)!, true);
+        }
+    }
+
+    [Fact]
+    public void ExportRequest_Defaults_To_Json_Format()
+    {
+        var request = new ExportRequest();
+
+        Assert.Equal(ExportSerializationFormat.Json, request.Format);
+    }
+
+    [Fact]
+    public void Export_Summary_Uses_GenerationResult_Statistics()
+    {
+        var builder = new ExportSummaryBuilder();
+        var result = new GenerationResult
+        {
+            World = new SyntheticEnterpriseWorld
+            {
+                IdentityAnomalies = { new IdentityAnomaly { Id = "IA-001", CompanyId = "CO-001", Category = "StaleAccount", Severity = "Medium", Description = "Stale account" } },
+                InfrastructureAnomalies = { new InfrastructureAnomaly { Id = "INA-001", CompanyId = "CO-001", Category = "ServerDrift", Severity = "Low", Description = "Server drift" } },
+                RepositoryAnomalies = { new RepositoryAnomaly { Id = "RA-001", CompanyId = "CO-001", Category = "BrokenAcl", Severity = "High", Description = "Broken ACL" } },
+            },
+            Statistics = new GenerationStatistics
+            {
+                CompanyCount = 1,
+                OfficeCount = 2,
+                PersonCount = 2,
+                AccountCount = 3,
+                GroupCount = 4,
+                ApplicationCount = 5,
+                DeviceCount = 5,
+                RepositoryCount = 6,
+                ContainerCount = 7,
+                OrganizationalUnitCount = 8,
+                PolicyCount = 9,
+                PolicySettingCount = 10,
+                PolicyTargetLinkCount = 11
+            }
+        };
+
+        var summary = builder.Build(result, artifactCount: 7);
+
+        Assert.Equal(1, summary.CompanyCount);
+        Assert.Equal(2, summary.OfficeCount);
+        Assert.Equal(2, summary.PersonCount);
+        Assert.Equal(3, summary.AccountCount);
+        Assert.Equal(4, summary.GroupCount);
+        Assert.Equal(5, summary.ApplicationCount);
+        Assert.Equal(5, summary.DeviceCount);
+        Assert.Equal(6, summary.RepositoryCount);
+        Assert.Equal(7, summary.ContainerCount);
+        Assert.Equal(8, summary.OrganizationalUnitCount);
+        Assert.Equal(9, summary.PolicyCount);
+        Assert.Equal(10, summary.PolicySettingCount);
+        Assert.Equal(11, summary.PolicyTargetLinkCount);
+        Assert.Equal(0, summary.PluginRecordCount);
+        Assert.Equal(3, summary.AnomalyCount);
+        Assert.Equal(7, summary.ArtifactCount);
+    }
+
+    [Fact]
     public void Export_Writes_Application_Entity_And_Link_Artifacts()
     {
         var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());

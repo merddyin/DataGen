@@ -1,8 +1,8 @@
 Platform,WorkspaceType,PrivacyType,LibraryName,TemplateType,Sensitivity,IndustryTags,MinimumEmployees
-SharePoint,Department,,Policies,Policies,Confidential,All,1
-SharePoint,Department,,Templates,Templates,Internal,All,1
-SharePoint,Project,,Projects,Projects,Internal,All,1
-Teams,Department,,Documents,Documents,Internal,All,1
-Teams,Department,,Meeting Notes,Meeting Notes,Internal,All,1
+SharePoint,Department,,Reference Library,Policies,Confidential,All,1
+SharePoint,Department,,Standard Templates,Templates,Internal,All,1
+SharePoint,Project,,Active Initiatives,Projects,Internal,All,1
+Teams,Department,,Shared Documents,Documents,Internal,All,1
+Teams,Department,,Team Cadence,Meeting Notes,Internal,All,1
 Teams,Project,,Project Files,Projects,Internal,All,1
 Teams,Project,,Deliverables,Documents,Confidential,Manufacturing|Technology,250

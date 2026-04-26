@@ -100,6 +100,12 @@ public sealed class EcosystemGenerationTests
             organization.RelationshipType == "Partner"
             && !string.IsNullOrWhiteSpace(organization.Industry)
             && !string.IsNullOrWhiteSpace(organization.Segment));
+        Assert.DoesNotContain(result.World.ExternalOrganizations, organization =>
+            !string.IsNullOrWhiteSpace(organization.Name)
+            && System.Text.RegularExpressions.Regex.IsMatch(
+                organization.Name,
+                @"\b\d+\b$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant));
         Assert.Contains(result.World.ApplicationCounterpartyLinks, link => link.RelationshipType == "VendorProvided");
         Assert.Contains(result.World.ApplicationCounterpartyLinks, link =>
             link.RelationshipType == "SupplierIntegration"
@@ -164,6 +170,59 @@ public sealed class EcosystemGenerationTests
                 && organization.RelationshipType == "Partner"
                 && organization.Segment is "DistributionPartner" or "ChannelPartner"));
         Assert.Contains(result.WorldMetadata!.AppliedLayers, layer => layer == "ExternalEcosystem");
+    }
+
+    [Fact]
+    public void WorldGenerator_Produces_Stable_External_Organization_Names_For_Same_Seed()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var scenario = new ScenarioDefinition
+        {
+            Name = "Stable Ecosystem Naming Test",
+            IndustryProfile = "Manufacturing",
+            GeographyProfile = "Regional-US",
+            EmployeeSize = new SizeBand { Minimum = 1800, Maximum = 2600 },
+            Applications = new ApplicationProfile
+            {
+                IncludeApplications = true,
+                BaseApplicationCount = 8,
+                IncludeLineOfBusinessApplications = true,
+                IncludeSaaSApplications = true
+            },
+            Companies =
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Stable Ecosystem Co",
+                    Industry = "Manufacturing",
+                    EmployeeCount = 2200,
+                    BusinessUnitCount = 4,
+                    DepartmentCountPerBusinessUnit = 4,
+                    TeamCountPerDepartment = 3,
+                    OfficeCount = 4,
+                    Countries = { "United States" }
+                }
+            }
+        };
+
+        var first = generator.Generate(new GenerationContext { Seed = 4242, Scenario = scenario }, catalogs);
+        var second = generator.Generate(new GenerationContext { Seed = 4242, Scenario = scenario }, catalogs);
+
+        var firstNames = first.World.ExternalOrganizations
+            .Select(organization => organization.Name)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var secondNames = second.World.ExternalOrganizations
+            .Select(organization => organization.Name)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        Assert.Equal(firstNames, secondNames);
     }
 
     [Fact]

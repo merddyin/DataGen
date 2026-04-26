@@ -15,7 +15,7 @@ public sealed class ExportSEEnterpriseWorldCommand : PSCmdlet
     public string OutputPath { get; set; } = string.Empty;
 
     [Parameter]
-    public ExportSerializationFormat Format { get; set; } = ExportSerializationFormat.Csv;
+    public ExportSerializationFormat Format { get; set; } = ExportSerializationFormat.Json;
 
     [Parameter]
     public ExportProfileKind Profile { get; set; } = ExportProfileKind.Normalized;

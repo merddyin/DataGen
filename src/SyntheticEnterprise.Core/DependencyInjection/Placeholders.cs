@@ -61,7 +61,8 @@ internal sealed class PlaceholderIdFactory : IIdFactory
 
 internal sealed class PlaceholderRandomSource : IRandomSource
 {
-    private readonly Random _random = new();
+    private Random _random = new();
+    public void Reseed(int? seed) => _random = seed is int value ? new Random(value) : new Random();
     public int Next() => _random.Next();
     public int Next(int maxValue) => _random.Next(maxValue);
     public int Next(int minValue, int maxValue) => _random.Next(minValue, maxValue);

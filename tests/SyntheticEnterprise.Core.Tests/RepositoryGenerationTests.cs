@@ -360,8 +360,7 @@ public sealed class RepositoryGenerationTests
 
         Assert.Equal(result.World.CollaborationSites.Count, result.World.CollaborationSites.Select(site => site.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Equal(result.World.CollaborationSites.Count, result.World.CollaborationSites.Select(site => site.Url).Distinct(StringComparer.OrdinalIgnoreCase).Count());
-        Assert.Contains(result.World.CollaborationSites, site => site.Name.EndsWith(" 2", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(result.World.CollaborationSites, site => site.Name.Contains(" 2 2", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(site.Name, @"\s\d+$"));
     }
 
     [Fact]
@@ -693,6 +692,45 @@ public sealed class RepositoryGenerationTests
                 && result.World.CollaborationSites.Any(site =>
                     string.Equals(site.Id, library.CollaborationSiteId, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(site.WorkspaceType, "Project", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    [Fact]
+    public void WorldGenerator_Avoids_Numbered_Default_Project_Folder_Patterns()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4242,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Repository Folder Realism Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Repository Folder Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 300,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            CollaborationSiteCount = 18,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.DoesNotContain(
+            result.World.DocumentFolders,
+            folder => System.Text.RegularExpressions.Regex.IsMatch(folder.Name, @"^(Wave|Phase)\s+\d{2}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase));
     }
 
     private static Dictionary<string, string?> NewRow(params (string Key, string? Value)[] entries)

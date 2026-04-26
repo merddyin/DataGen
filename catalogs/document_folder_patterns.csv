@@ -1,11 +1,11 @@
 LibraryName,WorkspaceType,ParentFolderName,FolderName,FolderType,Depth,IndustryTags,MinimumEmployees
-Policies,Department,,Security,Department,1,All,1
-Policies,Department,,Finance,Department,1,All,1
-Policies,Department,Security,Standards,Working,2,All,1
-Projects,Project,,Active,Project,1,All,1
-Projects,Project,,Archive,Archive,1,All,1
-Projects,Project,Active,Wave 01,Working,2,All,1
-Meeting Notes,Department,,Steering,Department,1,All,1
-Meeting Notes,Department,Steering,Weekly,Working,2,All,1
+Reference Library,Department,,Policies and Standards,Department,1,All,1
+Reference Library,Department,,Runbooks and Guides,Department,1,All,1
+Reference Library,Department,Policies and Standards,Standards,Working,2,All,1
+Active Initiatives,Project,,Current Delivery,Project,1,All,1
+Active Initiatives,Project,,Archive,Archive,1,All,1
+Active Initiatives,Project,Current Delivery,Milestone Reviews,Working,2,All,1
+Team Cadence,Department,,Steering,Department,1,All,1
+Team Cadence,Department,Steering,Weekly Reviews,Working,2,All,1
 Project Files,Project,,Design,Project,1,Technology|Manufacturing,100
-Project Files,Project,Design,Releases,Working,2,Technology|Manufacturing,100
+Project Files,Project,Design,Release Packages,Working,2,Technology|Manufacturing,100

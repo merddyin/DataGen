@@ -532,6 +532,61 @@ public sealed class IdentityInfrastructureGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Avoids_Location_Code_Collisions_For_Similar_City_Names()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4242,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Network City Collision Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Network Collision Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 1,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 1,
+                            OfficeCount = 2,
+                            NetworkAssetCountPerOffice = 6,
+                            Countries = new() { "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet
+            {
+                CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["locality_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("CountryCode", "MX"), ("StateCode", "MEX"), ("StateOrProvince", "Estado de Mexico"), ("City", "Naucalpan"), ("PostalCode", "53000"), ("TimeZone", "America/Mexico_City"), ("Latitude", "19.4753"), ("Longitude", "-99.2378"), ("Population", "776220"), ("Accuracy", "6")),
+                        NewRow(("CountryCode", "MX"), ("StateCode", "MEX"), ("StateOrProvince", "Estado de Mexico"), ("City", "Naucalpan de Juarez"), ("PostalCode", "53100"), ("TimeZone", "America/Mexico_City"), ("Latitude", "19.4787"), ("Longitude", "-99.2386"), ("Population", "792211"), ("Accuracy", "6"))
+                    },
+                    ["countries_reference"] = new List<Dictionary<string, string?>>
+                    {
+                        NewRow(("Name", "Mexico"), ("Code", "MX"), ("Continent", "North America"))
+                    }
+                }
+            });
+
+        Assert.Equal(
+            result.World.NetworkAssets.Count,
+            result.World.NetworkAssets.Select(asset => asset.Hostname).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(result.World.NetworkAssets, asset => asset.Hostname.Contains("-NAUCAL-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.NetworkAssets, asset => asset.Hostname.Contains("-NAUJUA-", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void WorldGenerator_Uses_Role_Aware_Server_Hostnames()
     {
         var services = new ServiceCollection()
@@ -694,5 +749,16 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.DoesNotContain(
             result.Warnings,
             warning => warning.Contains("duplicate person display names", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Dictionary<string, string?> NewRow(params (string Key, string? Value)[] entries)
+    {
+        var row = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in entries)
+        {
+            row[key] = value;
+        }
+
+        return row;
     }
 }

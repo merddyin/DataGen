@@ -28,11 +28,22 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "application_counterparty_links_missing_org", "application counterparty links reference missing external organizations.");
         AppendMetricWarning(warnings, metrics, "process_counterparty_links_missing_org", "business process counterparty links reference missing external organizations.");
         AppendMetricWarning(warnings, metrics, "duplicate_external_org_names", "duplicate external organization names were generated.");
+        AppendMetricWarning(warnings, metrics, "numbered_external_org_names", "external organization names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "external_orgs_missing_identity_metadata", "external organizations are missing legal, domain, website, contact, description, or tagline metadata.");
         AppendMetricWarning(warnings, metrics, "external_orgs_missing_relationship_qualifiers", "external organizations are missing relationship basis, scope, or definition metadata.");
         AppendMetricWarning(warnings, metrics, "numbered_business_unit_names", "business unit names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "numbered_department_names", "department names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "numbered_team_names", "team names use synthetic numeric suffixes.");
+        AppendMetricWarning(warnings, metrics, "duplicate_application_names", "application names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_application_service_names", "application service names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_group_names", "group names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_identity_store_names", "identity store names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_device_hostnames", "device hostnames were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_server_hostnames", "server hostnames were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_network_asset_hostnames", "network asset hostnames were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_configuration_item_display_names", "configuration item display names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_collaboration_site_names", "collaboration site names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "numbered_collaboration_site_names", "collaboration site names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "generic_share_names", "file shares still use generic or legacy naming patterns.");
         AppendMetricWarning(warnings, metrics, "generic_folder_names", "document folders still use generic or sequenced naming patterns.");
         AppendMetricWarning(warnings, metrics, "generic_channel_names", "collaboration channel names still use generic template labels.");
@@ -80,11 +91,22 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
                 world.BusinessProcessCounterpartyLinks.Select(link => link.ExternalOrganizationId),
                 world.ExternalOrganizations),
             ["duplicate_external_org_names"] = CountDuplicateValues(world.ExternalOrganizations.Select(organization => organization.Name)),
+            ["numbered_external_org_names"] = CountNumberedNames(world.ExternalOrganizations.Select(organization => organization.Name)),
             ["external_orgs_missing_identity_metadata"] = CountExternalOrganizationsMissingIdentityMetadata(world),
             ["external_orgs_missing_relationship_qualifiers"] = CountExternalOrganizationsMissingRelationshipQualifiers(world),
             ["numbered_business_unit_names"] = CountNumberedNames(world.BusinessUnits.Select(unit => unit.Name)),
             ["numbered_department_names"] = CountNumberedNames(world.Departments.Select(department => department.Name)),
             ["numbered_team_names"] = CountNumberedNames(world.Teams.Select(team => team.Name)),
+            ["duplicate_application_names"] = CountDuplicateValues(world.Applications.Select(application => application.Name)),
+            ["duplicate_application_service_names"] = CountDuplicateValues(world.ApplicationServices.Select(service => service.Name)),
+            ["duplicate_group_names"] = CountDuplicateValues(world.Groups.Select(group => group.Name)),
+            ["duplicate_identity_store_names"] = CountDuplicateValues(world.IdentityStores.Select(store => store.Name)),
+            ["duplicate_device_hostnames"] = CountDuplicateValues(world.Devices.Select(device => device.Hostname)),
+            ["duplicate_server_hostnames"] = CountDuplicateValues(world.Servers.Select(server => server.Hostname)),
+            ["duplicate_network_asset_hostnames"] = CountDuplicateValues(world.NetworkAssets.Select(asset => asset.Hostname)),
+            ["duplicate_configuration_item_display_names"] = CountDuplicateConfigurationItemDisplayNames(world),
+            ["duplicate_collaboration_site_names"] = CountDuplicateValues(world.CollaborationSites.Select(site => site.Name)),
+            ["numbered_collaboration_site_names"] = CountNumberedNames(world.CollaborationSites.Select(site => site.Name)),
             ["generic_share_names"] = CountGenericShareNames(world),
             ["generic_folder_names"] = CountGenericFolderNames(world),
             ["generic_channel_names"] = CountGenericChannelNames(world),
@@ -135,11 +157,14 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["configuration_items"] = Sample(world.ConfigurationItems.Select(item => item.DisplayName)),
             ["cmdb_sources"] = Sample(world.CmdbSourceRecords.Select(record => record.DisplayName)),
             ["applications"] = Sample(world.Applications.Select(application => application.Name)),
+            ["application_services"] = Sample(world.ApplicationServices.Select(service => service.Name)),
             ["people"] = Sample(world.People.Select(person => person.DisplayName)),
             ["accounts"] = Sample(world.Accounts.Select(account => $"{account.SamAccountName} [{account.AccountType} | {account.IdentityProvider}]")),
             ["servers"] = Sample(world.Servers.Select(server => server.Hostname)),
+            ["network_assets"] = Sample(world.NetworkAssets.Select(asset => asset.Hostname)),
             ["offices"] = Sample(world.Offices.Select(office => $"{office.Name} [{office.Country} | {office.Region} | {office.BusinessPhone}]")),
             ["identity_stores"] = Sample(world.IdentityStores.Select(store => $"{store.Name} [{store.DirectoryMode} | {store.PrimaryDomain}]")),
+            ["external_organizations"] = Sample(world.ExternalOrganizations.Select(organization => organization.Name)),
             ["plugin_capabilities"] = Sample(world.PluginRecords.Select(record => record.PluginCapability).Distinct(StringComparer.OrdinalIgnoreCase))
         };
     }
@@ -311,13 +336,21 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
     private static int CountGenericFolderNames(SyntheticEnterpriseWorld world)
         => world.DocumentFolders.Count(folder =>
             !string.IsNullOrWhiteSpace(folder.Name)
-            && System.Text.RegularExpressions.Regex.IsMatch(folder.Name, @"(^.+-\d{2,}$)|^(Shared-\d+|Archive-\d+|Working-\d+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+            && System.Text.RegularExpressions.Regex.IsMatch(folder.Name, @"(^.+-\d{2,}$)|^(Shared-\d+|Archive-\d+|Working-\d+)$|^(Wave|Phase)\s+\d{2}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
 
     private static int CountGenericChannelNames(SyntheticEnterpriseWorld world)
         => world.CollaborationChannels.Count(channel =>
             string.Equals(channel.Name, "Operations", StringComparison.OrdinalIgnoreCase)
             || string.Equals(channel.Name, "Projects", StringComparison.OrdinalIgnoreCase)
             || System.Text.RegularExpressions.Regex.IsMatch(channel.Name ?? string.Empty, @"\b\d+\b$", System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+
+    private static int CountDuplicateConfigurationItemDisplayNames(SyntheticEnterpriseWorld world)
+        => world.ConfigurationItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.DisplayName))
+            .GroupBy(
+                item => $"{item.CiType}|{item.DisplayName}",
+                StringComparer.OrdinalIgnoreCase)
+            .Count(group => group.Count() > 1);
 
     private static int CountOfficeRegionCountryMismatches(SyntheticEnterpriseWorld world)
         => world.Offices.Count(office =>

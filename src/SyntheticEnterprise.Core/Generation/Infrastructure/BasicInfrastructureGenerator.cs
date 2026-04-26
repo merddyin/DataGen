@@ -1199,8 +1199,33 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
     private static string BuildNetworkHostname(string companyName, string city, int index, string prefix)
     {
         var company = Slug(companyName);
-        var location = Slug(city);
+        var location = BuildLocationCode(city);
         return $"{prefix}-{company[..Math.Min(6, company.Length)]}-{location[..Math.Min(6, location.Length)]}-{index:000}".ToUpperInvariant();
+    }
+
+    private static string BuildLocationCode(string city)
+    {
+        var tokens = city
+            .Split(new[] { ' ', '-', '/', ',', '.' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(Slug)
+            .Where(token =>
+                token.Length > 0 &&
+                token is not ("de" or "del" or "la" or "las" or "los" or "of" or "the" or "y"))
+            .ToArray();
+
+        if (tokens.Length == 0)
+        {
+            return "site";
+        }
+
+        if (tokens.Length == 1)
+        {
+            return tokens[0];
+        }
+
+        var first = tokens[0];
+        var last = tokens[^1];
+        return $"{first[..Math.Min(3, first.Length)]}{last[..Math.Min(3, last.Length)]}";
     }
 
     private static string Slug(string value)

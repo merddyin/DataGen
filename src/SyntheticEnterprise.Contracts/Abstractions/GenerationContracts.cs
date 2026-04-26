@@ -47,6 +47,11 @@ public record GenerationStatistics
     public int ApplicationCount { get; init; }
     public int DeviceCount { get; init; }
     public int RepositoryCount { get; init; }
+    public int ContainerCount { get; init; }
+    public int OrganizationalUnitCount { get; init; }
+    public int PolicyCount { get; init; }
+    public int PolicySettingCount { get; init; }
+    public int PolicyTargetLinkCount { get; init; }
 }
 
 public record OwnedArtifactDescriptor

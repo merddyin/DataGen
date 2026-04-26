@@ -252,21 +252,28 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
     {
         var patterns = ReadRepositoryPatterns(catalogs, "CollaborationSite");
         var siteNameUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var siteContextUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < Math.Max(1, definition.CollaborationSiteCount); i++)
         {
             var dept = departments[i % departments.Count];
             var owner = people[i % people.Count];
+            var workspaceType = ((i + (string.Equals(dept.Name, "Information Technology", StringComparison.OrdinalIgnoreCase) ? 1 : 0)) % 3) switch
+            {
+                0 => i % 5 == 0 ? "Project" : "Team",
+                1 => i % 4 == 0 ? "Knowledge" : "Department",
+                _ => i % 6 == 0 ? "Project" : "Department"
+            };
             var platform = i % 5 == 0 ? "Teams" : "SharePoint";
+            var siteContextKey = $"{dept.Id}|{platform}|{workspaceType}";
+            siteContextUsage.TryGetValue(siteContextKey, out var occurrenceIndex);
+            siteContextUsage[siteContextKey] = occurrenceIndex + 1;
             var pattern = patterns.Count == 0 ? null : patterns[i % patterns.Count];
             var siteName = pattern is null
-                ? BuildDefaultSiteName(dept.Name, i, platform)
-                : ApplyDisplayPattern(pattern.Pattern, dept.Name, i + 1);
+                ? BuildDefaultSiteName(dept.Name, platform, workspaceType, occurrenceIndex)
+                : ApplyDisplayPattern(pattern.Pattern, dept.Name, occurrenceIndex + 1);
             siteName = NormalizeSiteName(siteName, dept.Name);
-            siteName = EnsureUniqueSiteName(siteNameUsage, siteName);
-            var workspaceType = platform == "Teams"
-                ? (i % 3 == 0 ? "Team" : i % 3 == 1 ? "Project" : "Department")
-                : (i % 3 == 0 ? "Department" : i % 3 == 1 ? "Knowledge" : "Project");
+            siteName = EnsureUniqueSiteName(siteNameUsage, siteName, dept.Name, platform, workspaceType, occurrenceIndex);
 
             var site = new CollaborationSite
             {
@@ -1485,24 +1492,14 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         return $"{baseName}-{count}";
     }
 
-    private static string BuildDefaultSiteName(string departmentName, int index, string platform)
+    private static string BuildDefaultSiteName(string departmentName, string platform, string workspaceType, int occurrenceIndex)
     {
-        if (string.Equals(platform, "Teams", StringComparison.OrdinalIgnoreCase))
-        {
-            return (index % 3) switch
-            {
-                0 => $"{departmentName} Team Hub",
-                1 => $"{departmentName} Working Session",
-                _ => $"{departmentName} Leadership Hub"
-            };
-        }
+        var descriptor = GetSiteNameDescriptors(platform, workspaceType)
+            .Skip(occurrenceIndex % GetSiteNameDescriptors(platform, workspaceType).Count)
+            .Concat(GetSiteNameDescriptors(platform, workspaceType).Take(occurrenceIndex % GetSiteNameDescriptors(platform, workspaceType).Count))
+            .First();
 
-        return (index % 3) switch
-        {
-            0 => $"{departmentName} Knowledge Center",
-            1 => $"{departmentName} Operations Hub",
-            _ => $"{departmentName} Project Workspace"
-        };
+        return $"{departmentName} {descriptor}";
     }
 
     private static string ExtractPrimaryDepartmentToken(string siteName)
@@ -1807,22 +1804,129 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         return trimmedName;
     }
 
-    private static string EnsureUniqueSiteName(IDictionary<string, int> usage, string siteName)
+    private static string EnsureUniqueSiteName(
+        IDictionary<string, int> usage,
+        string siteName,
+        string departmentName,
+        string platform,
+        string workspaceType,
+        int occurrenceIndex)
     {
-        if (!usage.TryGetValue(siteName, out var count))
+        foreach (var candidate in BuildSiteNameCandidates(siteName, departmentName, platform, workspaceType, occurrenceIndex))
         {
-            usage[siteName] = 1;
-            return siteName;
+            if (usage.ContainsKey(candidate))
+            {
+                continue;
+            }
+
+            usage[candidate] = 1;
+            return candidate;
         }
 
-        count++;
-        usage[siteName] = count;
-        if (TrySplitTrailingNumber(siteName, out var baseName, out var existingNumber))
+        var fallbackSequence = 0;
+        while (true)
         {
-            return $"{baseName} {existingNumber + count - 1}";
+            var fallback = $"{departmentName} {BuildFallbackSiteDescriptor(workspaceType, fallbackSequence)}";
+            if (!usage.ContainsKey(fallback))
+            {
+                usage[fallback] = 1;
+                return fallback;
+            }
+
+            fallbackSequence++;
+        }
+    }
+
+    private static IReadOnlyList<string> BuildSiteNameCandidates(
+        string siteName,
+        string departmentName,
+        string platform,
+        string workspaceType,
+        int occurrenceIndex)
+    {
+        var candidates = new List<string>();
+
+        AddCandidate(candidates, siteName);
+
+        var descriptors = GetSiteNameDescriptors(platform, workspaceType);
+        var startIndex = descriptors.Count == 0 ? 0 : occurrenceIndex % descriptors.Count;
+        for (var offset = 0; offset < descriptors.Count; offset++)
+        {
+            AddCandidate(candidates, $"{departmentName} {descriptors[(startIndex + offset) % descriptors.Count]}");
         }
 
-        return $"{siteName} {count}";
+        if (siteName.StartsWith($"{departmentName} ", StringComparison.OrdinalIgnoreCase))
+        {
+            var stem = siteName[departmentName.Length..].Trim();
+            AddCandidate(candidates, $"{departmentName} {stem}");
+        }
+
+        return candidates;
+    }
+
+    private static IReadOnlyList<string> GetSiteNameDescriptors(string platform, string workspaceType)
+    {
+        if (string.Equals(platform, "Teams", StringComparison.OrdinalIgnoreCase))
+        {
+            return workspaceType switch
+            {
+                "Project" => new[] { "Delivery Workspace", "Project Hub", "Program Workspace", "Initiative Room", "Launch Workspace", "Execution Hub" },
+                "Department" => new[] { "Collaboration Hub", "Working Session", "Leadership Hub", "Coordination Room", "Department Workspace", "Operating Rhythm" },
+                "Knowledge" => new[] { "Knowledge Hub", "Reference Center", "Playbook Workspace", "Guide Center", "Standards Hub", "Information Space" },
+                _ => new[] { "Team Hub", "Working Session", "Leadership Hub", "Collaboration Space", "Operations Room", "Pod Workspace" }
+            };
+        }
+
+        return workspaceType switch
+        {
+            "Project" => new[] { "Project Workspace", "Delivery Workspace", "Program Workspace", "Initiative Center", "Milestone Hub", "Launch Workspace" },
+            "Knowledge" => new[] { "Knowledge Center", "Reference Center", "Standards Portal", "Playbook Hub", "Information Center", "Guide Library" },
+            _ => new[] { "Operations Hub", "Department Workspace", "Knowledge Center", "Reference Center", "Leadership Hub", "Operating Model" }
+        };
+    }
+
+    private static string BuildFallbackSiteDescriptor(string workspaceType, int index)
+    {
+        var qualifiers = new[]
+        {
+            "Planning Center",
+            "Execution Desk",
+            "Coordination Room",
+            "Enablement Hub",
+            "Operations Studio",
+            "Service Hub",
+            "Reference Center",
+            "Leadership Forum"
+        };
+
+        var normalizedIndex = Math.Max(0, index);
+        var qualifier = qualifiers[normalizedIndex % qualifiers.Length];
+        var modifier = normalizedIndex >= qualifiers.Length
+            ? new[] { "North", "Central", "South", "East", "West", "Core", "Prime", "Summit" }[(normalizedIndex / qualifiers.Length - 1) % 8]
+            : null;
+        var descriptor = string.IsNullOrWhiteSpace(modifier) ? qualifier : $"{modifier} {qualifier}";
+
+        return workspaceType switch
+        {
+            "Project" => descriptor,
+            "Knowledge" => descriptor,
+            _ => descriptor
+        };
+    }
+
+    private static void AddCandidate(ICollection<string> candidates, string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return;
+        }
+
+        if (candidates.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        candidates.Add(candidate.Trim());
     }
 
     private static bool TrySplitTrailingNumber(string value, out string baseName, out int number)

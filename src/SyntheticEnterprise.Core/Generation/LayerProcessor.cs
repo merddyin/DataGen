@@ -18,6 +18,7 @@ public sealed class LayerProcessor : ILayerProcessor
     private readonly IWorldOwnershipReconciliationService _worldOwnershipReconciliationService;
     private readonly IWorldReferenceRepairService _worldReferenceRepairService;
     private readonly IWorldQualityAuditService _worldQualityAuditService;
+    private readonly IRandomSource _randomSource;
 
     public LayerProcessor(
         IIdentityGenerator identityGenerator,
@@ -30,7 +31,8 @@ public sealed class LayerProcessor : ILayerProcessor
         IWorldLayerRemapService worldLayerRemapService,
         IWorldOwnershipReconciliationService worldOwnershipReconciliationService,
         IWorldReferenceRepairService worldReferenceRepairService,
-        IWorldQualityAuditService worldQualityAuditService)
+        IWorldQualityAuditService worldQualityAuditService,
+        IRandomSource randomSource)
     {
         _identityGenerator = identityGenerator;
         _infrastructureGenerator = infrastructureGenerator;
@@ -43,6 +45,7 @@ public sealed class LayerProcessor : ILayerProcessor
         _worldOwnershipReconciliationService = worldOwnershipReconciliationService;
         _worldReferenceRepairService = worldReferenceRepairService;
         _worldQualityAuditService = worldQualityAuditService;
+        _randomSource = randomSource;
     }
 
     public GenerationResult AddIdentityLayer(GenerationResult input, LayerProcessingOptions? options = null)
@@ -68,6 +71,7 @@ public sealed class LayerProcessor : ILayerProcessor
             ClearIdentityData(staging);
             catalogs = _catalogContextResolver.Resolve(staging);
             var context = BuildContext(staging);
+            _randomSource.Reseed(context.Seed);
             _identityGenerator.GenerateIdentity(staging.World, context, catalogs);
             MergeIdentityLayerArtifacts(result, input, staging);
         }
@@ -75,6 +79,7 @@ public sealed class LayerProcessor : ILayerProcessor
         {
             catalogs = _catalogContextResolver.Resolve(result);
             var context = BuildContext(result);
+            _randomSource.Reseed(context.Seed);
             _identityGenerator.GenerateIdentity(result.World, context, catalogs);
         }
 
@@ -122,6 +127,7 @@ public sealed class LayerProcessor : ILayerProcessor
 
             catalogs = _catalogContextResolver.Resolve(staging);
             var context = BuildContext(staging);
+            _randomSource.Reseed(context.Seed);
             _infrastructureGenerator.GenerateInfrastructure(staging.World, context, catalogs);
 
             if (preservedSoftwarePackages.Count > 0)
@@ -148,6 +154,7 @@ public sealed class LayerProcessor : ILayerProcessor
         {
             catalogs = _catalogContextResolver.Resolve(result);
             var context = BuildContext(result);
+            _randomSource.Reseed(context.Seed);
             _infrastructureGenerator.GenerateInfrastructure(result.World, context, catalogs);
         }
 
@@ -191,6 +198,7 @@ public sealed class LayerProcessor : ILayerProcessor
             ClearRepositoryData(staging);
             catalogs = _catalogContextResolver.Resolve(staging);
             var context = BuildContext(staging);
+            _randomSource.Reseed(context.Seed);
             _repositoryGenerator.GenerateRepositories(staging.World, context, catalogs);
 
             if (preserveExistingRepositoryLinks)
@@ -218,6 +226,7 @@ public sealed class LayerProcessor : ILayerProcessor
         {
             catalogs = _catalogContextResolver.Resolve(result);
             var context = BuildContext(result);
+            _randomSource.Reseed(context.Seed);
             _repositoryGenerator.GenerateRepositories(result.World, context, catalogs);
         }
 
@@ -235,6 +244,7 @@ public sealed class LayerProcessor : ILayerProcessor
         var result = _worldCloner.Clone(input);
         var catalogs = _catalogContextResolver.Resolve(result);
         var context = BuildContext(result);
+        _randomSource.Reseed(context.Seed);
 
         foreach (var anomalyProfile in context.Scenario.Anomalies)
         {
@@ -473,7 +483,12 @@ public sealed class LayerProcessor : ILayerProcessor
                 + input.World.CollaborationChannelTabs.Count
                 + input.World.DocumentLibraries.Count
                 + input.World.SitePages.Count
-                + input.World.DocumentFolders.Count
+                + input.World.DocumentFolders.Count,
+            ContainerCount = input.World.Containers.Count,
+            OrganizationalUnitCount = input.World.OrganizationalUnits.Count,
+            PolicyCount = input.World.Policies.Count,
+            PolicySettingCount = input.World.PolicySettings.Count,
+            PolicyTargetLinkCount = input.World.PolicyTargetLinks.Count
         };
 
     private static GenerationResult AppendWarning(GenerationResult input, string warning)

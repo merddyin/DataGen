@@ -114,7 +114,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         if (profile.IncludeCloudServices)
         {
-            foreach (var tenant in world.CloudTenants.Where(item => item.CompanyId == companyContext.Company.Id))
+            foreach (var tenant in ResolveCanonicalCloudTenants(world, companyContext.Company.Id))
             {
                 AddConfigurationItem(
                     world,
@@ -1160,6 +1160,16 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                                || world.ServerSoftwareInstallations.Any(install => install.SoftwareId == item.Id && world.Servers.Any(server => server.Id == install.ServerId && server.CompanyId == companyId))))
             .ToList();
     }
+
+    private static IReadOnlyList<CloudTenant> ResolveCanonicalCloudTenants(SyntheticEnterpriseWorld world, string companyId)
+        => world.CloudTenants
+            .Where(item => item.CompanyId == companyId)
+            .GroupBy(
+                tenant => $"{tenant.Provider}|{tenant.TenantType}|{tenant.Name}|{tenant.PrimaryDomain}|{tenant.Environment}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(tenant => tenant.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     private string? ResolveBusinessOwnerPersonId(CompanyContext context, Department? department)
         => department is null

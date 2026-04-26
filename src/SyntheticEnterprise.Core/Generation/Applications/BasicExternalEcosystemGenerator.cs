@@ -33,7 +33,7 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
             var processCounterpartyPatterns = ReadProcessCounterpartyPatterns(catalogs, company.Industry ?? string.Empty, taxonomy, people.Count);
 
             var vendors = CreateVendors(company, departments, applications, processes, country, people.Count, catalogs, taxonomy);
-            var counterparties = CreateCounterparties(company, companyDefinition, departments, country, people.Count, catalogs, taxonomy, vendors);
+            var counterparties = CreateCounterparties(world, company, companyDefinition, departments, country, people.Count, catalogs, taxonomy, vendors);
 
             world.ExternalOrganizations.AddRange(vendors);
             world.ExternalOrganizations.AddRange(counterparties);
@@ -137,6 +137,7 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
     }
 
     private List<ExternalOrganization> CreateCounterparties(
+        SyntheticEnterpriseWorld world,
         Company company,
         ScenarioCompanyDefinition? companyDefinition,
         IReadOnlyList<Department> departments,
@@ -147,12 +148,17 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
         IReadOnlyList<ExternalOrganization> vendors)
     {
         var count = Math.Max(6, Math.Min(24, Math.Max(1, peopleCount) / 120));
-        var usedNames = new HashSet<string>(vendors.Select(vendor => vendor.Name), StringComparer.OrdinalIgnoreCase)
+        var usedNames = new HashSet<string>(
+            vendors.Select(vendor => vendor.Name)
+                .Concat(world.ExternalOrganizations
+                    .Where(organization => organization.CompanyId == company.Id)
+                    .Select(organization => organization.Name)),
+            StringComparer.OrdinalIgnoreCase)
         {
             company.Name
         };
         var fakeCompanyProfiles = ReadFakeCompanyProfiles(catalogs)
-            .Where(profile => usedNames.Add(profile.Name))
+            .Where(profile => !usedNames.Contains(profile.Name))
             .ToList();
         var counterpartyPrefixes = ReadCatalogValues(catalogs, "counterparty_name_prefixes", "Value", CustomerPrefixes);
         var counterpartyTerms = ReadCatalogValues(catalogs, "counterparty_name_terms", "Value", CustomerSuffixes);
@@ -583,6 +589,20 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
         return departments.FirstOrDefault()?.Id ?? string.Empty;
     }
 
+    private static readonly string[] NameCollisionQualifiers =
+    [
+        "Advisors",
+        "Alliance",
+        "Collective",
+        "Consortium",
+        "Network",
+        "Operations",
+        "Partners",
+        "Services",
+        "Solutions",
+        "Ventures"
+    ];
+
     private static string EnsureUniqueOrganizationName(string baseName, ISet<string> usedNames, int ordinal)
     {
         if (usedNames.Add(baseName))
@@ -590,16 +610,28 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
             return baseName;
         }
 
-        for (var suffix = ordinal; suffix < ordinal + 1000; suffix++)
+        for (var index = 0; index < NameCollisionQualifiers.Length; index++)
         {
-            var candidate = $"{baseName} {suffix}";
+            var candidate = $"{baseName} {NameCollisionQualifiers[(ordinal + index) % NameCollisionQualifiers.Length]}";
             if (usedNames.Add(candidate))
             {
                 return candidate;
             }
         }
 
-        return $"{baseName} {Guid.NewGuid():N}";
+        for (var cycle = 1; cycle <= 100; cycle++)
+        {
+            for (var index = 0; index < NameCollisionQualifiers.Length; index++)
+            {
+                var candidate = $"{baseName} {NameCollisionQualifiers[index]} {GetOrdinalLabel(cycle)}";
+                if (usedNames.Add(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        throw new InvalidOperationException($"Unable to generate a unique external organization name for '{baseName}'.");
     }
 
     private static bool ShouldMaterializeVendorRelationship(string vendorName, IReadOnlyList<ApplicationRecord> applications, VendorDefinition? definition)
@@ -1180,16 +1212,34 @@ public sealed class BasicExternalEcosystemGenerator : IExternalEcosystemGenerato
     {
         var prefixes = counterpartyPrefixes.Count == 0 ? CustomerPrefixes : counterpartyPrefixes;
         var terms = counterpartyTerms.Count == 0 ? CustomerSuffixes : counterpartyTerms;
-        var prefix = prefixes[index % prefixes.Count];
-        var term = companyTerms.Count == 0
-            ? terms[(index + _randomSource.Next(0, terms.Count)) % terms.Count]
-            : companyTerms[_randomSource.Next(companyTerms.Count)];
-        var suffix = companySuffixes.Count == 0
-            ? "LLC"
-            : companySuffixes[_randomSource.Next(companySuffixes.Count)];
+        var primaryTerms = companyTerms.Count == 0 ? terms : companyTerms;
+        var suffixes = companySuffixes.Count == 0 ? new[] { "LLC" } : companySuffixes;
+
+        var cursor = Math.Max(0, index);
+        var prefix = prefixes[cursor % prefixes.Count];
+        cursor /= prefixes.Count;
+        var term = primaryTerms[cursor % primaryTerms.Count];
+        cursor /= primaryTerms.Count;
+        var suffix = suffixes[cursor % suffixes.Count];
 
         return $"{prefix} {term} {suffix}";
     }
+
+    private static string GetOrdinalLabel(int value)
+        => value switch
+        {
+            1 => "East",
+            2 => "West",
+            3 => "North",
+            4 => "South",
+            5 => "Central",
+            6 => "Regional",
+            7 => "National",
+            8 => "Industrial",
+            9 => "Commercial",
+            10 => "Strategic",
+            _ => $"Tier {value}"
+        };
 
     private static List<string> ReadIndustryCompanyTerms(CatalogSet catalogs, string companyIndustry, IndustryTaxonomyMatch? taxonomy)
     {

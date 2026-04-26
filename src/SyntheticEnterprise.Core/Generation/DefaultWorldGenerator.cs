@@ -17,6 +17,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
     private readonly IWorldInvariantValidator _worldInvariantValidator;
     private readonly IWorldQualityAuditService _worldQualityAuditService;
     private readonly ITemporalSimulationService _temporalSimulationService;
+    private readonly IRandomSource _randomSource;
 
     public DefaultWorldGenerator(
         IEnumerable<IWorldGenerationPlugin> plugins,
@@ -27,7 +28,8 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         IWorldReferenceRepairService worldReferenceRepairService,
         IWorldInvariantValidator worldInvariantValidator,
         IWorldQualityAuditService worldQualityAuditService,
-        ITemporalSimulationService temporalSimulationService)
+        ITemporalSimulationService temporalSimulationService,
+        IRandomSource randomSource)
     {
         _plugins = plugins.ToDictionary(plugin => plugin.Manifest.Capability, StringComparer.OrdinalIgnoreCase);
         _planner = planner;
@@ -38,10 +40,12 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         _worldInvariantValidator = worldInvariantValidator;
         _worldQualityAuditService = worldQualityAuditService;
         _temporalSimulationService = temporalSimulationService;
+        _randomSource = randomSource;
     }
 
     public GenerationResult Generate(GenerationContext context, CatalogSet catalogs)
     {
+        _randomSource.Reseed(context.Seed);
         var world = new SyntheticEnterpriseWorld();
         var plan = _planner.BuildPlan(context.Scenario, _plugins.Values);
         var appliedPlugins = new List<string>();
@@ -89,7 +93,12 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
                 + world.CollaborationChannelTabs.Count
                 + world.DocumentLibraries.Count
                 + world.SitePages.Count
-                + world.DocumentFolders.Count
+                + world.DocumentFolders.Count,
+            ContainerCount = world.Containers.Count,
+            OrganizationalUnitCount = world.OrganizationalUnits.Count,
+            PolicyCount = world.Policies.Count,
+            PolicySettingCount = world.PolicySettings.Count,
+            PolicyTargetLinkCount = world.PolicyTargetLinks.Count
         };
 
         var worldMetadata = new WorldMetadata

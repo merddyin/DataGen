@@ -46,9 +46,20 @@ public sealed class FlagshipRealismAcceptanceTests
         Assert.Equal(0, audit.Metrics["duplicate_account_upns"]);
         Assert.Equal(0, audit.Metrics["duplicate_person_display_names"]);
         Assert.True(audit.Metrics["max_person_display_name_repeat"] <= 1, $"Expected person display names to remain unique, found max repeat of {audit.Metrics["max_person_display_name_repeat"]}.");
+        Assert.Equal(0, audit.Metrics["duplicate_application_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_application_service_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_group_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_identity_store_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_device_hostnames"]);
+        Assert.Equal(0, audit.Metrics["duplicate_server_hostnames"]);
+        Assert.Equal(0, audit.Metrics["duplicate_network_asset_hostnames"]);
+        Assert.Equal(0, audit.Metrics["duplicate_configuration_item_display_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_collaboration_site_names"]);
+        Assert.Equal(0, audit.Metrics["numbered_collaboration_site_names"]);
         Assert.Equal(0, audit.Metrics["accounts_missing_temporal_identity_evidence"]);
         Assert.Equal(0, audit.Metrics["workstations_missing_identity_evidence"]);
         Assert.Equal(0, audit.Metrics["servers_missing_directory_account_evidence"]);
+        Assert.Equal(0, audit.Metrics["numbered_external_org_names"]);
         Assert.Equal(0, audit.Metrics["numbered_business_unit_names"]);
         Assert.Equal(0, audit.Metrics["numbered_department_names"]);
         Assert.Equal(0, audit.Metrics["numbered_team_names"]);
@@ -73,6 +84,9 @@ public sealed class FlagshipRealismAcceptanceTests
         Assert.NotEmpty(audit.Samples["policies"]);
         Assert.NotEmpty(audit.Samples["policy_settings"]);
         Assert.NotEmpty(audit.Samples["applications"]);
+        Assert.NotEmpty(audit.Samples["application_services"]);
+        Assert.NotEmpty(audit.Samples["network_assets"]);
+        Assert.NotEmpty(audit.Samples["external_organizations"]);
         Assert.NotEmpty(audit.Samples["people"]);
         Assert.NotEmpty(audit.Samples["accounts"]);
     }
@@ -198,5 +212,56 @@ public sealed class FlagshipRealismAcceptanceTests
         Assert.DoesNotContain(
             audit.Warnings,
             warning => warning.Contains("duplicate person display names", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Duckburg_Subset_Scenario_Is_Deterministic_For_Same_Seed_Across_Repeated_Generations()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var catalogLoader = services.GetRequiredService<ICatalogLoader>();
+        var scenarioLoader = services.GetRequiredService<IScenarioLoader>();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+
+        var catalogs = catalogLoader.LoadDefault();
+        var scenario = scenarioLoader.LoadFromPath(Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "artifacts", "duckburg-subset.scenario.json"));
+
+        var first = generator.Generate(new GenerationContext
+        {
+            Scenario = scenario,
+            Seed = 4242
+        }, catalogs);
+        var second = generator.Generate(new GenerationContext
+        {
+            Scenario = scenario,
+            Seed = 4242
+        }, catalogs);
+        var third = generator.Generate(new GenerationContext
+        {
+            Scenario = scenario,
+            Seed = 4242
+        }, catalogs);
+
+        Assert.Equal(first.Statistics.PersonCount, second.Statistics.PersonCount);
+        Assert.Equal(first.Statistics.PersonCount, third.Statistics.PersonCount);
+        Assert.Equal(first.Statistics.AccountCount, second.Statistics.AccountCount);
+        Assert.Equal(first.Statistics.AccountCount, third.Statistics.AccountCount);
+        Assert.Equal(first.World.Devices.Count, second.World.Devices.Count);
+        Assert.Equal(first.World.Devices.Count, third.World.Devices.Count);
+        Assert.Equal(first.World.Servers.Count, second.World.Servers.Count);
+        Assert.Equal(first.World.Servers.Count, third.World.Servers.Count);
+        Assert.Equal(first.World.ExternalOrganizations.Count, second.World.ExternalOrganizations.Count);
+        Assert.Equal(first.World.ExternalOrganizations.Count, third.World.ExternalOrganizations.Count);
+
+        var firstNames = first.World.ExternalOrganizations.Select(organization => organization.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var secondNames = second.World.ExternalOrganizations.Select(organization => organization.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var thirdNames = third.World.ExternalOrganizations.Select(organization => organization.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+
+        Assert.Equal(firstNames, secondNames);
+        Assert.Equal(firstNames, thirdNames);
+        Assert.Equal(first.Warnings, second.Warnings);
+        Assert.Equal(first.Warnings, third.Warnings);
     }
 }

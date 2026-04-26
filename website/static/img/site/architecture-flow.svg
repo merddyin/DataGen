@@ -43,8 +43,8 @@
   </text>
   <path d="M236 108H270" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
   <path d="M450 108H484" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M574 154V188" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M172 338V356" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M382 338V356" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
-  <path d="M548 338V356" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M574 154V214" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M172 338V368" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M382 338V368" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
+  <path d="M570 338V368" stroke="#79C2FF" stroke-width="6" stroke-linecap="round"/>
 </svg>

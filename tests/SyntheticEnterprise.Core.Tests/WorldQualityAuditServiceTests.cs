@@ -197,15 +197,33 @@ public sealed class WorldQualityAuditServiceTests
         world.BusinessUnits.Add(new BusinessUnit { Id = "BU-1", CompanyId = "COMP-1", Name = "Operations 3" });
         world.Departments.Add(new Department { Id = "DEPT-1", CompanyId = "COMP-1", Name = "Endpoint Engineering 6" });
         world.Teams.Add(new Team { Id = "TEAM-1", CompanyId = "COMP-1", Name = "Commercial Planning 15" });
+        world.Applications.Add(new ApplicationRecord { Id = "APP-1", CompanyId = "COMP-1", Name = "CRM" });
+        world.Applications.Add(new ApplicationRecord { Id = "APP-2", CompanyId = "COMP-1", Name = "CRM" });
+        world.ApplicationServices.Add(new ApplicationService { Id = "APS-1", CompanyId = "COMP-1", Name = "CRM API Service" });
+        world.ApplicationServices.Add(new ApplicationService { Id = "APS-2", CompanyId = "COMP-1", Name = "CRM API Service" });
+        world.Groups.Add(new DirectoryGroup { Id = "GRP-1", CompanyId = "COMP-1", Name = "GG CRM Users" });
+        world.Groups.Add(new DirectoryGroup { Id = "GRP-2", CompanyId = "COMP-1", Name = "GG CRM Users" });
+        world.IdentityStores.Add(new IdentityStore { Id = "IDS-1", CompanyId = "COMP-1", Name = "corp.example.com" });
+        world.IdentityStores.Add(new IdentityStore { Id = "IDS-2", CompanyId = "COMP-1", Name = "corp.example.com" });
+        world.Devices.Add(new ManagedDevice { Id = "DEV-1", CompanyId = "COMP-1", Hostname = "WS-CORP-001", DeviceType = "Workstation" });
+        world.Devices.Add(new ManagedDevice { Id = "DEV-2", CompanyId = "COMP-1", Hostname = "WS-CORP-001", DeviceType = "Workstation" });
+        world.Servers.Add(new ServerAsset { Id = "SRV-1", CompanyId = "COMP-1", Hostname = "SRV-CORP-001" });
+        world.Servers.Add(new ServerAsset { Id = "SRV-2", CompanyId = "COMP-1", Hostname = "SRV-CORP-001" });
+        world.NetworkAssets.Add(new NetworkAsset { Id = "NET-1", CompanyId = "COMP-1", Hostname = "SW-CORP-CHI-001" });
+        world.NetworkAssets.Add(new NetworkAsset { Id = "NET-2", CompanyId = "COMP-1", Hostname = "SW-CORP-CHI-001" });
+        world.CollaborationSites.Add(new CollaborationSite { Id = "SITE-1", CompanyId = "COMP-1", Name = "Operations Hub 2" });
+        world.CollaborationSites.Add(new CollaborationSite { Id = "SITE-2", CompanyId = "COMP-1", Name = "Operations Hub 2" });
         world.FileShares.Add(new FileShareRepository { Id = "FS-1", CompanyId = "COMP-1", ShareName = "marketing-share-01" });
-        world.DocumentFolders.Add(new DocumentFolder { Id = "FOLDER-1", CompanyId = "COMP-1", Name = "Archive-02" });
+        world.DocumentFolders.Add(new DocumentFolder { Id = "FOLDER-1", CompanyId = "COMP-1", Name = "Wave 01" });
         world.CollaborationChannels.Add(new CollaborationChannel { Id = "CHAN-1", CompanyId = "COMP-1", Name = "Operations" });
         world.ConfigurationItems.Add(new ConfigurationItem { Id = "CI-1", CompanyId = "COMP-1", CiType = "BusinessProcessService", DisplayName = "Order to Cash" });
+        world.ConfigurationItems.Add(new ConfigurationItem { Id = "CI-2", CompanyId = "COMP-1", CiType = "NetworkAsset", DisplayName = "SW-CORP-CHI-001" });
+        world.ConfigurationItems.Add(new ConfigurationItem { Id = "CI-3", CompanyId = "COMP-1", CiType = "NetworkAsset", DisplayName = "SW-CORP-CHI-001" });
         world.ExternalOrganizations.Add(new ExternalOrganization
         {
             Id = "EXT-1",
             CompanyId = "COMP-1",
-            Name = "Northwind Consulting",
+            Name = "Northwind Consulting 4",
             LegalName = "Northwind Consulting LLC",
             Description = "Temporary consulting labor provider.",
             Tagline = "Consulting delivery with measurable outcomes.",
@@ -251,11 +269,22 @@ public sealed class WorldQualityAuditServiceTests
         Assert.Contains(result.Warnings, warning => warning.Contains("business unit names use synthetic numeric suffixes", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("department names use synthetic numeric suffixes", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("team names use synthetic numeric suffixes", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("application names were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("application service names were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("group names were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("identity store names were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("device hostnames were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("server hostnames were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("network asset hostnames were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("configuration item display names were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("collaboration site names were duplicated", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("collaboration site names use synthetic numeric suffixes", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("file shares still use generic or legacy naming patterns", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("document folders still use generic or sequenced naming patterns", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("collaboration channel names still use generic template labels", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("business processes are surfacing as configuration items", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("policy and policy-setting counts are below the minimum realism threshold", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("external organization names use synthetic numeric suffixes", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("policies are missing stable directory or platform identifiers", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("policy settings are missing realistic policy or registry paths", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Warnings, warning => warning.Contains("group policy objects are missing linked container targets", StringComparison.OrdinalIgnoreCase));
@@ -263,6 +292,17 @@ public sealed class WorldQualityAuditServiceTests
         Assert.Equal("Operations 3", result.Samples["business_units"].Single());
         Assert.Equal("Endpoint Engineering 6", result.Samples["departments"].Single());
         Assert.Equal("Commercial Planning 15", result.Samples["teams"].Single());
+        Assert.Equal(1, result.Metrics["numbered_external_org_names"]);
+        Assert.True(result.Metrics["duplicate_application_names"] > 0);
+        Assert.True(result.Metrics["duplicate_application_service_names"] > 0);
+        Assert.True(result.Metrics["duplicate_group_names"] > 0);
+        Assert.True(result.Metrics["duplicate_identity_store_names"] > 0);
+        Assert.True(result.Metrics["duplicate_device_hostnames"] > 0);
+        Assert.True(result.Metrics["duplicate_server_hostnames"] > 0);
+        Assert.True(result.Metrics["duplicate_network_asset_hostnames"] > 0);
+        Assert.True(result.Metrics["duplicate_configuration_item_display_names"] > 0);
+        Assert.True(result.Metrics["duplicate_collaboration_site_names"] > 0);
+        Assert.True(result.Metrics["numbered_collaboration_site_names"] > 0);
         Assert.True(result.Metrics["undersized_policy_surface"] > 0);
         Assert.True(result.Metrics["policies_missing_guid"] > 0);
         Assert.True(result.Metrics["policy_settings_missing_path"] > 0);
