@@ -94,16 +94,14 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var templates = SelectOrganizationTemplates(catalogs, "Department", companyDefinition.Industry, companyDefinition.EmployeeCount);
 
         var departments = new List<Department>();
-        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var businessUnit in businessUnits)
         {
+            var localUsedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var preferredNames = BuildPreferredDepartmentNames(
                 businessUnit.Name,
                 templates);
-            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.DepartmentCountPerBusinessUnit)
-                .Select(name => EnsureContextualUniqueName(name, usedNames, businessUnit.Name))
-                .ToList();
+            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.DepartmentCountPerBusinessUnit, localUsedNames);
 
             foreach (var name in names)
             {
@@ -134,16 +132,14 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var templates = SelectOrganizationTemplates(catalogs, "Team", companyDefinition.Industry, companyDefinition.EmployeeCount);
 
         var teams = new List<Team>();
-        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var department in departments)
         {
+            var localUsedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var preferredNames = BuildPreferredTeamNames(
                 department.Name,
                 templates);
-            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.TeamCountPerDepartment)
-                .Select(name => EnsureContextualUniqueName(name, usedNames, department.Name))
-                .ToList();
+            var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.TeamCountPerDepartment, localUsedNames);
 
             foreach (var name in names)
             {
@@ -201,14 +197,25 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Sales",
                 "Marketing",
                 "Customer Support",
-                "Customer Success"
+                "Customer Success",
+                "Business Development"
             },
             "revenue operations" => new[]
             {
-                "Sales",
-                "Marketing",
+                "Sales Operations",
+                "Marketing Operations",
+                "Customer Operations",
+                "Commercial Analytics",
                 "Customer Success",
                 "Revenue Operations"
+            },
+            "customer success" => new[]
+            {
+                "Customer Service",
+                "Support",
+                "Customer Programs",
+                "Professional Services",
+                "Field Services"
             },
             "customer and growth" => new[]
             {
@@ -222,35 +229,40 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Product Engineering",
                 "Manufacturing Engineering",
                 "Quality Assurance",
-                "Product Management"
+                "Product Management",
+                "Engineering"
             },
             "supply chain and manufacturing" => new[]
             {
                 "Production Operations",
                 "Procurement",
                 "Logistics and Planning",
-                "Supplier Quality"
+                "Supplier Quality",
+                "Warehouse Operations"
             },
             "corporate services" => new[]
             {
                 "Finance",
                 "Human Resources",
                 "Legal",
-                "Corporate Communications"
+                "Corporate Communications",
+                "Workplace Services"
             },
             "digital and technology" or "technology and controls" or "platform operations" => new[]
             {
                 "Information Technology",
                 "Security",
                 "Enterprise Applications",
-                "Data and Analytics"
+                "Data and Analytics",
+                "Infrastructure Services"
             },
             "product engineering" => new[]
             {
                 "Engineering",
                 "Product Management",
                 "Quality Assurance",
-                "Data and Analytics"
+                "Data and Analytics",
+                "Developer Experience"
             },
             "client operations" => new[]
             {
@@ -286,7 +298,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
 
     private static IReadOnlyList<string> GetTeamBlueprints(string departmentName)
     {
-        return NormalizeOrganizationLabel(departmentName) switch
+        return ResolveDepartmentFamily(departmentName) switch
         {
             "sales" => new[]
             {
@@ -294,7 +306,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Account Management",
                 "Sales Operations",
                 "Channel Sales",
-                "Deal Desk"
+                "Deal Desk",
+                "Commercial Planning"
             },
             "marketing" => new[]
             {
@@ -302,7 +315,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Demand Generation",
                 "Marketing Operations",
                 "Brand and Communications",
-                "Digital Marketing"
+                "Digital Marketing",
+                "Field Marketing"
             },
             "customer support" or "support" => new[]
             {
@@ -310,7 +324,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Customer Care",
                 "Escalation Management",
                 "Field Service Coordination",
-                "Knowledge Management"
+                "Knowledge Management",
+                "Support Readiness"
             },
             "customer success" => new[]
             {
@@ -318,14 +333,62 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Adoption Programs",
                 "Renewal Operations",
                 "Customer Programs",
-                "Support Readiness"
+                "Support Readiness",
+                "Success Operations"
+            },
+            "customer service" => new[]
+            {
+                "Customer Care",
+                "Case Management",
+                "Service Operations",
+                "Escalation Management",
+                "Knowledge Management",
+                "Workforce Planning"
             },
             "revenue operations" => new[]
             {
                 "Pipeline Operations",
                 "Territory Planning",
                 "Commercial Analytics",
-                "Deal Operations"
+                "Deal Operations",
+                "Forecasting",
+                "Revenue Systems"
+            },
+            "sales operations" => new[]
+            {
+                "Territory Planning",
+                "Pipeline Operations",
+                "Quote Operations",
+                "Deal Desk",
+                "Forecasting",
+                "Incentive Compensation"
+            },
+            "marketing operations" => new[]
+            {
+                "Campaign Operations",
+                "MarTech Administration",
+                "Lead Management",
+                "Web Operations",
+                "Field Marketing Operations",
+                "Attribution and Reporting"
+            },
+            "customer operations" => new[]
+            {
+                "Customer Programs",
+                "Case Management",
+                "Service Operations",
+                "Escalation Management",
+                "Success Operations",
+                "Journey Analytics"
+            },
+            "commercial analytics" => new[]
+            {
+                "Business Intelligence",
+                "Revenue Analytics",
+                "Forecasting",
+                "Pricing Analytics",
+                "Dashboard Operations",
+                "Data Governance"
             },
             "partnerships" => new[]
             {
@@ -333,33 +396,59 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Alliance Operations",
                 "Channel Enablement"
             },
+            "business development" => new[]
+            {
+                "Partner Development",
+                "Alliance Management",
+                "Opportunity Development",
+                "Market Development",
+                "Solutions Consulting",
+                "Pipeline Development"
+            },
             "production operations" or "operations" => new[]
             {
                 "Production Scheduling",
                 "Warehouse Operations",
                 "Inventory Control",
                 "Logistics Coordination",
-                "Continuous Improvement"
+                "Continuous Improvement",
+                "Shift Operations"
             },
             "procurement" => new[]
             {
                 "Strategic Sourcing",
                 "Supplier Management",
                 "Purchasing Operations",
-                "Vendor Governance"
+                "Vendor Governance",
+                "Supplier Quality",
+                "Category Management"
             },
             "logistics and planning" => new[]
             {
                 "Supply Planning",
                 "Demand Planning",
                 "Transportation Coordination",
-                "Inventory Planning"
+                "Inventory Planning",
+                "Fulfillment Planning",
+                "Warehouse Coordination"
+            },
+            "warehouse operations" => new[]
+            {
+                "Inventory Control",
+                "Fulfillment Operations",
+                "Shipping Coordination",
+                "Receiving Operations",
+                "Warehouse Systems",
+                "Cycle Count Operations"
             },
             "supplier quality" => new[]
             {
                 "Supplier Quality Engineering",
                 "Incoming Inspection",
-                "Quality Systems"
+                "Quality Systems",
+                "Supplier Audits",
+                "Corrective Actions",
+                "Compliance Validation"
             },
             "product engineering" or "engineering" => new[]
             {
@@ -367,7 +456,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Platform Engineering",
                 "Release Engineering",
                 "Reliability Engineering",
-                "Test Engineering"
+                "Test Engineering",
+                "Developer Experience"
             },
             "manufacturing engineering" => new[]
             {
@@ -375,21 +465,26 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Plant Systems",
                 "Process Engineering",
                 "Reliability Engineering",
-                "Continuous Improvement"
+                "Continuous Improvement",
+                "Tooling Engineering"
             },
             "quality assurance" or "quality" => new[]
             {
                 "Quality Engineering",
                 "Compliance Validation",
                 "Test and Inspection",
-                "Quality Systems"
+                "Quality Systems",
+                "Supplier Quality",
+                "Audit Readiness"
             },
             "product management" => new[]
             {
                 "Portfolio Planning",
                 "Product Operations",
                 "Release Management",
-                "Requirements Management"
+                "Requirements Management",
+                "Lifecycle Management",
+                "Voice of Customer"
             },
             "finance" => new[]
             {
@@ -397,7 +492,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Accounts Receivable",
                 "Financial Planning and Analysis",
                 "Treasury Operations",
-                "Payroll"
+                "Payroll",
+                "Internal Controls"
             },
             "human resources" => new[]
             {
@@ -405,20 +501,35 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Recruiting Operations",
                 "Benefits Administration",
                 "People Operations",
-                "Learning and Development"
+                "Learning and Development",
+                "HRIS Operations"
             },
             "legal" => new[]
             {
                 "Contracts Management",
                 "Compliance Advisory",
                 "Corporate Governance",
-                "Commercial Counsel"
+                "Commercial Counsel",
+                "Litigation Support",
+                "Privacy and Data Protection"
             },
             "corporate communications" => new[]
             {
                 "Internal Communications",
                 "Executive Communications",
-                "Brand Communications"
+                "Brand Communications",
+                "Media Relations",
+                "Analyst Relations",
+                "Events Communications"
+            },
+            "workplace services" => new[]
+            {
+                "Facilities Operations",
+                "Workplace Experience",
+                "Travel Services",
+                "Office Services",
+                "Physical Security Coordination",
+                "Corporate Events"
             },
             "information technology" => new[]
             {
@@ -426,7 +537,17 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Infrastructure Services",
                 "Service Desk",
                 "Enterprise Applications",
-                "Collaboration Services"
+                "Collaboration Services",
+                "Identity and Access"
+            },
+            "infrastructure services" => new[]
+            {
+                "Cloud Platform",
+                "Network Services",
+                "Compute Services",
+                "Storage Services",
+                "Backup and Recovery",
+                "Platform Operations"
             },
             "security" => new[]
             {
@@ -434,7 +555,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Identity and Access",
                 "Governance Risk and Compliance",
                 "Vulnerability Management",
-                "Threat Detection"
+                "Threat Detection",
+                "Security Engineering"
             },
             "enterprise applications" => new[]
             {
@@ -442,7 +564,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "HRIS Administration",
                 "CRM Administration",
                 "Integration Services",
-                "Business Applications"
+                "Business Applications",
+                "Application Support"
             },
             "data and analytics" => new[]
             {
@@ -450,7 +573,44 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Business Intelligence",
                 "Data Governance",
                 "Reporting Services",
-                "Analytics Engineering"
+                "Analytics Engineering",
+                "Insights Operations"
+            },
+            "developer experience" => new[]
+            {
+                "Build Engineering",
+                "Tooling Engineering",
+                "CI/CD Platform",
+                "Developer Enablement",
+                "Test Automation",
+                "Release Tooling"
+            },
+            "customer programs" => new[]
+            {
+                "Program Management",
+                "Customer Education",
+                "Community Programs",
+                "Lifecycle Campaigns",
+                "Enablement Operations",
+                "Value Realization"
+            },
+            "professional services" => new[]
+            {
+                "Implementation Services",
+                "Solution Delivery",
+                "Project Delivery",
+                "Advisory Services",
+                "Technical Enablement",
+                "Change Management"
+            },
+            "field services" => new[]
+            {
+                "Field Service Coordination",
+                "Dispatch Operations",
+                "Installation Services",
+                "Service Planning",
+                "Remote Support",
+                "Asset Recovery"
             },
             "risk" => new[]
             {
@@ -490,6 +650,64 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             },
             _ => Array.Empty<string>()
         };
+    }
+
+    private static string ResolveDepartmentFamily(string departmentName)
+    {
+        var normalized = NormalizeOrganizationLabel(departmentName);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        var exactFamilies = new[]
+        {
+            "sales operations",
+            "marketing operations",
+            "customer operations",
+            "commercial analytics",
+            "customer success",
+            "customer support",
+            "customer service",
+            "corporate communications",
+            "workplace services",
+            "information technology",
+            "infrastructure services",
+            "enterprise applications",
+            "data and analytics",
+            "developer experience",
+            "manufacturing engineering",
+            "product engineering",
+            "product management",
+            "production operations",
+            "supplier quality",
+            "quality assurance",
+            "logistics and planning",
+            "business development",
+            "professional services",
+            "field services",
+            "human resources",
+            "revenue operations"
+        };
+
+        foreach (var family in exactFamilies.OrderByDescending(value => value.Length))
+        {
+            if (normalized.Equals(family, StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith(family + " ", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith(family + " - ", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith(" - " + family, StringComparison.OrdinalIgnoreCase))
+            {
+                return family;
+            }
+        }
+
+        if (normalized.Contains(" - ", StringComparison.OrdinalIgnoreCase))
+        {
+            return normalized.Split(" - ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault()
+                ?? normalized;
+        }
+
+        return normalized;
     }
 
     private List<Person> CreatePeople(

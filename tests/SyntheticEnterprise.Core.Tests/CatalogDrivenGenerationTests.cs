@@ -10,7 +10,7 @@ namespace SyntheticEnterprise.Core.Tests;
 public sealed class CatalogDrivenGenerationTests
 {
     [Fact]
-    public void WorldGenerator_Contextualizes_Duplicate_Department_And_Team_Names_Instead_Of_Numbering_Them()
+    public void WorldGenerator_Keeps_Duplicate_Department_And_Team_Names_Local_Without_Numbering_Or_Breadcrumbs()
     {
         var services = new ServiceCollection()
             .AddSyntheticEnterpriseCore()
@@ -63,8 +63,10 @@ public sealed class CatalogDrivenGenerationTests
         Assert.Equal(2, result.World.Teams.Count);
         Assert.DoesNotContain(result.World.Departments, department => Regex.IsMatch(department.Name, @"\s\d+$"));
         Assert.DoesNotContain(result.World.Teams, team => Regex.IsMatch(team.Name, @"\s\d+$"));
-        Assert.Contains(result.World.Departments, department => department.Name.Contains("Commercial", StringComparison.OrdinalIgnoreCase) || department.Name.Contains("Technology", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.Teams, team => team.Name.Contains("Planning", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Contains(" - ", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.World.Teams, team => team.Name.Contains(" - ", StringComparison.Ordinal));
+        Assert.Equal(2, result.World.Departments.Count(department => department.Name == "Planning"));
+        Assert.Equal(2, result.World.Teams.Count(team => team.Name == "Operations"));
     }
 
     [Fact]
@@ -138,6 +140,48 @@ public sealed class CatalogDrivenGenerationTests
         Assert.Contains(result.World.Teams, team => team.Name == "Supplier Management");
         Assert.Contains(result.World.Teams, team => team.Name == "Supply Planning");
         Assert.Contains(result.World.Teams, team => team.Name == "Demand Planning");
+    }
+
+    [Fact]
+    public void WorldGenerator_Avoids_Breadcrumb_Department_And_Team_Names_At_Duckburg_Scale()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogLoader = services.GetRequiredService<ICatalogLoader>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4242,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Duckburg Org Realism Test",
+                    Companies =
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Duckburg Industries",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 1200,
+                            BusinessUnitCount = 8,
+                            DepartmentCountPerBusinessUnit = 5,
+                            TeamCountPerDepartment = 6,
+                            OfficeCount = 6,
+                            Countries = { "United States", "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            catalogLoader.LoadDefault());
+
+        Assert.Equal(40, result.World.Departments.Count);
+        Assert.Equal(240, result.World.Teams.Count);
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Contains(" - ", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.World.Teams, team => team.Name.Contains(" - ", StringComparison.Ordinal));
+        Assert.DoesNotContain(result.World.Departments, department => Regex.IsMatch(department.Name, @"\s\d+$"));
+        Assert.DoesNotContain(result.World.Teams, team => Regex.IsMatch(team.Name, @"\s\d+$"));
     }
 
     [Fact]
