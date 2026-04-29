@@ -182,7 +182,9 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Quote Desk");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Territory Planner");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Web Content Studio");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Escalation Desk");
+        Assert.Contains(result.World.Applications, application =>
+            application.Name == "Catalog Manufacturing Escalation Desk"
+            || application.Name == "Catalog Manufacturing Warranty Resolution Center");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Release Readiness Board");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Capacity Commit Console");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing ERP Core");

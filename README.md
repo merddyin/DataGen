@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.6.0
+
+- hardened flagship realism across organization structure, reporting lines, team naming, policy scope evidence, CMDB evidence, and Duckburg scenario composition
+- added richer DTED-facing export evidence, including typed policy-setting source and behavior fields plus CMDB matching and recovery metadata such as `fqdn`, `unc_path`, `rto_hours`, and `rpo_hours`
+- improved bridge-readiness for downstream consumers by aligning account lifecycle/state evidence and non-AD identity-store association inputs without baking DTED-specific inference into DataGen itself
+- regenerated the Duckburg DTED demo package with the updated realism, policy, container, plugin-record, and CMDB surfaces
+
 ### v0.5.1
 
 - removed the vulnerable transitive `uuid` path from the website toolchain by vendoring a patched `sockjs` copy that uses Node's built-in `crypto.randomUUID()`

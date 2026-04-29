@@ -43,7 +43,8 @@ foreach ($relativePath in $trackedFiles) {
 
     if ($normalizedPath.StartsWith('sdk/', [StringComparison]::Ordinal) -or
         $normalizedPath.StartsWith('tests/', [StringComparison]::Ordinal) -or
-        $normalizedPath.StartsWith('examples/', [StringComparison]::Ordinal)) {
+        $normalizedPath.StartsWith('examples/', [StringComparison]::Ordinal) -or
+        $normalizedPath.StartsWith('website/vendor/', [StringComparison]::Ordinal)) {
         continue
     }
 
