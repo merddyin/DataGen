@@ -29,6 +29,8 @@ public record PolicySettingRecord
     public string? RegistryPath { get; init; }
     public string ValueType { get; init; } = "";
     public string ConfiguredValue { get; init; } = "";
+    public string Source { get; init; } = "GPO";
+    public string Behavior { get; init; } = "Unknown";
     public bool IsLegacy { get; init; }
     public bool IsConflicting { get; init; }
     public string? SourceReference { get; init; }

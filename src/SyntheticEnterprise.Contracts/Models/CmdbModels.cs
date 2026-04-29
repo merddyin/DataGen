@@ -26,6 +26,8 @@ public record ConfigurationItem
     public string? Version { get; init; }
     public string? SerialNumber { get; init; }
     public string? AssetTag { get; init; }
+    public string? Fqdn { get; init; }
+    public string? UncPath { get; init; }
     public string Environment { get; init; } = "Production";
     public string OperationalStatus { get; init; } = "Active";
     public string LifecycleStatus { get; init; } = "InService";
@@ -44,6 +46,8 @@ public record ConfigurationItem
     public DateTimeOffset? InstallDate { get; init; }
     public DateTimeOffset? RetirementDate { get; init; }
     public DateTimeOffset? LastReviewedAt { get; init; }
+    public int? RtoHours { get; init; }
+    public int? RpoHours { get; init; }
     public string? Notes { get; init; }
 }
 

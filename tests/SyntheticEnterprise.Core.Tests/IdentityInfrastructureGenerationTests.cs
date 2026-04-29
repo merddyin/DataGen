@@ -189,6 +189,24 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.People, person => person.EmploymentType == "Contractor");
         Assert.Contains(result.World.People, person => person.EmploymentType == "ManagedServiceProvider");
         Assert.Contains(result.World.People, person => person.EmploymentType == "Guest");
+        var teamsById = result.World.Teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
+        var peopleById = result.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
+        var ceo = Assert.Single(result.World.People.Where(person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase)));
+        Assert.All(
+            result.World.People.Where(person => !string.Equals(person.Id, ceo.Id, StringComparison.OrdinalIgnoreCase)),
+            person =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(person.ManagerPersonId));
+                Assert.True(peopleById.ContainsKey(person.ManagerPersonId!));
+                Assert.True(teamsById.TryGetValue(person.TeamId, out var team));
+                Assert.Equal(team!.DepartmentId, person.DepartmentId);
+
+                var manager = peopleById[person.ManagerPersonId!];
+                Assert.True(
+                    string.Equals(manager.DepartmentId, person.DepartmentId, StringComparison.OrdinalIgnoreCase)
+                    || manager.Title.Contains("Vice President", StringComparison.OrdinalIgnoreCase)
+                    || manager.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase));
+            });
         Assert.Contains(result.World.Accounts, account => account.AccountType == "Contractor" && account.UserType == "Member");
         Assert.Contains(result.World.Accounts, account => account.AccountType == "ManagedServiceProvider" && account.UserType == "Guest");
         Assert.Contains(result.World.Accounts, account => account.AccountType == "Guest" && account.IdentityProvider == "EntraB2B");

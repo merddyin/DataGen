@@ -59,6 +59,9 @@ public sealed class FlagshipRealismAcceptanceTests
         Assert.Equal(0, audit.Metrics["accounts_missing_temporal_identity_evidence"]);
         Assert.Equal(0, audit.Metrics["workstations_missing_identity_evidence"]);
         Assert.Equal(0, audit.Metrics["servers_missing_directory_account_evidence"]);
+        Assert.Equal(0, audit.Metrics["duplicate_business_unit_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_department_names"]);
+        Assert.Equal(0, audit.Metrics["duplicate_team_names"]);
         Assert.Equal(0, audit.Metrics["numbered_external_org_names"]);
         Assert.Equal(0, audit.Metrics["numbered_business_unit_names"]);
         Assert.Equal(0, audit.Metrics["numbered_department_names"]);

@@ -325,6 +325,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "registry_path",
                     "value_type",
                     "configured_value",
+                    "source",
+                    "behavior",
                     "is_legacy",
                     "is_conflicting",
                     "source_reference"
@@ -341,6 +343,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["registry_path"] = setting.RegistryPath,
                     ["value_type"] = setting.ValueType,
                     ["configured_value"] = setting.ConfiguredValue,
+                    ["source"] = setting.Source,
+                    ["behavior"] = setting.Behavior,
                     ["is_legacy"] = setting.IsLegacy,
                     ["is_conflicting"] = setting.IsConflicting,
                     ["source_reference"] = setting.SourceReference
@@ -407,6 +411,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "version",
                     "serial_number",
                     "asset_tag",
+                    "fqdn",
+                    "unc_path",
                     "environment",
                     "operational_status",
                     "lifecycle_status",
@@ -429,6 +435,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "install_date",
                     "retirement_date",
                     "last_reviewed_at",
+                    "rto_hours",
+                    "rpo_hours",
                     "notes"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.ConfigurationItems,
@@ -449,6 +457,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["version"] = item.Version,
                     ["serial_number"] = item.SerialNumber,
                     ["asset_tag"] = item.AssetTag,
+                    ["fqdn"] = item.Fqdn,
+                    ["unc_path"] = item.UncPath,
                     ["environment"] = item.Environment,
                     ["operational_status"] = item.OperationalStatus,
                     ["lifecycle_status"] = item.LifecycleStatus,
@@ -471,6 +481,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["install_date"] = item.InstallDate,
                     ["retirement_date"] = item.RetirementDate,
                     ["last_reviewed_at"] = item.LastReviewedAt,
+                    ["rto_hours"] = item.RtoHours,
+                    ["rpo_hours"] = item.RpoHours,
                     ["notes"] = item.Notes
                 },
                 SortKeySelector = item => item.Id

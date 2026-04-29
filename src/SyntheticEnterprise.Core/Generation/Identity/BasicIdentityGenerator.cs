@@ -2745,8 +2745,27 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         for (var i = 0; i < count; i++)
         {
             var department = targetDepartments[i % targetDepartments.Count];
-            var team = targetTeams[i % targetTeams.Count];
-            var sponsor = employees[_randomSource.Next(employees.Count)];
+            var departmentTeams = targetTeams
+                .Where(team => string.Equals(team.DepartmentId, department.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var teamPool = departmentTeams.Count > 0 ? departmentTeams : targetTeams;
+            var team = teamPool[i % teamPool.Count];
+            var sponsorPool = employees
+                .Where(person => string.Equals(person.TeamId, team.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (sponsorPool.Count == 0)
+            {
+                sponsorPool = employees
+                    .Where(person => string.Equals(person.DepartmentId, team.DepartmentId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            if (sponsorPool.Count == 0)
+            {
+                sponsorPool = employees.ToList();
+            }
+
+            var sponsor = SelectExternalSponsor(sponsorPool);
             var workerNumber = employmentType switch
             {
                 "ManagedServiceProvider" => $"MSP-{i + 1:0000}",
@@ -2770,7 +2789,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 Id = _idFactory.Next("PERS"),
                 CompanyId = company.Id,
                 TeamId = team.Id,
-                DepartmentId = department.Id,
+                DepartmentId = team.DepartmentId,
                 FirstName = firstName,
                 LastName = lastName,
                 DisplayName = displayName,
@@ -2789,6 +2808,52 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
 
         return results;
+    }
+
+    private static Person SelectExternalSponsor(IReadOnlyList<Person> sponsorPool)
+    {
+        return sponsorPool
+            .OrderBy(person => GetExternalSponsorPriority(person.Title))
+            .ThenBy(person => person.LastName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(person => person.FirstName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(person => person.EmployeeId, StringComparer.OrdinalIgnoreCase)
+            .First();
+    }
+
+    private static int GetExternalSponsorPriority(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return 5;
+        }
+
+        if (title.Contains("Manager", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        if (title.Contains("Director", StringComparison.OrdinalIgnoreCase))
+        {
+            return 1;
+        }
+
+        if (title.Contains("Vice President", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        if (title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase))
+        {
+            return 4;
+        }
+
+        if (title.Contains("Lead", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Principal", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        return 5;
     }
 
     private IReadOnlyList<string> BuildExternalFirstNamePool(
@@ -3533,6 +3598,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             settingCategory,
             policyPath,
             registryPath);
+        var source = ResolvePolicySettingSource(world, policyId, settingCategory, metadata.PolicyPath, metadata.RegistryPath);
+        var behavior = ResolvePolicySettingBehavior(settingCategory, metadata.PolicyPath, metadata.RegistryPath);
 
         world.PolicySettings.Add(new PolicySettingRecord
         {
@@ -3545,6 +3612,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             RegistryPath = metadata.RegistryPath,
             ValueType = valueType,
             ConfiguredValue = configuredValue,
+            Source = source,
+            Behavior = behavior,
             IsLegacy = isLegacy,
             IsConflicting = isConflicting,
             SourceReference = sourceReference
@@ -3647,6 +3716,83 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         var fallbackRegistryPath = BuildCustomPolicyRegistryPath(company, IsUserScopedPolicySetting(policy, settingCategory, settingName), policy.Name, settingCategory, settingName);
         return (fallbackRegistryPath, fallbackRegistryPath);
+    }
+
+    private static string ResolvePolicySettingSource(
+        SyntheticEnterpriseWorld world,
+        string policyId,
+        string settingCategory,
+        string policyPath,
+        string? registryPath)
+    {
+        var policy = world.Policies.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, policyId, StringComparison.OrdinalIgnoreCase));
+        if (policy is null)
+        {
+            return "CustomProfile";
+        }
+
+        if (string.Equals(policy.Platform, "Intune", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "IntuneConfigurationProfile", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.PolicyType, "IntuneCompliancePolicy", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(policy.Platform, "EntraID", StringComparison.OrdinalIgnoreCase))
+        {
+            return "CustomProfile";
+        }
+
+        if (string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            return "AuditCsv";
+        }
+
+        if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
+            || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase))
+        {
+            return "SecTemplate";
+        }
+
+        if (string.Equals(settingCategory, "DriveMappings", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "Printers", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "Shortcuts", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GPP";
+        }
+
+        if (!string.IsNullOrWhiteSpace(registryPath) || policyPath.Contains("Administrative Templates", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GPO";
+        }
+
+        return "CustomProfile";
+    }
+
+    private static string ResolvePolicySettingBehavior(
+        string settingCategory,
+        string policyPath,
+        string? registryPath)
+    {
+        if (!string.IsNullOrWhiteSpace(registryPath))
+        {
+            return registryPath.Contains("\\Policies\\", StringComparison.OrdinalIgnoreCase)
+                ? "BlueDot"
+                : "RedDot";
+        }
+
+        if (policyPath.Contains("Administrative Templates", StringComparison.OrdinalIgnoreCase))
+        {
+            return "BlueDot";
+        }
+
+        if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
+            || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase))
+        {
+            return "RedDot";
+        }
+
+        return "Unknown";
     }
 
     private (string PolicyPath, string? RegistryPath) ResolveGroupPolicySettingMetadata(

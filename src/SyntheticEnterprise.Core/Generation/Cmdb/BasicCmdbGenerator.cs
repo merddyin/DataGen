@@ -96,6 +96,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SourceEntityId = store.Id,
                     Vendor = store.Provider,
                     Manufacturer = store.Provider,
+                    Fqdn = store.PrimaryDomain,
                     Environment = store.Environment,
                     OperationalStatus = "Active",
                     LifecycleStatus = "InService",
@@ -134,6 +135,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                         SourceEntityId = tenant.Id,
                         Vendor = tenant.Provider,
                         Manufacturer = tenant.Provider,
+                        Fqdn = tenant.PrimaryDomain,
                         Environment = tenant.Environment,
                         OperationalStatus = "Active",
                         LifecycleStatus = "InService",
@@ -255,6 +257,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     Vendor = "Microsoft",
                     Model = server.ServerRole,
                     Version = server.OperatingSystemVersion,
+                    Fqdn = BuildFqdn(server.Hostname, companyContext.Company.PrimaryDomain),
                     Environment = server.Environment,
                     OperationalStatus = "Active",
                     LifecycleStatus = ResolveLifecycleStatus(server.Environment),
@@ -296,6 +299,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     Model = device.Model,
                     Version = device.OperatingSystemVersion,
                     SerialNumber = device.SerialNumber,
+                    Fqdn = BuildFqdn(device.Hostname, companyContext.Company.PrimaryDomain),
                     AssetTag = device.AssetTag,
                     Environment = "Production",
                     OperationalStatus = "Active",
@@ -338,6 +342,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     Manufacturer = asset.Vendor,
                     Vendor = asset.Vendor,
                     Model = asset.Model,
+                    Fqdn = BuildFqdn(asset.Hostname, companyContext.Company.PrimaryDomain),
                     Environment = "Production",
                     OperationalStatus = "Active",
                     LifecycleStatus = "InService",
@@ -460,6 +465,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     DataSensitivity = share.Sensitivity,
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, ResolveOfficeIdForServer(world, share.HostServerId)), "Data"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(20, 180)),
+                    UncPath = share.UncPath,
                     Notes = share.UncPath
                 });
         }
@@ -1111,6 +1117,12 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             return;
         }
 
+        item = item with
+        {
+            RtoHours = item.RtoHours ?? ResolveRtoHours(item.BusinessCriticality, item.ServiceTier),
+            RpoHours = item.RpoHours ?? ResolveRpoHours(item.BusinessCriticality, item.ServiceTier)
+        };
+
         world.ConfigurationItems.Add(item);
         ciBySourceKey[key] = item;
     }
@@ -1177,6 +1189,60 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             : context.PeopleByDepartmentId.TryGetValue(department.Id, out var people)
                 ? people.OrderByDescending(IsLikelyManager).ThenBy(person => person.DisplayName, StringComparer.OrdinalIgnoreCase).Select(person => person.Id).FirstOrDefault()
                 : ResolvePlatformBusinessOwner(context);
+
+    private static string? BuildFqdn(string? hostName, string? primaryDomain)
+    {
+        if (string.IsNullOrWhiteSpace(hostName))
+        {
+            return null;
+        }
+
+        if (hostName.Contains('.', StringComparison.Ordinal))
+        {
+            return hostName;
+        }
+
+        if (string.IsNullOrWhiteSpace(primaryDomain))
+        {
+            return hostName;
+        }
+
+        return $"{hostName}.{primaryDomain}";
+    }
+
+    private static int? ResolveRtoHours(string? businessCriticality, string serviceTier)
+    {
+        var criticality = businessCriticality ?? string.Empty;
+        return criticality switch
+        {
+            "MissionCritical" => 1,
+            "High" => 4,
+            "Medium" => serviceTier.Equals("Tier1", StringComparison.OrdinalIgnoreCase) ? 8 : 12,
+            "Low" => 24,
+            _ => serviceTier.Equals("Tier1", StringComparison.OrdinalIgnoreCase)
+                ? 8
+                : serviceTier.Equals("Tier2", StringComparison.OrdinalIgnoreCase)
+                    ? 12
+                    : 24
+        };
+    }
+
+    private static int? ResolveRpoHours(string? businessCriticality, string serviceTier)
+    {
+        var criticality = businessCriticality ?? string.Empty;
+        return criticality switch
+        {
+            "MissionCritical" => 1,
+            "High" => 2,
+            "Medium" => serviceTier.Equals("Tier1", StringComparison.OrdinalIgnoreCase) ? 4 : 8,
+            "Low" => 24,
+            _ => serviceTier.Equals("Tier1", StringComparison.OrdinalIgnoreCase)
+                ? 4
+                : serviceTier.Equals("Tier2", StringComparison.OrdinalIgnoreCase)
+                    ? 8
+                    : 24
+        };
+    }
 
     private string? ResolveTechnicalOwnerPersonId(CompanyContext context, Department? department, string? preferredTeamId)
     {

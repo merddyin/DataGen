@@ -116,7 +116,7 @@ public sealed class CatalogDrivenGenerationTests
         Assert.DoesNotContain(result.World.Departments, department => department.Name.Contains(" - ", StringComparison.Ordinal));
         Assert.Contains(result.World.Departments, department => department.Name == "Sales");
         Assert.Contains(result.World.Departments, department => department.Name == "Marketing");
-        Assert.Contains(result.World.Departments, department => department.Name == "Customer Support");
+        Assert.Contains(result.World.Departments, department => department.Name == "Customer Success");
         Assert.Contains(result.World.Departments, department => department.Name == "Product Engineering");
         Assert.Contains(result.World.Departments, department => department.Name == "Manufacturing Engineering");
         Assert.Contains(result.World.Departments, department => department.Name == "Quality Assurance");
@@ -132,8 +132,8 @@ public sealed class CatalogDrivenGenerationTests
         Assert.Contains(result.World.Teams, team => team.Name == "Account Management");
         Assert.Contains(result.World.Teams, team => team.Name == "Product Marketing");
         Assert.Contains(result.World.Teams, team => team.Name == "Demand Generation");
-        Assert.Contains(result.World.Teams, team => team.Name == "Technical Support");
-        Assert.Contains(result.World.Teams, team => team.Name == "Customer Care");
+        Assert.Contains(result.World.Teams, team => team.Name == "Customer Onboarding");
+        Assert.Contains(result.World.Teams, team => team.Name == "Adoption Programs");
         Assert.Contains(result.World.Teams, team => team.Name == "Industrial Automation");
         Assert.Contains(result.World.Teams, team => team.Name == "Plant Systems");
         Assert.Contains(result.World.Teams, team => team.Name == "Strategic Sourcing");
@@ -182,6 +182,52 @@ public sealed class CatalogDrivenGenerationTests
         Assert.DoesNotContain(result.World.Teams, team => team.Name.Contains(" - ", StringComparison.Ordinal));
         Assert.DoesNotContain(result.World.Departments, department => Regex.IsMatch(department.Name, @"\s\d+$"));
         Assert.DoesNotContain(result.World.Teams, team => Regex.IsMatch(team.Name, @"\s\d+$"));
+        Assert.Equal(
+            result.World.Departments.Count,
+            result.World.Departments.Select(department => department.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(
+            result.World.BusinessUnits.Count,
+            result.World.BusinessUnits.Select(unit => unit.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Equals("Marketing Operations", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Equals("Customer Service", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Equals("Customer Programs", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Equals("Infrastructure Services", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Equals("Engineering", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Departments, department => department.Name.Equals("Data and Analytics", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(result.World.Departments, department => department.Name.Equals("Customer Success", StringComparison.OrdinalIgnoreCase));
+        Assert.Single(result.World.Departments, department => department.Name.Equals("Product Management", StringComparison.OrdinalIgnoreCase));
+
+        var peopleById = result.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
+        var teamsById = result.World.Teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
+        var ceo = Assert.Single(result.World.People.Where(person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase)));
+
+        Assert.All(
+            result.World.People.Where(person => !string.Equals(person.Id, ceo.Id, StringComparison.OrdinalIgnoreCase)),
+            person =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(person.ManagerPersonId));
+                Assert.True(teamsById.TryGetValue(person.TeamId, out var team));
+                Assert.Equal(team!.DepartmentId, person.DepartmentId);
+
+                var manager = peopleById[person.ManagerPersonId!];
+                Assert.True(
+                    string.Equals(manager.DepartmentId, person.DepartmentId, StringComparison.OrdinalIgnoreCase)
+                    || manager.Title.Contains("Vice President", StringComparison.OrdinalIgnoreCase)
+                    || manager.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase));
+            });
+
+        Assert.All(
+            result.World.Teams,
+            team =>
+            {
+                var distinctManagerCount = result.World.People
+                    .Where(person => string.Equals(person.TeamId, team.Id, StringComparison.OrdinalIgnoreCase))
+                    .Select(person => person.ManagerPersonId)
+                    .Where(managerId => !string.IsNullOrWhiteSpace(managerId))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .Count();
+                Assert.InRange(distinctManagerCount, 1, 3);
+            });
     }
 
     [Fact]
@@ -1187,7 +1233,7 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.Equal("Chief Executive Officer", result.World.People[0].Title);
+        Assert.Equal("President and Chief Executive Officer", result.World.People[0].Title);
         Assert.Contains(result.World.People.Take(15), person => person.FirstName == "Edward");
         Assert.Contains(result.World.People.Skip(15), person => person.FirstName == "Emma");
     }

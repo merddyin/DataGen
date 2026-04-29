@@ -46,7 +46,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             var teams = CreateTeams(company, departments, companyDefinition, catalogs);
             world.Teams.AddRange(teams);
 
-            var people = CreatePeople(company, teams, departments, companyDefinition, catalogs);
+            var people = CreatePeople(company, businessUnits, teams, departments, companyDefinition, catalogs);
             world.People.AddRange(people);
         }
     }
@@ -94,6 +94,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var templates = SelectOrganizationTemplates(catalogs, "Department", companyDefinition.Industry, companyDefinition.EmployeeCount);
 
         var departments = new List<Department>();
+        var companyUsedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var businessUnit in businessUnits)
         {
@@ -102,6 +103,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 businessUnit.Name,
                 templates);
             var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.DepartmentCountPerBusinessUnit, localUsedNames);
+            names = HarmonizeDepartmentSelections(businessUnit.Name, names, fallbackNames, companyUsedNames);
 
             foreach (var name in names)
             {
@@ -126,12 +128,13 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
     {
         var fallbackNames = ReadCatalogValues(catalogs, "teams", "Name", new[]
         {
-            "Platform", "Service Desk", "Identity", "Infrastructure", "Analytics",
-            "Business Systems", "Regional Sales", "Demand Generation", "Payroll", "Procurement"
+            "Program Management", "Service Operations", "Systems Administration", "Enablement Programs", "Operations Excellence",
+            "Planning Coordination", "Workflow Support", "Platform Services", "Business Analysis", "Customer Insights"
         });
         var templates = SelectOrganizationTemplates(catalogs, "Team", companyDefinition.Industry, companyDefinition.EmployeeCount);
 
         var teams = new List<Team>();
+        var companyUsedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var department in departments)
         {
@@ -140,6 +143,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 department.Name,
                 templates);
             var names = ExpandOrganizationNames(preferredNames, fallbackNames, companyDefinition.TeamCountPerDepartment, localUsedNames);
+            names = HarmonizeTeamSelections(department.Name, names, fallbackNames, companyUsedNames);
 
             foreach (var name in names)
             {
@@ -196,26 +200,25 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             {
                 "Sales",
                 "Marketing",
-                "Customer Support",
                 "Customer Success",
-                "Business Development"
+                "Business Development",
+                "Partnerships"
             },
             "revenue operations" => new[]
             {
                 "Sales Operations",
-                "Marketing Operations",
-                "Customer Operations",
+                "Revenue Operations",
                 "Commercial Analytics",
-                "Customer Success",
-                "Revenue Operations"
+                "Pricing and Planning",
+                "Revenue Systems"
             },
             "customer success" => new[]
             {
-                "Customer Service",
-                "Support",
-                "Customer Programs",
+                "Customer Support",
                 "Professional Services",
-                "Field Services"
+                "Field Services",
+                "Customer Education",
+                "Renewals"
             },
             "customer and growth" => new[]
             {
@@ -229,8 +232,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Product Engineering",
                 "Manufacturing Engineering",
                 "Quality Assurance",
-                "Product Management",
-                "Engineering"
+                "Test Engineering",
+                "Process Engineering"
             },
             "supply chain and manufacturing" => new[]
             {
@@ -251,18 +254,18 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             "digital and technology" or "technology and controls" or "platform operations" => new[]
             {
                 "Information Technology",
-                "Security",
+                "Cybersecurity",
                 "Enterprise Applications",
-                "Data and Analytics",
-                "Infrastructure Services"
+                "Data Platform",
+                "Digital Workplace"
             },
             "product engineering" => new[]
             {
-                "Engineering",
+                "Software Engineering",
                 "Product Management",
-                "Quality Assurance",
-                "Data and Analytics",
-                "Developer Experience"
+                "Architecture",
+                "Developer Experience",
+                "Product Design"
             },
             "client operations" => new[]
             {
@@ -304,10 +307,10 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             {
                 "Regional Sales",
                 "Account Management",
-                "Sales Operations",
                 "Channel Sales",
-                "Deal Desk",
-                "Commercial Planning"
+                "Strategic Accounts",
+                "Territory Development",
+                "Pipeline Development"
             },
             "marketing" => new[]
             {
@@ -331,9 +334,9 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             {
                 "Customer Onboarding",
                 "Adoption Programs",
-                "Renewal Operations",
-                "Customer Programs",
-                "Support Readiness",
+                "Renewal Readiness",
+                "Success Planning",
+                "Lifecycle Planning",
                 "Success Operations"
             },
             "customer service" => new[]
@@ -347,21 +350,21 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             },
             "revenue operations" => new[]
             {
-                "Pipeline Operations",
-                "Territory Planning",
-                "Commercial Analytics",
-                "Deal Operations",
-                "Forecasting",
-                "Revenue Systems"
+                "Revenue Forecasting",
+                "Compensation Strategy",
+                "Revenue Systems",
+                "Commercial Planning",
+                "Pipeline Governance",
+                "Deal Operations"
             },
             "sales operations" => new[]
             {
                 "Territory Planning",
                 "Pipeline Operations",
                 "Quote Operations",
-                "Deal Desk",
-                "Forecasting",
-                "Incentive Compensation"
+                "Incentive Compensation",
+                "Sales Systems",
+                "Performance Reporting"
             },
             "marketing operations" => new[]
             {
@@ -374,7 +377,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             },
             "customer operations" => new[]
             {
-                "Customer Programs",
+                "Customer Onboarding",
                 "Case Management",
                 "Service Operations",
                 "Escalation Management",
@@ -383,18 +386,23 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             },
             "commercial analytics" => new[]
             {
-                "Business Intelligence",
                 "Revenue Analytics",
-                "Forecasting",
                 "Pricing Analytics",
                 "Dashboard Operations",
-                "Data Governance"
+                "Data Governance",
+                "Market Insights",
+                "Performance Analytics",
+                "Customer Insights",
+                "Analytics Operations"
             },
             "partnerships" => new[]
             {
                 "Partner Management",
                 "Alliance Operations",
-                "Channel Enablement"
+                "Channel Enablement",
+                "Ecosystem Strategy",
+                "Partner Success",
+                "Co-Sell Programs"
             },
             "business development" => new[]
             {
@@ -403,15 +411,17 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Opportunity Development",
                 "Market Development",
                 "Solutions Consulting",
-                "Pipeline Development"
+                "Pipeline Development",
+                "Strategic Growth",
+                "Account Development"
             },
             "production operations" or "operations" => new[]
             {
                 "Production Scheduling",
-                "Warehouse Operations",
+                "Operations Control",
                 "Inventory Control",
                 "Logistics Coordination",
-                "Continuous Improvement",
+                "Throughput Management",
                 "Shift Operations"
             },
             "procurement" => new[]
@@ -439,34 +449,37 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Shipping Coordination",
                 "Receiving Operations",
                 "Warehouse Systems",
-                "Cycle Count Operations"
+                "Cycle Count Operations",
+                "Returns Processing",
+                "Warehouse Compliance"
             },
             "supplier quality" => new[]
             {
                 "Supplier Quality Engineering",
                 "Incoming Inspection",
-                "Quality Systems",
                 "Supplier Audits",
                 "Corrective Actions",
-                "Compliance Validation"
+                "Vendor Compliance",
+                "Supplier Development"
             },
             "product engineering" or "engineering" => new[]
             {
                 "Product Engineering",
-                "Platform Engineering",
+                "Platform Services",
+                "Feature Development",
+                "Deal Operations",
                 "Release Engineering",
-                "Reliability Engineering",
-                "Test Engineering",
-                "Developer Experience"
+                "Core Services",
+                "Application Architecture"
             },
             "manufacturing engineering" => new[]
             {
                 "Industrial Automation",
                 "Plant Systems",
-                "Process Engineering",
-                "Reliability Engineering",
-                "Continuous Improvement",
-                "Tooling Engineering"
+                "Process Optimization",
+                "Manufacturing Controls",
+                "Tooling Engineering",
+                "Line Engineering"
             },
             "quality assurance" or "quality" => new[]
             {
@@ -474,8 +487,8 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Compliance Validation",
                 "Test and Inspection",
                 "Quality Systems",
-                "Supplier Quality",
-                "Audit Readiness"
+                "Audit Readiness",
+                "Release Quality"
             },
             "product management" => new[]
             {
@@ -533,12 +546,12 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             },
             "information technology" => new[]
             {
-                "Endpoint Engineering",
-                "Infrastructure Services",
-                "Service Desk",
-                "Enterprise Applications",
-                "Collaboration Services",
-                "Identity and Access"
+                "IT Service Management",
+                "Workplace Support",
+                "Enterprise Infrastructure",
+                "Platform Operations",
+                "Collaboration Administration",
+                "Endpoint Lifecycle"
             },
             "infrastructure services" => new[]
             {
@@ -552,7 +565,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             "security" => new[]
             {
                 "Security Operations",
-                "Identity and Access",
+                "Access Governance",
                 "Governance Risk and Compliance",
                 "Vulnerability Management",
                 "Threat Detection",
@@ -576,14 +589,132 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Analytics Engineering",
                 "Insights Operations"
             },
+            "data platform" => new[]
+            {
+                "Data Engineering",
+                "Data Platform Operations",
+                "Data Governance",
+                "Analytics Enablement",
+                "Reporting Services",
+                "Insights Operations"
+            },
+            "digital workplace" => new[]
+            {
+                "Endpoint Engineering",
+                "Service Desk",
+                "Collaboration Services",
+                "Client Platform",
+                "Workplace Automation",
+                "End User Experience",
+                "Workplace Identity Support",
+                "Device Enrollment"
+            },
+            "cybersecurity" => new[]
+            {
+                "Security Operations",
+                "Identity Security",
+                "Governance Risk and Compliance",
+                "Vulnerability Management",
+                "Threat Detection",
+                "Security Engineering"
+            },
+            "software engineering" => new[]
+            {
+                "Platform Engineering",
+                "Distributed Systems",
+                "Service Engineering",
+                "Developer Productivity",
+                "Developer Platform",
+                "Product Architecture"
+            },
+            "architecture" => new[]
+            {
+                "Solution Architecture",
+                "Platform Architecture",
+                "Integration Architecture",
+                "Reference Architecture",
+                "Engineering Governance",
+                "Technical Standards"
+            },
+            "product design" => new[]
+            {
+                "User Research",
+                "Interaction Design",
+                "Design Systems",
+                "Content Design",
+                "Experience Design",
+                "Prototype Studio"
+            },
+            "test engineering" => new[]
+            {
+                "Test Automation",
+                "Verification Lab",
+                "Release Validation",
+                "Reliability Testing",
+                "Quality Tooling",
+                "Test Operations"
+            },
+            "process engineering" => new[]
+            {
+                "Continuous Improvement",
+                "Manufacturing Process Control",
+                "Line Optimization",
+                "Industrial Engineering",
+                "Process Validation",
+                "Operational Excellence"
+            },
+            "customer education" => new[]
+            {
+                "Training Delivery",
+                "Enablement Programs",
+                "Documentation Services",
+                "Academy Operations",
+                "Learning Experience",
+                "Certification Programs"
+            },
+            "renewals" => new[]
+            {
+                "Renewal Operations",
+                "Retention Programs",
+                "Contract Renewals",
+                "Expansion Planning",
+                "Value Realization",
+                "Book of Business Planning",
+                "Renewal Desk",
+                "Subscription Management"
+            },
+            "pricing and planning" => new[]
+            {
+                "Commercial Planning",
+                "Pricing Strategy",
+                "Demand Forecasting",
+                "Margin Analysis",
+                "Revenue Insights",
+                "Forecast Governance",
+                "Scenario Modeling",
+                "Planning Systems"
+            },
+            "revenue systems" => new[]
+            {
+                "Revenue Systems Administration",
+                "Quote Operations",
+                "CPQ Administration",
+                "Billing Platform",
+                "Sales Workflow Automation",
+                "Revenue Reporting",
+                "Billing Operations",
+                "Revenue Controls"
+            },
             "developer experience" => new[]
             {
                 "Build Engineering",
-                "Tooling Engineering",
                 "CI/CD Platform",
-                "Developer Enablement",
-                "Test Automation",
-                "Release Tooling"
+                "Engineering Enablement",
+                "Internal Developer Portal",
+                "Developer Advocacy",
+                "Sandbox Services",
+                "Developer Workflows",
+                "Engineering Productivity"
             },
             "customer programs" => new[]
             {
@@ -610,7 +741,9 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
                 "Installation Services",
                 "Service Planning",
                 "Remote Support",
-                "Asset Recovery"
+                "Asset Recovery",
+                "Depot Services",
+                "Service Logistics"
             },
             "risk" => new[]
             {
@@ -712,6 +845,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
 
     private List<Person> CreatePeople(
         Company company,
+        IReadOnlyList<BusinessUnit> businessUnits,
         IReadOnlyList<Team> teams,
         IReadOnlyList<Department> departments,
         ScenarioCompanyDefinition companyDefinition,
@@ -867,31 +1001,166 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             results.Add(person);
         }
 
-        // Simple reporting structure:
-        // first person is CEO, next BU leaders report to CEO, remaining employees report to an earlier manager
-        if (results.Count > 0)
+        AssignManagementHierarchy(results, teams, departments, businessUnits);
+
+        return results;
+    }
+
+    private static void AssignManagementHierarchy(
+        List<Person> people,
+        IReadOnlyList<Team> teams,
+        IReadOnlyList<Department> departments,
+        IReadOnlyList<BusinessUnit> businessUnits)
+    {
+        if (people.Count == 0)
         {
-            results[0] = results[0] with { Title = "Chief Executive Officer", ManagerPersonId = null };
+            return;
         }
 
-        var managerIndices = new List<int> { 0 };
-        for (var i = 1; i < results.Count; i++)
+        var teamsById = teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
+        var departmentsById = departments.ToDictionary(department => department.Id, StringComparer.OrdinalIgnoreCase);
+        var businessUnitsById = businessUnits.ToDictionary(unit => unit.Id, StringComparer.OrdinalIgnoreCase);
+
+        people[0] = people[0] with { Title = "President and Chief Executive Officer", ManagerPersonId = null };
+        var ceoId = people[0].Id;
+
+        var departmentHeadIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var department in departments)
         {
-            var title = results[i].Title;
-            var isManager = title.Contains("Manager", StringComparison.OrdinalIgnoreCase)
-                || title.Contains("Director", StringComparison.OrdinalIgnoreCase)
-                || i <= Math.Min(10, results.Count - 1);
-
-            var managerIndex = managerIndices[_randomSource.Next(managerIndices.Count)];
-            results[i] = results[i] with { ManagerPersonId = results[managerIndex].Id };
-
-            if (isManager)
+            var departmentHeadIndex = FindFirstIndex(people, person =>
+                !string.IsNullOrWhiteSpace(person.DepartmentId)
+                && string.Equals(person.DepartmentId, department.Id, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(person.Id, ceoId, StringComparison.OrdinalIgnoreCase));
+            if (departmentHeadIndex >= 0)
             {
-                managerIndices.Add(i);
+                departmentHeadIndexById[department.Id] = departmentHeadIndex;
             }
         }
 
-        return results;
+        var businessUnitLeaderIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var businessUnit in businessUnits)
+        {
+            var leaderIndex = departmentHeadIndexById
+                .Where(pair =>
+                    departmentsById.TryGetValue(pair.Key, out var department)
+                    && string.Equals(department.BusinessUnitId, businessUnit.Id, StringComparison.OrdinalIgnoreCase))
+                .Select(pair => pair.Value)
+                .DefaultIfEmpty(-1)
+                .Min();
+
+            if (leaderIndex >= 0)
+            {
+                businessUnitLeaderIndexById[businessUnit.Id] = leaderIndex;
+                people[leaderIndex] = people[leaderIndex] with
+                {
+                    Title = $"Vice President, {businessUnit.Name}",
+                    ManagerPersonId = ceoId
+                };
+            }
+        }
+
+        foreach (var department in departments)
+        {
+            if (!departmentHeadIndexById.TryGetValue(department.Id, out var departmentHeadIndex))
+            {
+                continue;
+            }
+
+            if (businessUnitLeaderIndexById.TryGetValue(department.BusinessUnitId, out var businessUnitLeaderIndex)
+                && businessUnitLeaderIndex == departmentHeadIndex)
+            {
+                continue;
+            }
+
+            var managerPersonId = businessUnitLeaderIndexById.TryGetValue(department.BusinessUnitId, out businessUnitLeaderIndex)
+                ? people[businessUnitLeaderIndex].Id
+                : ceoId;
+
+            people[departmentHeadIndex] = people[departmentHeadIndex] with
+            {
+                Title = $"Director, {department.Name}",
+                ManagerPersonId = managerPersonId
+            };
+        }
+
+        var teamLeadIndexById = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var team in teams)
+        {
+            var teamLeadIndex = departmentHeadIndexById.TryGetValue(team.DepartmentId, out var preferredDepartmentHeadIndex)
+                                && string.Equals(people[preferredDepartmentHeadIndex].TeamId, team.Id, StringComparison.OrdinalIgnoreCase)
+                ? preferredDepartmentHeadIndex
+                : FindFirstIndex(people, person =>
+                !string.IsNullOrWhiteSpace(person.TeamId)
+                && string.Equals(person.TeamId, team.Id, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(person.Id, ceoId, StringComparison.OrdinalIgnoreCase));
+            if (teamLeadIndex < 0)
+            {
+                continue;
+            }
+
+            teamLeadIndexById[team.Id] = teamLeadIndex;
+            if (departmentHeadIndexById.TryGetValue(team.DepartmentId, out var departmentHeadIndex)
+                && teamLeadIndex != departmentHeadIndex)
+            {
+                people[teamLeadIndex] = people[teamLeadIndex] with
+                {
+                    Title = $"Manager, {team.Name}",
+                    ManagerPersonId = people[departmentHeadIndex].Id
+                };
+            }
+        }
+
+        for (var i = 1; i < people.Count; i++)
+        {
+            if (!teamsById.TryGetValue(people[i].TeamId, out var team))
+            {
+                continue;
+            }
+
+            if (teamLeadIndexById.TryGetValue(team.Id, out var teamLeadIndex) && teamLeadIndex != i)
+            {
+                people[i] = people[i] with
+                {
+                    DepartmentId = team.DepartmentId,
+                    ManagerPersonId = people[teamLeadIndex].Id
+                };
+                continue;
+            }
+
+            if (departmentHeadIndexById.TryGetValue(team.DepartmentId, out var departmentHeadIndex) && departmentHeadIndex != i)
+            {
+                people[i] = people[i] with
+                {
+                    DepartmentId = team.DepartmentId,
+                    ManagerPersonId = people[departmentHeadIndex].Id
+                };
+                continue;
+            }
+
+            var fallbackManagerId = departmentsById.TryGetValue(team.DepartmentId, out var department)
+                                    && businessUnitLeaderIndexById.TryGetValue(department.BusinessUnitId, out var businessUnitLeaderIndex)
+                ? people[businessUnitLeaderIndex].Id
+                : ceoId;
+
+            people[i] = people[i] with
+            {
+                DepartmentId = team.DepartmentId,
+                ManagerPersonId = fallbackManagerId
+            };
+        }
+    }
+
+    private static int FindFirstIndex(IReadOnlyList<Person> people, Func<Person, bool> predicate)
+    {
+        for (var i = 0; i < people.Count; i++)
+        {
+            if (predicate(people[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static string BuildDomain(string companyName)
@@ -958,6 +1227,170 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         }
 
         return results;
+    }
+
+    private static List<string> HarmonizeDepartmentSelections(
+        string businessUnitName,
+        IReadOnlyList<string> proposedNames,
+        IReadOnlyList<string> fallbackNames,
+        ISet<string> companyUsedNames)
+    {
+        var businessUnitAlternatives = GetDepartmentBlueprints(businessUnitName)
+            .Concat(fallbackNames)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var results = new List<string>(proposedNames.Count);
+
+        foreach (var proposedName in proposedNames)
+        {
+            var chosenName = ChooseDepartmentName(proposedName, businessUnitAlternatives, companyUsedNames);
+            results.Add(chosenName);
+            companyUsedNames.Add(chosenName);
+        }
+
+        return results;
+    }
+
+    private static string ChooseDepartmentName(
+        string proposedName,
+        IReadOnlyList<string> candidates,
+        ISet<string> companyUsedNames)
+    {
+        if (IsDepartmentCompatibleWithCompany(proposedName, companyUsedNames))
+        {
+            return proposedName;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (IsDepartmentCompatibleWithCompany(candidate, companyUsedNames))
+            {
+                return candidate;
+            }
+        }
+
+        return proposedName;
+    }
+
+    private static bool IsDepartmentCompatibleWithCompany(string candidate, IEnumerable<string> companyUsedNames)
+    {
+        var normalizedCandidate = NormalizeOrganizationLabel(candidate);
+        foreach (var existingName in companyUsedNames)
+        {
+            var normalizedExisting = NormalizeOrganizationLabel(existingName);
+            if (normalizedCandidate.Equals(normalizedExisting, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("marketing operations", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("marketing", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("marketing", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("marketing operations", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("information technology", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("infrastructure services", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("infrastructure services", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("information technology", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("customer success", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("customer service", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("customer service", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("customer success", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("customer success", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("customer operations", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (normalizedCandidate.Equals("customer operations", StringComparison.OrdinalIgnoreCase)
+                && normalizedExisting.Equals("customer success", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<string> HarmonizeTeamSelections(
+        string departmentName,
+        IReadOnlyList<string> proposedNames,
+        IReadOnlyList<string> fallbackNames,
+        ISet<string> companyUsedNames)
+    {
+        var departmentAlternatives = GetTeamBlueprints(departmentName)
+            .Concat(fallbackNames)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var results = new List<string>(proposedNames.Count);
+        var departmentUsedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var proposedName in proposedNames)
+        {
+            var chosenName = ChooseTeamName(proposedName, departmentAlternatives, companyUsedNames, departmentUsedNames);
+            results.Add(chosenName);
+            companyUsedNames.Add(chosenName);
+            departmentUsedNames.Add(chosenName);
+        }
+
+        return results;
+    }
+
+    private static string ChooseTeamName(
+        string proposedName,
+        IReadOnlyList<string> candidates,
+        ISet<string> companyUsedNames,
+        ISet<string> departmentUsedNames)
+    {
+        if (!companyUsedNames.Contains(proposedName)
+            && !departmentUsedNames.Contains(proposedName))
+        {
+            return proposedName;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!companyUsedNames.Contains(candidate)
+                && !departmentUsedNames.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!departmentUsedNames.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return proposedName;
     }
 
     private static string EnsureUniqueName(string baseName, ISet<string>? usedNames)

@@ -15,6 +15,9 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "offices_missing_geocode", "office records are missing postal/geocode details.");
         AppendMetricWarning(warnings, metrics, "offices_missing_contact_metadata", "office records are missing business phone numbers or headquarters markers.");
         AppendMetricWarning(warnings, metrics, "people_office_country_mismatch", "people have country values that do not match their assigned office.");
+        AppendMetricWarning(warnings, metrics, "people_missing_manager", "people are missing a manager assignment outside the CEO role.");
+        AppendMetricWarning(warnings, metrics, "people_team_department_mismatch", "people have team and department assignments that do not line up.");
+        AppendMetricWarning(warnings, metrics, "people_manager_department_mismatch", "people report to managers outside their department or executive chain.");
         AppendMetricWarning(warnings, metrics, "duplicate_person_display_names", "duplicate person display names were generated.");
         AppendMetricWarning(warnings, metrics, "max_person_display_name_repeat_over_limit", "a person display name is repeating more often than the realism limit allows.");
         AppendMetricWarning(warnings, metrics, "duplicate_person_upns", "duplicate person user principal names were generated.");
@@ -31,6 +34,9 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "numbered_external_org_names", "external organization names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "external_orgs_missing_identity_metadata", "external organizations are missing legal, domain, website, contact, description, or tagline metadata.");
         AppendMetricWarning(warnings, metrics, "external_orgs_missing_relationship_qualifiers", "external organizations are missing relationship basis, scope, or definition metadata.");
+        AppendMetricWarning(warnings, metrics, "duplicate_business_unit_names", "business unit names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_department_names", "department names were duplicated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_team_names", "team names were duplicated.");
         AppendMetricWarning(warnings, metrics, "numbered_business_unit_names", "business unit names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "numbered_department_names", "department names use synthetic numeric suffixes.");
         AppendMetricWarning(warnings, metrics, "numbered_team_names", "team names use synthetic numeric suffixes.");
@@ -73,6 +79,9 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["offices_missing_geocode"] = CountOfficesMissingGeocode(world),
             ["offices_missing_contact_metadata"] = CountOfficesMissingContactMetadata(world),
             ["people_office_country_mismatch"] = CountPeopleWithOfficeCountryMismatch(world),
+            ["people_missing_manager"] = CountPeopleMissingManager(world),
+            ["people_team_department_mismatch"] = CountPeopleWithTeamDepartmentMismatch(world),
+            ["people_manager_department_mismatch"] = CountPeopleWithManagerDepartmentMismatch(world),
             ["duplicate_person_display_names"] = CountDuplicateValues(world.People.Select(person => person.DisplayName)),
             ["max_person_display_name_repeat"] = CountMaxRepeat(world.People.Select(person => person.DisplayName)),
             ["max_person_display_name_repeat_over_limit"] = Math.Max(0, CountMaxRepeat(world.People.Select(person => person.DisplayName)) - 3),
@@ -94,6 +103,9 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["numbered_external_org_names"] = CountNumberedNames(world.ExternalOrganizations.Select(organization => organization.Name)),
             ["external_orgs_missing_identity_metadata"] = CountExternalOrganizationsMissingIdentityMetadata(world),
             ["external_orgs_missing_relationship_qualifiers"] = CountExternalOrganizationsMissingRelationshipQualifiers(world),
+            ["duplicate_business_unit_names"] = CountDuplicateValues(world.BusinessUnits.Select(unit => unit.Name)),
+            ["duplicate_department_names"] = CountDuplicateValues(world.Departments.Select(department => department.Name)),
+            ["duplicate_team_names"] = CountDuplicateValues(world.Teams.Select(team => team.Name)),
             ["numbered_business_unit_names"] = CountNumberedNames(world.BusinessUnits.Select(unit => unit.Name)),
             ["numbered_department_names"] = CountNumberedNames(world.Departments.Select(department => department.Name)),
             ["numbered_team_names"] = CountNumberedNames(world.Teams.Select(team => team.Name)),
@@ -212,6 +224,52 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             && !string.IsNullOrWhiteSpace(person.Country)
             && !string.IsNullOrWhiteSpace(office.Country)
             && !string.Equals(person.Country, office.Country, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int CountPeopleMissingManager(SyntheticEnterpriseWorld world)
+    {
+        if (world.People.Count == 0)
+        {
+            return 0;
+        }
+
+        var ceoId = world.People
+            .FirstOrDefault(person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase))
+            ?.Id;
+
+        return world.People.Count(person =>
+            !string.Equals(person.Id, ceoId, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(person.ManagerPersonId));
+    }
+
+    private static int CountPeopleWithTeamDepartmentMismatch(SyntheticEnterpriseWorld world)
+    {
+        var teamsById = world.Teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
+        return world.People.Count(person =>
+            !string.IsNullOrWhiteSpace(person.TeamId)
+            && teamsById.TryGetValue(person.TeamId, out var team)
+            && !string.Equals(team.DepartmentId, person.DepartmentId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int CountPeopleWithManagerDepartmentMismatch(SyntheticEnterpriseWorld world)
+    {
+        var peopleById = world.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
+        return world.People.Count(person =>
+        {
+            if (string.IsNullOrWhiteSpace(person.ManagerPersonId)
+                || !peopleById.TryGetValue(person.ManagerPersonId, out var manager))
+            {
+                return false;
+            }
+
+            if (manager.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase)
+                || manager.Title.Contains("Vice President", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return !string.Equals(manager.DepartmentId, person.DepartmentId, StringComparison.OrdinalIgnoreCase);
+        });
     }
 
     private static int CountExternalWorkforceWithoutEmployer(SyntheticEnterpriseWorld world)
