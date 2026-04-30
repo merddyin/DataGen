@@ -32,9 +32,11 @@ public record DirectoryAccount
     public string CompanyId { get; init; } = "";
     public string? PersonId { get; init; }
     public string AccountType { get; init; } = "User";
+    public string DisplayName { get; init; } = "";
     public string SamAccountName { get; init; } = "";
     public string UserPrincipalName { get; init; } = "";
     public string? Mail { get; init; }
+    public string? Domain { get; init; }
     public string DistinguishedName { get; init; } = "";
     public string OuId { get; init; } = "";
     public bool Enabled { get; init; } = true;

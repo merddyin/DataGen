@@ -576,6 +576,13 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         var companySoftware = world.SoftwarePackages.ToList();
         var devices = world.Devices.Where(d => d.CompanyId == company.Id).ToList();
         var servers = world.Servers.Where(s => s.CompanyId == company.Id).ToList();
+        var crowdStrikeFalcon = companySoftware.FirstOrDefault(s => string.Equals(s.Name, "CrowdStrike Falcon", StringComparison.OrdinalIgnoreCase));
+        var universalDeviceAgents = companySoftware
+            .Where(IsUniversalManagedEndpointSoftware)
+            .ToList();
+        var universalServerAgents = companySoftware
+            .Where(IsUniversalManagedServerSoftware)
+            .ToList();
 
         var workstationDefaults = companySoftware
             .Where(s => s.Category is "Productivity" or "Collaboration" or "Browser" or "Security" or "VPN" or "Utility")
@@ -587,14 +594,19 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
         foreach (var device in devices)
         {
+            foreach (var software in universalDeviceAgents)
+            {
+                AddDeviceSoftwareInstallation(world, device.Id, software.Id);
+            }
+
+            if (crowdStrikeFalcon is not null)
+            {
+                AddDeviceSoftwareInstallation(world, device.Id, crowdStrikeFalcon.Id);
+            }
+
             foreach (var software in workstationDefaults.Take(5 + _randomSource.Next(0, 3)))
             {
-                world.DeviceSoftwareInstallations.Add(new DeviceSoftwareInstallation
-                {
-                    Id = _idFactory.Next("DSW"),
-                    DeviceId = device.Id,
-                    SoftwareId = software.Id
-                });
+                AddDeviceSoftwareInstallation(world, device.Id, software.Id);
             }
 
             if (device.Model.Contains("MacBook", StringComparison.OrdinalIgnoreCase))
@@ -602,28 +614,82 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 var vscode = companySoftware.FirstOrDefault(s => s.Name == "Visual Studio Code");
                 if (vscode is not null)
                 {
-                    world.DeviceSoftwareInstallations.Add(new DeviceSoftwareInstallation
-                    {
-                        Id = _idFactory.Next("DSW"),
-                        DeviceId = device.Id,
-                        SoftwareId = vscode.Id
-                    });
+                    AddDeviceSoftwareInstallation(world, device.Id, vscode.Id);
                 }
             }
         }
 
         foreach (var server in servers)
         {
+            foreach (var software in universalServerAgents)
+            {
+                AddServerSoftwareInstallation(world, server.Id, software.Id);
+            }
+
+            if (crowdStrikeFalcon is not null)
+            {
+                AddServerSoftwareInstallation(world, server.Id, crowdStrikeFalcon.Id);
+            }
+
             foreach (var software in serverDefaults.Take(3 + _randomSource.Next(0, 2)))
             {
-                world.ServerSoftwareInstallations.Add(new ServerSoftwareInstallation
-                {
-                    Id = _idFactory.Next("SSW"),
-                    ServerId = server.Id,
-                    SoftwareId = software.Id
-                });
+                AddServerSoftwareInstallation(world, server.Id, software.Id);
             }
         }
+    }
+
+    private void AddDeviceSoftwareInstallation(SyntheticEnterpriseWorld world, string deviceId, string softwareId)
+    {
+        if (world.DeviceSoftwareInstallations.Any(installation =>
+                string.Equals(installation.DeviceId, deviceId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(installation.SoftwareId, softwareId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        world.DeviceSoftwareInstallations.Add(new DeviceSoftwareInstallation
+        {
+            Id = _idFactory.Next("DSW"),
+            DeviceId = deviceId,
+            SoftwareId = softwareId
+        });
+    }
+
+    private void AddServerSoftwareInstallation(SyntheticEnterpriseWorld world, string serverId, string softwareId)
+    {
+        if (world.ServerSoftwareInstallations.Any(installation =>
+                string.Equals(installation.ServerId, serverId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(installation.SoftwareId, softwareId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        world.ServerSoftwareInstallations.Add(new ServerSoftwareInstallation
+        {
+            Id = _idFactory.Next("SSW"),
+            ServerId = serverId,
+            SoftwareId = softwareId
+        });
+    }
+
+    private static bool IsUniversalManagedEndpointSoftware(SoftwarePackage software)
+    {
+        var name = software.Name ?? string.Empty;
+        return name.Contains("CrowdStrike", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("SentinelOne", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Defender for Endpoint", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Qualys Cloud Agent", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("Tanium Client", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("SCCM Client", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("ServiceNow Agent", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsUniversalManagedServerSoftware(SoftwarePackage software)
+    {
+        var name = software.Name ?? string.Empty;
+        return IsUniversalManagedEndpointSoftware(software)
+               || name.Contains("Windows Server Backup", StringComparison.OrdinalIgnoreCase)
+               || name.Contains("VMware Tools", StringComparison.OrdinalIgnoreCase);
     }
 
     private void CreateAdministrativeEndpointControls(
@@ -874,9 +940,11 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 Id = BuildMachineAccountId(company.Name, hostname, "AD"),
                 CompanyId = company.Id,
                 AccountType = "Device",
+                DisplayName = hostname,
                 SamAccountName = sam,
                 UserPrincipalName = upn,
                 Mail = null,
+                Domain = company.PrimaryDomain,
                 DistinguishedName = onPremOu is null ? $"CN={EscapeDn(hostname)}" : $"CN={EscapeDn(hostname)},{onPremOu.DistinguishedName}",
                 OuId = onPremOu?.Id ?? string.Empty,
                 Enabled = true,
@@ -912,9 +980,11 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 Id = BuildMachineAccountId(company.Name, hostname, "ENTRA"),
                 CompanyId = company.Id,
                 AccountType = "Device",
+                DisplayName = hostname,
                 SamAccountName = sam,
                 UserPrincipalName = upn,
                 Mail = null,
+                Domain = company.PrimaryDomain,
                 DistinguishedName = hostname,
                 OuId = string.Empty,
                 Enabled = true,

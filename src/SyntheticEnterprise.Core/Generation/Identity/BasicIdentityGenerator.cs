@@ -58,7 +58,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             world.OrganizationalUnits.AddRange(ous);
             world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous));
 
-            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, ous, issuedPasswords);
+            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, ous, rootDomain, issuedPasswords);
             world.Accounts.AddRange(peopleAccounts);
             foreach (var upn in peopleAccounts
                          .Select(account => account.UserPrincipalName)
@@ -1830,6 +1830,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Person> people,
         IReadOnlyList<Department> departments,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        string rootDomain,
         HashSet<string> issuedPasswords)
     {
         var usersOu = ous.First(o => o.Name == "Users");
@@ -1855,9 +1856,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 PersonId = person.Id,
                 AccountType = "User",
+                DisplayName = person.DisplayName,
                 SamAccountName = sam,
                 UserPrincipalName = person.UserPrincipalName,
                 Mail = person.UserPrincipalName,
+                Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(person.DisplayName)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
@@ -1908,9 +1911,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 Id = _idFactory.Next("ACT"),
                 CompanyId = company.Id,
                 AccountType = "Service",
+                DisplayName = blueprint.CommonName,
                 SamAccountName = blueprint.SamAccountName,
                 UserPrincipalName = upn,
                 Mail = null,
+                Domain = rootDomain,
                 DistinguishedName = $"CN={blueprint.CommonName},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
@@ -1958,9 +1963,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 Id = _idFactory.Next("ACT"),
                 CompanyId = company.Id,
                 AccountType = "Shared",
+                DisplayName = localPart,
                 SamAccountName = Truncate(localPart.Replace("-", ""), 20),
                 UserPrincipalName = upn,
                 Mail = upn,
+                Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(localPart)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
@@ -2020,15 +2027,17 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 PersonId = person.Id,
                 AccountType = "Privileged",
+                DisplayName = BuildSecondaryAccountDisplayName(person, "Admin"),
                 SamAccountName = Truncate($"adm_{Slug(person.LastName)}_{employeeSuffix}", 20),
                 UserPrincipalName = upn,
                 Mail = null,
+                Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(person.DisplayName)} Admin,{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
                 Privileged = true,
                 MfaEnabled = _randomSource.NextDouble() >= 0.15,
-                EmployeeId = person.EmployeeId,
+                EmployeeId = BuildSecondaryEmployeeId(person.EmployeeId, "A"),
                 GeneratedPassword = CreateUniquePassword(issuedPasswords, 20),
                 PasswordProfile = "PrivilegedElevated",
                 AdministrativeTier = tier,
@@ -3122,9 +3131,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 PersonId = person.Id,
                 AccountType = accountType,
+                DisplayName = person.DisplayName,
                 SamAccountName = BuildExternalSam(person, accountType),
                 UserPrincipalName = upn,
                 Mail = accountType == "Guest" ? null : upn,
+                Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(person.DisplayName)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
@@ -4674,6 +4685,26 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var suffix = safeEmployeeId.Length >= 3 ? safeEmployeeId[^3..] : safeEmployeeId.PadLeft(3, '0');
         var baseValue = $"{Slug(firstName).FirstOrDefault()}{Slug(lastName)}";
         return Truncate($"{baseValue}{suffix}", 20);
+    }
+
+    private static string BuildSecondaryAccountDisplayName(Person person, string subtype)
+    {
+        if (string.IsNullOrWhiteSpace(subtype))
+        {
+            return person.DisplayName;
+        }
+
+        return $"{person.DisplayName} {subtype}".Trim();
+    }
+
+    private static string? BuildSecondaryEmployeeId(string? employeeId, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(employeeId))
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(prefix) ? employeeId : $"{prefix}{employeeId}";
     }
 
     private static string Slug(string value)

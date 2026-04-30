@@ -169,10 +169,12 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.Applications, application => application.Name == "Databricks Unity Catalog");
         Assert.DoesNotContain(result.World.Applications, application => application.Name == "Google Chrome");
         Assert.DoesNotContain(result.World.Applications, application => application.Name == "Cisco AnyConnect");
+        Assert.DoesNotContain(result.World.Applications, application => application.Name == "CrowdStrike Falcon");
         Assert.DoesNotContain(result.World.Applications, application => application.Name == "OneDrive Sync Client");
         Assert.DoesNotContain(result.World.Applications, application => application.Name == "Windows Server Backup");
         Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Google Chrome");
         Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Cisco AnyConnect");
+        Assert.Contains(result.World.SoftwarePackages, package => package.Name == "CrowdStrike Falcon");
         Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Windows Server Backup");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Supplier Quality Hub");
         Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Production Planning");

@@ -1130,6 +1130,12 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             return false;
         }
 
+        if (template.Category == "Security"
+            && LooksLikeEndpointSecurityOrManagementClient(template.Name))
+        {
+            return false;
+        }
+
         var excludedNameTokens = new[]
         {
             "Sync Client",
@@ -1157,6 +1163,32 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         };
 
         return !excludedNameTokens.Any(token => template.Name.Contains(token, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool LooksLikeEndpointSecurityOrManagementClient(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        var endpointClientTokens = new[]
+        {
+            "CrowdStrike Falcon",
+            "Defender for Endpoint",
+            "SentinelOne",
+            "Qualys Cloud Agent",
+            "Tanium Client",
+            "SCCM Client",
+            "ServiceNow Agent",
+            "BeyondTrust Privilege Management",
+            "BeyondTrust Remote Support",
+            "Okta Verify",
+            "Okta Browser Plugin",
+            "Netskope Client"
+        };
+
+        return endpointClientTokens.Any(token => name.Contains(token, StringComparison.OrdinalIgnoreCase));
     }
 
     private static List<SoftwareTemplate> ReadSoftwareCatalog(CatalogSet catalogs)

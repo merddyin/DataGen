@@ -144,6 +144,29 @@ public sealed class IdentityInfrastructureGenerationTests
             account.AccountType == "Device"
             && string.Equals(account.IdentityProvider, "EntraID", StringComparison.OrdinalIgnoreCase)
             && !account.SamAccountName.EndsWith("$", StringComparison.Ordinal));
+        var peopleById = result.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
+        Assert.All(
+            result.World.Accounts.Where(account => string.Equals(account.AccountType, "User", StringComparison.OrdinalIgnoreCase)),
+            account =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(account.PersonId));
+                Assert.False(string.IsNullOrWhiteSpace(account.DisplayName));
+                Assert.False(string.IsNullOrWhiteSpace(account.EmployeeId));
+                var person = peopleById[account.PersonId!];
+                Assert.Equal(person.DisplayName, account.DisplayName);
+                Assert.Equal(person.EmployeeId, account.EmployeeId);
+            });
+        Assert.All(
+            result.World.Accounts.Where(account => string.Equals(account.AccountType, "Privileged", StringComparison.OrdinalIgnoreCase)),
+            account =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(account.PersonId));
+                Assert.False(string.IsNullOrWhiteSpace(account.DisplayName));
+                Assert.False(string.IsNullOrWhiteSpace(account.EmployeeId));
+                var person = peopleById[account.PersonId!];
+                Assert.NotEqual(person.DisplayName, account.DisplayName);
+                Assert.StartsWith("A", account.EmployeeId!, StringComparison.OrdinalIgnoreCase);
+            });
         Assert.All(
             result.World.Accounts.Where(account => account.AccountType == "Device"),
             account =>
@@ -153,6 +176,18 @@ public sealed class IdentityInfrastructureGenerationTests
                 Assert.NotNull(account.WhenModified);
                 Assert.True(account.LastLogon >= account.WhenCreated!.Value);
                 Assert.True(account.WhenModified!.Value >= account.LastLogon);
+                Assert.False(string.IsNullOrWhiteSpace(account.DisplayName));
+                Assert.False(string.IsNullOrWhiteSpace(account.Domain));
+                Assert.Equal(account.UserPrincipalName.Split('@')[1], account.Domain, ignoreCase: true);
+                if (string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.EndsWith("$", account.SamAccountName, StringComparison.Ordinal);
+                    Assert.StartsWith($"CN={account.DisplayName},", account.DistinguishedName, StringComparison.OrdinalIgnoreCase);
+                }
+                else if (string.Equals(account.IdentityProvider, "EntraID", StringComparison.OrdinalIgnoreCase))
+                {
+                    Assert.Equal(account.DistinguishedName, account.DisplayName, ignoreCase: true);
+                }
             });
         Assert.DoesNotContain(result.World.GroupMemberships, membership => membership.MemberObjectType == "Device");
         Assert.DoesNotContain(result.World.GroupMemberships, membership => membership.MemberObjectType == "Server");
@@ -182,6 +217,20 @@ public sealed class IdentityInfrastructureGenerationTests
             member.EndpointType == "Device" && member.LocalGroupName == "Administrators");
         Assert.Contains(result.World.EndpointLocalGroupMembers, member =>
             member.EndpointType == "Server" && member.LocalGroupName == "Remote Desktop Users");
+        var falconPackage = Assert.Single(result.World.SoftwarePackages.Where(package =>
+            string.Equals(package.Name, "CrowdStrike Falcon", StringComparison.OrdinalIgnoreCase)));
+        var deviceFalconInstallations = result.World.DeviceSoftwareInstallations
+            .Where(installation => string.Equals(installation.SoftwareId, falconPackage.Id, StringComparison.OrdinalIgnoreCase))
+            .Select(installation => installation.DeviceId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        var serverFalconInstallations = result.World.ServerSoftwareInstallations
+            .Where(installation => string.Equals(installation.SoftwareId, falconPackage.Id, StringComparison.OrdinalIgnoreCase))
+            .Select(installation => installation.ServerId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+        Assert.Equal(result.World.Devices.Count, deviceFalconInstallations);
+        Assert.Equal(result.World.Servers.Count, serverFalconInstallations);
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "External Users");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Contractors");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Managed Services");
@@ -190,7 +239,6 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.People, person => person.EmploymentType == "ManagedServiceProvider");
         Assert.Contains(result.World.People, person => person.EmploymentType == "Guest");
         var teamsById = result.World.Teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
-        var peopleById = result.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
         var ceo = Assert.Single(result.World.People.Where(person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase)));
         Assert.All(
             result.World.People.Where(person => !string.Equals(person.Id, ceo.Id, StringComparison.OrdinalIgnoreCase)),
