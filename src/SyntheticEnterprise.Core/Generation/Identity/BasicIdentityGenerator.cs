@@ -2,6 +2,7 @@ namespace SyntheticEnterprise.Core.Generation.Identity;
 
 using System.Security.Cryptography;
 using System.Text;
+using System.Globalization;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
@@ -49,6 +50,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var rootDomain = BuildRootDomain(company);
             var issuedPasswords = new HashSet<string>(StringComparer.Ordinal);
             var issuedAccountUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var issuedSamAccountNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var includeAdministrativeTiers = context.Scenario.Identity.IncludeAdministrativeTiers;
 
             var identityStores = CreateIdentityStores(company, rootDomain, context.Scenario.Identity);
@@ -58,7 +60,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             world.OrganizationalUnits.AddRange(ous);
             world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous));
 
-            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, ous, rootDomain, issuedPasswords);
+            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, ous, rootDomain, issuedPasswords, issuedSamAccountNames);
             world.Accounts.AddRange(peopleAccounts);
             foreach (var upn in peopleAccounts
                          .Select(account => account.UserPrincipalName)
@@ -69,15 +71,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
             SetManagerRelationships(world, company, companyPeople, peopleAccounts);
 
-            var serviceAccounts = CreateServiceAccounts(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns, includeAdministrativeTiers);
+            var serviceAccounts = CreateServiceAccounts(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames, includeAdministrativeTiers);
             world.Accounts.AddRange(serviceAccounts);
 
-            var sharedAccounts = CreateSharedMailboxes(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns);
+            var sharedAccounts = CreateSharedMailboxes(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames);
             world.Accounts.AddRange(sharedAccounts);
 
             if (companyDefinition.IncludePrivilegedAccounts)
             {
-                var privileged = CreatePrivilegedAccounts(company, companyPeople, ous, rootDomain, issuedPasswords, issuedAccountUpns, includeAdministrativeTiers);
+                var privileged = CreatePrivilegedAccounts(company, companyPeople, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames, includeAdministrativeTiers);
                 world.Accounts.AddRange(privileged);
             }
 
@@ -114,6 +116,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                         ous,
                         issuedPasswords,
                         issuedAccountUpns,
+                        issuedSamAccountNames,
                         rootDomain);
                     world.Accounts.AddRange(externalAccounts);
 
@@ -1831,7 +1834,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Department> departments,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         string rootDomain,
-        HashSet<string> issuedPasswords)
+        HashSet<string> issuedPasswords,
+        ISet<string> issuedSamAccountNames)
     {
         var usersOu = ous.First(o => o.Name == "Users");
         var departmentOus = ous
@@ -1842,7 +1846,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         return people.Select(person =>
         {
-            var sam = BuildSam(person.FirstName, person.LastName, person.EmployeeId);
+            var sam = EnsureUniqueSamAccountName(BuildSam(person.FirstName, person.LastName, person.EmployeeId), issuedSamAccountNames);
             var targetOu = departmentNamesById.TryGetValue(person.DepartmentId, out var departmentName) &&
                            departmentOus.TryGetValue(departmentName, out var departmentOu)
                 ? departmentOu
@@ -1891,6 +1895,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string rootDomain,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
+        ISet<string> issuedSamAccountNames,
         bool includeAdministrativeTiers)
     {
         var defaultOu = ous.First(o => o.Name == "Service Accounts");
@@ -1904,6 +1909,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var blueprint = BuildServiceAccountBlueprint(company, i);
             var targetOu = blueprint.AdministrativeTier is null ? defaultOu : tier1Ou;
             var upn = BuildUniqueDirectoryAccountUpn(blueprint.UserPrincipalNameLocalPart, rootDomain, issuedAccountUpns);
+            var samAccountName = EnsureUniqueSamAccountName(blueprint.SamAccountName, issuedSamAccountNames);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(7, 180));
             var lifecycle = CreateAccountLifecycle(passwordLastSet, 180, 3650, 30);
             results.Add(new DirectoryAccount
@@ -1912,7 +1918,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 AccountType = "Service",
                 DisplayName = blueprint.CommonName,
-                SamAccountName = blueprint.SamAccountName,
+                SamAccountName = samAccountName,
                 UserPrincipalName = upn,
                 Mail = null,
                 Domain = rootDomain,
@@ -1946,16 +1952,18 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         string rootDomain,
         HashSet<string> issuedPasswords,
-        ISet<string> issuedAccountUpns)
+        ISet<string> issuedAccountUpns,
+        ISet<string> issuedSamAccountNames)
     {
         var targetOu = ous.First(o => o.Name == "Shared Mailboxes");
-        var mailboxPrefixes = new[] { "helpdesk", "payroll", "accounts-payable", "sales-ops", "recruiting", "facilities", "it-ops" };
         var results = new List<DirectoryAccount>();
 
         for (var i = 0; i < definition.SharedMailboxCount; i++)
         {
-            var localPart = mailboxPrefixes[i % mailboxPrefixes.Length];
+            var blueprint = BuildSharedMailboxBlueprint(i);
+            var localPart = blueprint.LocalPart;
             var upn = BuildUniqueDirectoryAccountUpn(localPart, rootDomain, issuedAccountUpns);
+            var samAccountName = EnsureUniqueSamAccountName(Truncate(localPart.Replace("-", ""), 20), issuedSamAccountNames);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(14, 180));
             var lifecycle = CreateAccountLifecycle(passwordLastSet, 90, 2190, 21);
             results.Add(new DirectoryAccount
@@ -1963,12 +1971,12 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 Id = _idFactory.Next("ACT"),
                 CompanyId = company.Id,
                 AccountType = "Shared",
-                DisplayName = localPart,
-                SamAccountName = Truncate(localPart.Replace("-", ""), 20),
+                DisplayName = blueprint.DisplayName,
+                SamAccountName = samAccountName,
                 UserPrincipalName = upn,
                 Mail = upn,
                 Domain = rootDomain,
-                DistinguishedName = $"CN={EscapeDn(localPart)},{targetOu.DistinguishedName}",
+                DistinguishedName = $"CN={EscapeDn(blueprint.DisplayName)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
                 Enabled = true,
                 Privileged = false,
@@ -1992,6 +2000,61 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return results;
     }
 
+    private static string EnsureUniqueSamAccountName(string baseValue, ISet<string> issuedValues)
+    {
+        var normalizedBase = string.IsNullOrWhiteSpace(baseValue) ? "shared" : baseValue.Trim();
+        var candidate = Truncate(normalizedBase, 20);
+        if (issuedValues.Add(candidate))
+        {
+            return candidate;
+        }
+
+        for (var suffix = 2; suffix < 1000; suffix++)
+        {
+            var suffixText = suffix.ToString(CultureInfo.InvariantCulture);
+            candidate = Truncate($"{normalizedBase}{suffixText}", 20);
+            if (issuedValues.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return candidate;
+    }
+
+    private SharedMailboxBlueprint BuildSharedMailboxBlueprint(int index)
+    {
+        var patterns = new[]
+        {
+            new SharedMailboxPattern("helpdesk", "Help Desk", ["North America", "Canada", "Mexico", "VIP", "Field Services", "Manufacturing", "After Hours", "Escalations", "Contractors"]),
+            new SharedMailboxPattern("payroll", "Payroll", ["Corporate", "United States", "Canada", "Mexico", "Hourly", "Salaried", "Leadership", "Escalations", "Audits"]),
+            new SharedMailboxPattern("accounts-payable", "Accounts Payable", ["Corporate", "Operations", "North America", "Canada", "Mexico", "Vendors", "Escalations", "Shared Services", "Travel"]),
+            new SharedMailboxPattern("sales-ops", "Sales Operations", ["North America", "Strategic Accounts", "Channel", "Renewals", "Forecasting", "Deal Desk", "Commercial", "Escalations", "Leadership"]),
+            new SharedMailboxPattern("recruiting", "Recruiting", ["Corporate", "Campus", "North America", "Manufacturing", "Technology", "Operations", "Executive", "Escalations", "Programs"]),
+            new SharedMailboxPattern("facilities", "Facilities", ["Corporate", "Plant Operations", "North America", "Canada", "Mexico", "Real Estate", "Safety", "Escalations", "Projects"]),
+            new SharedMailboxPattern("it-ops", "IT Operations", ["Service Desk", "Infrastructure", "Endpoint", "Identity", "North America", "Canada", "Mexico", "After Hours", "Escalations"])
+        };
+
+        var pattern = patterns[index % patterns.Length];
+        var variantIndex = index / patterns.Length;
+        if (variantIndex <= 0)
+        {
+            return new SharedMailboxBlueprint(pattern.LocalPart, pattern.DisplayName);
+        }
+
+        if (variantIndex - 1 < pattern.Qualifiers.Count)
+        {
+            var qualifier = pattern.Qualifiers[variantIndex - 1];
+            return new SharedMailboxBlueprint(
+                $"{pattern.LocalPart}-{Slug(qualifier)}",
+                $"{pattern.DisplayName} - {qualifier}");
+        }
+
+        return new SharedMailboxBlueprint(
+            $"{pattern.LocalPart}-shared-{variantIndex:00}",
+            $"{pattern.DisplayName} - Shared Services {variantIndex:00}");
+    }
+
     private List<DirectoryAccount> CreatePrivilegedAccounts(
         Company company,
         IReadOnlyList<Person> people,
@@ -1999,6 +2062,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string rootDomain,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
+        ISet<string> issuedSamAccountNames,
         bool includeAdministrativeTiers)
     {
         var managers = people.Where(person =>
@@ -2018,6 +2082,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var employeeSuffix = Slug(person.EmployeeId);
             var localPart = $"adm.{Slug(person.FirstName)}.{Slug(person.LastName)}.{employeeSuffix}";
             var upn = BuildUniqueDirectoryAccountUpn(localPart, rootDomain, issuedAccountUpns);
+            var samAccountName = EnsureUniqueSamAccountName(Truncate($"adm_{Slug(person.LastName)}_{employeeSuffix}", 20), issuedSamAccountNames);
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 45));
             var lifecycle = CreateAccountLifecycle(passwordLastSet, 60, 1460, 7);
 
@@ -2028,7 +2093,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PersonId = person.Id,
                 AccountType = "Privileged",
                 DisplayName = BuildSecondaryAccountDisplayName(person, "Admin"),
-                SamAccountName = Truncate($"adm_{Slug(person.LastName)}_{employeeSuffix}", 20),
+                SamAccountName = samAccountName,
                 UserPrincipalName = upn,
                 Mail = null,
                 Domain = rootDomain,
@@ -2150,6 +2215,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     }
 
     private sealed record AccountLifecycle(DateTimeOffset? LastLogon, DateTimeOffset WhenCreated, DateTimeOffset WhenModified);
+    private sealed record SharedMailboxPattern(string LocalPart, string DisplayName, IReadOnlyList<string> Qualifiers);
+    private sealed record SharedMailboxBlueprint(string LocalPart, string DisplayName);
 
     private List<DirectoryGroup> CreateGroups(
         Company company,
@@ -3004,6 +3071,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
+        ISet<string> issuedSamAccountNames,
         string rootDomain)
     {
         var contractorsOu = ous.First(o => o.Name == "Contractors");
@@ -3110,6 +3178,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 _ => $"{Slug(person.FirstName)}.{Slug(person.LastName)}.{Slug(person.EmployeeId)}.ctr"
             };
             var upn = BuildUniqueDirectoryAccountUpn(localPart, rootDomain, issuedAccountUpns);
+            var samAccountName = EnsureUniqueSamAccountName(BuildExternalSam(person, accountType), issuedSamAccountNames);
             var targetOu = accountType switch
             {
                 "ManagedServiceProvider" => managedServicesOu,
@@ -3132,7 +3201,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PersonId = person.Id,
                 AccountType = accountType,
                 DisplayName = person.DisplayName,
-                SamAccountName = BuildExternalSam(person, accountType),
+                SamAccountName = samAccountName,
                 UserPrincipalName = upn,
                 Mail = accountType == "Guest" ? null : upn,
                 Domain = rootDomain,
@@ -4506,7 +4575,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         => "GG Tier2 Application Support";
 
     private static string ResolveMailboxToken(DirectoryAccount sharedAccount)
-        => sharedAccount.UserPrincipalName?.Split('@')[0].Replace(".", " ", StringComparison.OrdinalIgnoreCase)
+        => sharedAccount.DisplayName
+           ?? sharedAccount.UserPrincipalName?.Split('@')[0].Replace(".", " ", StringComparison.OrdinalIgnoreCase)
                .Replace("-", " ", StringComparison.OrdinalIgnoreCase)
            ?? sharedAccount.SamAccountName
            ?? "Shared Mailbox";
@@ -4682,8 +4752,16 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private static string BuildSam(string firstName, string lastName, string employeeId)
     {
         var safeEmployeeId = string.IsNullOrWhiteSpace(employeeId) ? "000" : employeeId;
-        var suffix = safeEmployeeId.Length >= 3 ? safeEmployeeId[^3..] : safeEmployeeId.PadLeft(3, '0');
+        var employeeDigits = new string(safeEmployeeId.Where(char.IsDigit).ToArray());
+        var suffixSource = string.IsNullOrWhiteSpace(employeeDigits) ? safeEmployeeId : employeeDigits;
+        var suffix = suffixSource.Length >= 5 ? suffixSource[^5..] : suffixSource.PadLeft(5, '0');
         var baseValue = $"{Slug(firstName).FirstOrDefault()}{Slug(lastName)}";
+        var nameBudget = Math.Max(1, 20 - suffix.Length);
+        if (baseValue.Length > nameBudget)
+        {
+            baseValue = baseValue[..nameBudget];
+        }
+
         return Truncate($"{baseValue}{suffix}", 20);
     }
 
@@ -4722,7 +4800,19 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             _ => "ctr"
         };
 
-        return Truncate($"{suffix}_{Slug(person.LastName)}", 20);
+        var employeeToken = string.IsNullOrWhiteSpace(person.EmployeeId)
+            ? Slug(person.FirstName)
+            : Slug(person.EmployeeId);
+        var uniqueToken = employeeToken.Length >= 6 ? employeeToken[^6..] : employeeToken;
+        var lastNameToken = Slug(person.LastName);
+        var reservedLength = suffix.Length + 1 + uniqueToken.Length + 1;
+        var lastNameBudget = Math.Max(1, 20 - reservedLength);
+        if (lastNameToken.Length > lastNameBudget)
+        {
+            lastNameToken = lastNameToken[..lastNameBudget];
+        }
+
+        return Truncate($"{suffix}_{lastNameToken}_{uniqueToken}", 20);
     }
 
     private static string BuildGuestUpnLocalPart(string firstName, string lastName, string homeTenantDomain)

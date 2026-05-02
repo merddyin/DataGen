@@ -8,6 +8,7 @@ public static class WorldQualityValidationService
     [
         "duplicate_person_upns",
         "duplicate_account_upns",
+        "duplicate_account_sam_account_names",
         "companies_missing_identity_metadata",
         "application_counterparty_links_missing_org",
         "process_counterparty_links_missing_org",

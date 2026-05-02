@@ -2137,27 +2137,35 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             }
         }
 
-        var duplicateDisplayName = $"{first.Name} {last.Name}";
-        return (first, last, duplicateDisplayName);
+        const string middleInitials = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        for (var offset = 0; offset < middleInitials.Length; offset++)
+        {
+            var middleInitial = middleInitials[(personIndex + offset) % middleInitials.Length];
+            var candidateDisplayName = $"{first.Name} {middleInitial}. {last.Name}";
+            if (issuedDisplayNames.Add(candidateDisplayName))
+            {
+                return (first, last, candidateDisplayName);
+            }
+        }
+
+        for (var suffix = 2; suffix < 1000; suffix++)
+        {
+            var candidateDisplayName = $"{first.Name} {last.Name} {suffix}";
+            if (issuedDisplayNames.Add(candidateDisplayName))
+            {
+                return (first, last, candidateDisplayName);
+            }
+        }
+
+        var fallbackDisplayName = $"{first.Name} {last.Name} {personIndex + 1}";
+        _ = issuedDisplayNames.Add(fallbackDisplayName);
+        return (first, last, fallbackDisplayName);
     }
 
     private static List<(string Name, string Country)> BuildScopedNamePool(
         params IEnumerable<(string Name, string Country)>[] pools)
     {
-        foreach (var pool in pools)
-        {
-            var values = pool
-                .Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
-                .Distinct()
-                .ToList();
-
-            if (values.Count > 0)
-            {
-                return values;
-            }
-        }
-
-        return new();
+        return CombineDistinctNameEntries(pools);
     }
 
     private static List<(string Name, string Country)> CombineDistinctNameEntries(params IEnumerable<(string Name, string Country)>[] pools)

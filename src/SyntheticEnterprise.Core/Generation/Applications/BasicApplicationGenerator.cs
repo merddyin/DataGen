@@ -134,6 +134,69 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             {
                 world.ApplicationDependencies.Add(dependency);
             }
+
+            CreateApplicationAccessEvidence(world, company, departments, companyApplications);
+        }
+    }
+
+    private void CreateApplicationAccessEvidence(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<Department> departments,
+        IReadOnlyList<ApplicationRecord> applications)
+    {
+        var groups = world.Groups.Where(group => string.Equals(group.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (groups.Count == 0 || applications.Count == 0)
+        {
+            return;
+        }
+
+        var allEmployees = FindGroup(groups, "GG All Employees");
+        var officeUsers = FindGroup(groups, "GG Microsoft 365 Users");
+        var officeAdmins = FindGroup(groups, "GG Microsoft 365 Admins");
+        var erpUsers = FindGroup(groups, "GG ERP Users");
+        var erpAdmins = FindGroup(groups, "GG ERP Admins");
+        var crmUsers = FindGroup(groups, "GG CRM Users");
+        var crmAdmins = FindGroup(groups, "GG CRM Admins");
+        var hrisUsers = FindGroup(groups, "GG HRIS Users");
+        var hrisAdmins = FindGroup(groups, "GG HRIS Admins");
+        var itsmAgents = FindGroup(groups, "GG ITSM Agents");
+        var itsmAdmins = FindGroup(groups, "GG ITSM Admins");
+        var sqlAdmins = FindGroup(groups, "GG SQL Administrators");
+        var browserPilotUsers = FindGroup(groups, "GG Browser Pilot Users");
+        var remoteSupportOperators = FindGroup(groups, "GG Remote Support Operators");
+        var privilegedIdentityAdmins = FindGroup(groups, "GG Tier0 Identity Admins");
+
+        foreach (var application in applications)
+        {
+            var ownerDepartmentGroup = FindDepartmentGroup(groups, departments, application.OwnerDepartmentId);
+            foreach (var accessGroup in ResolveApplicationAccessGroups(
+                         application,
+                         ownerDepartmentGroup,
+                         allEmployees,
+                         officeUsers,
+                         erpUsers,
+                         crmUsers,
+                         hrisUsers,
+                         itsmAgents,
+                         browserPilotUsers))
+            {
+                AddAccessControlEvidence(world, company.Id, accessGroup, application, "ApplicationAccess", "Allow", ResolveApplicationAccessSource(application));
+            }
+
+            foreach (var adminGroup in ResolveApplicationAdminGroups(
+                         application,
+                         officeAdmins,
+                         erpAdmins,
+                         crmAdmins,
+                         hrisAdmins,
+                         itsmAdmins,
+                         sqlAdmins,
+                         remoteSupportOperators,
+                         privilegedIdentityAdmins))
+            {
+                AddAccessControlEvidence(world, company.Id, adminGroup, application, "ApplicationAdministration", "Allow", ResolveApplicationAccessSource(application));
+            }
         }
     }
 
@@ -2039,6 +2102,334 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
             _ => "Enterprise"
         };
     }
+
+    private static IEnumerable<DirectoryGroup> ResolveApplicationAccessGroups(
+        ApplicationRecord application,
+        DirectoryGroup? ownerDepartmentGroup,
+        DirectoryGroup? allEmployees,
+        DirectoryGroup? officeUsers,
+        DirectoryGroup? erpUsers,
+        DirectoryGroup? crmUsers,
+        DirectoryGroup? hrisUsers,
+        DirectoryGroup? itsmAgents,
+        DirectoryGroup? browserPilotUsers)
+    {
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (LooksLikeErpApplication(application))
+        {
+            foreach (var group in YieldDistinct(erpUsers, ownerDepartmentGroup))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+            yield break;
+        }
+
+        if (LooksLikeCrmApplication(application))
+        {
+            foreach (var group in YieldDistinct(crmUsers, ownerDepartmentGroup))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+            yield break;
+        }
+
+        if (LooksLikeHrisApplication(application))
+        {
+            foreach (var group in YieldDistinct(hrisUsers, ownerDepartmentGroup))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+            yield break;
+        }
+
+        if (LooksLikeItsmApplication(application))
+        {
+            foreach (var group in YieldDistinct(itsmAgents, ownerDepartmentGroup))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+            yield break;
+        }
+
+        if (LooksLikeEnterpriseProductivityApplication(application))
+        {
+            foreach (var group in YieldDistinct(officeUsers, allEmployees, ownerDepartmentGroup))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+            yield break;
+        }
+
+        if (LooksLikeBrowserPlatform(application))
+        {
+            foreach (var group in YieldDistinct(officeUsers, browserPilotUsers))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+            yield break;
+        }
+
+        foreach (var group in YieldDistinct(ownerDepartmentGroup))
+        {
+            if (emitted.Add(group.Id))
+            {
+                yield return group;
+            }
+        }
+    }
+
+    private static IEnumerable<DirectoryGroup> ResolveApplicationAdminGroups(
+        ApplicationRecord application,
+        DirectoryGroup? officeAdmins,
+        DirectoryGroup? erpAdmins,
+        DirectoryGroup? crmAdmins,
+        DirectoryGroup? hrisAdmins,
+        DirectoryGroup? itsmAdmins,
+        DirectoryGroup? sqlAdmins,
+        DirectoryGroup? remoteSupportOperators,
+        DirectoryGroup? privilegedIdentityAdmins)
+    {
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (LooksLikeErpApplication(application))
+        {
+            foreach (var group in YieldDistinct(erpAdmins))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+
+        if (LooksLikeCrmApplication(application))
+        {
+            foreach (var group in YieldDistinct(crmAdmins))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+
+        if (LooksLikeHrisApplication(application))
+        {
+            foreach (var group in YieldDistinct(hrisAdmins))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+
+        if (LooksLikeItsmApplication(application) || LooksLikeSecurityConsole(application))
+        {
+            foreach (var group in YieldDistinct(itsmAdmins, remoteSupportOperators))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+
+        if (LooksLikeIdentityAdministrationApplication(application))
+        {
+            foreach (var group in YieldDistinct(privilegedIdentityAdmins, officeAdmins))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+
+        if (LooksLikeSqlOrWarehouseApplication(application))
+        {
+            foreach (var group in YieldDistinct(sqlAdmins))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+
+        if (LooksLikeEnterpriseProductivityApplication(application) || application.Name.Contains("Admin", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var group in YieldDistinct(officeAdmins))
+            {
+                if (emitted.Add(group.Id))
+                {
+                    yield return group;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<DirectoryGroup> YieldDistinct(params DirectoryGroup?[] groups)
+        => groups
+            .Where(group => group is not null)
+            .Select(group => group!)
+            .GroupBy(group => group.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First());
+
+    private static DirectoryGroup? FindGroup(IEnumerable<DirectoryGroup> groups, string name)
+        => groups.FirstOrDefault(group => string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    private static DirectoryGroup? FindDepartmentGroup(
+        IEnumerable<DirectoryGroup> groups,
+        IEnumerable<Department> departments,
+        string? departmentId)
+    {
+        var department = departments.FirstOrDefault(candidate => string.Equals(candidate.Id, departmentId, StringComparison.OrdinalIgnoreCase));
+        if (department is null)
+        {
+            return null;
+        }
+
+        return FindGroup(groups, $"GG {department.Name} Users");
+    }
+
+    private void AddAccessControlEvidence(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        DirectoryGroup group,
+        ApplicationRecord application,
+        string rightName,
+        string accessType,
+        string sourceSystem)
+    {
+        if (world.AccessControlEvidence.Any(evidence =>
+                string.Equals(evidence.CompanyId, companyId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.PrincipalObjectId, group.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.TargetType, "Application", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.TargetId, application.Id, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.RightName, rightName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.AccessType, accessType, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        world.AccessControlEvidence.Add(new AccessControlEvidenceRecord
+        {
+            Id = _idFactory.Next("ACE"),
+            CompanyId = companyId,
+            PrincipalObjectId = group.Id,
+            PrincipalType = "Group",
+            TargetType = "Application",
+            TargetId = application.Id,
+            RightName = rightName,
+            AccessType = accessType,
+            IsInherited = false,
+            IsDefaultEntry = false,
+            SourceSystem = sourceSystem
+        });
+    }
+
+    private static string ResolveApplicationAccessSource(ApplicationRecord application)
+        => application.HostingModel switch
+        {
+            "SaaS" => "EntraID",
+            "Hybrid" => "HybridDirectory",
+            _ => "ApplicationDirectory"
+        };
+
+    private static bool LooksLikeErpApplication(ApplicationRecord application)
+        => System.Text.RegularExpressions.Regex.IsMatch(
+               application.Name,
+               @"\berp\b",
+               System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)
+           || application.Name.Contains("S/4HANA", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Oracle Fusion", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Concur", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Ariba", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Coupa", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Blue Yonder", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Warehouse Management", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Demand Planning", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Extended Warehouse Management", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("AVEVA", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("PI System", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeCrmApplication(ApplicationRecord application)
+        => application.Name.Contains("CRM", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Salesforce", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Gong", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Sales Cloud", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Experience Cloud", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeHrisApplication(ApplicationRecord application)
+        => application.Name.Contains("HRIS", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("HCM", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Workday", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Learning", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Recruit", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeItsmApplication(ApplicationRecord application)
+        => application.Name.Contains("Service Management", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("ServiceNow", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("PagerDuty", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Remote Support", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Knowledge Portal", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeEnterpriseProductivityApplication(ApplicationRecord application)
+        => application.Category is "Productivity" or "Collaboration"
+           || application.Name.Contains("Microsoft 365", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Teams", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Zoom", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Slack", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Confluence", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Box", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Smartsheet", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeBrowserPlatform(ApplicationRecord application)
+        => application.Name.Contains("Browser", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Edge", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Chrome", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeSqlOrWarehouseApplication(ApplicationRecord application)
+        => application.Category == "Database"
+           || application.Name.Contains("SQL", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Warehouse", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Snowflake", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Databricks", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeIdentityAdministrationApplication(ApplicationRecord application)
+        => application.Name.Contains("Entra Admin", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Identity Portal", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("SailPoint", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Okta Workforce Identity", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeSecurityConsole(ApplicationRecord application)
+        => application.Category == "Security"
+           || application.Name.Contains("Falcon Console", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Defender", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Splunk", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Datadog", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("Netskope", StringComparison.OrdinalIgnoreCase)
+           || application.Name.Contains("BeyondTrust", StringComparison.OrdinalIgnoreCase);
 
     private static ApplicationRecord? FindApplication(IReadOnlyList<ApplicationRecord> applications, string nameFragment)
         => applications.FirstOrDefault(app => app.Name.Contains(nameFragment, StringComparison.OrdinalIgnoreCase));

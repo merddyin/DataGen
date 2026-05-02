@@ -44,6 +44,7 @@ public sealed class FlagshipRealismAcceptanceTests
 
         Assert.Equal(0, audit.Metrics["duplicate_person_upns"]);
         Assert.Equal(0, audit.Metrics["duplicate_account_upns"]);
+        Assert.Equal(0, audit.Metrics["duplicate_account_sam_account_names"]);
         Assert.Equal(0, audit.Metrics["duplicate_person_display_names"]);
         Assert.True(audit.Metrics["max_person_display_name_repeat"] <= 1, $"Expected person display names to remain unique, found max repeat of {audit.Metrics["max_person_display_name_repeat"]}.");
         Assert.Equal(0, audit.Metrics["duplicate_application_names"]);
@@ -152,6 +153,7 @@ public sealed class FlagshipRealismAcceptanceTests
         Assert.True(audit.Metrics["max_person_display_name_repeat"] <= 1);
         Assert.Equal(0, audit.Metrics["duplicate_person_upns"]);
         Assert.Equal(0, audit.Metrics["duplicate_account_upns"]);
+        Assert.Equal(0, audit.Metrics["duplicate_account_sam_account_names"]);
         Assert.DoesNotContain(
             audit.Warnings,
             warning => warning.Contains("duplicate person display names", StringComparison.OrdinalIgnoreCase));
@@ -212,6 +214,7 @@ public sealed class FlagshipRealismAcceptanceTests
         Assert.True(audit.Metrics["max_person_display_name_repeat"] <= 1);
         Assert.Equal(0, audit.Metrics["duplicate_person_upns"]);
         Assert.Equal(0, audit.Metrics["duplicate_account_upns"]);
+        Assert.Equal(0, audit.Metrics["duplicate_account_sam_account_names"]);
         Assert.DoesNotContain(
             audit.Warnings,
             warning => warning.Contains("duplicate person display names", StringComparison.OrdinalIgnoreCase));

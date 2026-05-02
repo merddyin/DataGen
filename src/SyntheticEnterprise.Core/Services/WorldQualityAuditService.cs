@@ -22,6 +22,7 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "max_person_display_name_repeat_over_limit", "a person display name is repeating more often than the realism limit allows.");
         AppendMetricWarning(warnings, metrics, "duplicate_person_upns", "duplicate person user principal names were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_account_upns", "duplicate directory account user principal names were generated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_account_sam_account_names", "duplicate directory account sAMAccountName values were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_generated_passwords", "duplicate generated passwords were detected.");
         AppendMetricWarning(warnings, metrics, "accounts_missing_temporal_identity_evidence", "accounts are missing temporal identity evidence such as last logon or created/modified timestamps.");
         AppendMetricWarning(warnings, metrics, "workstations_missing_identity_evidence", "workstations are missing both assigned-user and directory-account evidence.");
@@ -87,6 +88,7 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["max_person_display_name_repeat_over_limit"] = Math.Max(0, CountMaxRepeat(world.People.Select(person => person.DisplayName)) - 3),
             ["duplicate_person_upns"] = CountDuplicateValues(world.People.Select(person => person.UserPrincipalName)),
             ["duplicate_account_upns"] = CountDuplicateValues(world.Accounts.Select(account => account.UserPrincipalName)),
+            ["duplicate_account_sam_account_names"] = CountDuplicateValues(world.Accounts.Select(account => account.SamAccountName)),
             ["duplicate_generated_passwords"] = CountDuplicateValues(world.Accounts.Select(account => account.GeneratedPassword)),
             ["accounts_missing_temporal_identity_evidence"] = CountAccountsMissingTemporalEvidence(world),
             ["workstations_missing_identity_evidence"] = CountWorkstationsMissingIdentityEvidence(world),

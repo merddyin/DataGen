@@ -229,7 +229,7 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
             "account previous invited-by references",
             warnings);
         updatedCount += NullInvalidReferences(world.Accounts,
-            account => !ouIds.Contains(account.OuId),
+            account => HasInvalidAccountOuReference(account, ouIds),
             account => account with { OuId = string.Empty, DistinguishedName = account.SamAccountName },
             "account OU references",
             warnings);
@@ -358,6 +358,27 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
             "Account" => accountIds.Contains(principalObjectId),
             _ => groupIds.Contains(principalObjectId)
         };
+
+    private static bool HasInvalidAccountOuReference(DirectoryAccount account, HashSet<string> ouIds)
+    {
+        if (!string.IsNullOrWhiteSpace(account.OuId))
+        {
+            return !ouIds.Contains(account.OuId);
+        }
+
+        return RequiresAccountOuReference(account);
+    }
+
+    private static bool RequiresAccountOuReference(DirectoryAccount account)
+    {
+        if (string.IsNullOrWhiteSpace(account.Domain))
+        {
+            return false;
+        }
+
+        return string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(account.IdentityProvider, "ActiveDirectory", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool HostExists(string hostType, string? hostId, HashSet<string> serverIds, HashSet<string> deviceIds)
     {

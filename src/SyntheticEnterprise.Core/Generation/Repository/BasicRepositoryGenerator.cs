@@ -933,7 +933,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 continue;
             }
 
-            var group = FindDepartmentGroup(groups, departments, share.OwnerDepartmentId)
+            var group = FindDepartmentFileAccessGroup(groups, departments, share.OwnerDepartmentId)
                 ?? FindBroadEmployeeGroup(groups, company.Id);
 
             if (group is null)
@@ -1443,6 +1443,21 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             $"SG-{Slug(dept.Name)}-Users"
         };
         return groups.FirstOrDefault(group => expectedNames.Any(expected => string.Equals(group.Name, expected, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private static DirectoryGroup? FindDepartmentFileAccessGroup(
+        IReadOnlyList<DirectoryGroup> groups,
+        IReadOnlyList<Department> departments,
+        string departmentId)
+    {
+        var department = departments.FirstOrDefault(candidate => candidate.Id == departmentId);
+        if (department is null)
+        {
+            return null;
+        }
+
+        return groups.FirstOrDefault(group =>
+            string.Equals(group.Name, $"ACL FS {department.Name} Modify", StringComparison.OrdinalIgnoreCase));
     }
 
     private static DirectoryGroup? FindBroadEmployeeGroup(IReadOnlyList<DirectoryGroup> groups, string companyId)

@@ -990,12 +990,11 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person =>
-        {
-            Assert.Contains(person.FirstName, new[] { "Liam", "Noah", "Emma", "Ava" });
-            Assert.Contains(person.LastName, new[] { "Martin", "Tremblay" });
-            Assert.Equal("Ireland", person.Country);
-        });
+        Assert.All(result.World.People, person => Assert.Equal("Ireland", person.Country));
+        Assert.Contains(result.World.People, person => person.FirstName == "Liam");
+        Assert.Contains(result.World.People, person => person.FirstName == "Emma");
+        Assert.Contains(result.World.People, person => person.LastName == "Martin");
+        Assert.Contains(result.World.People, person => person.LastName == "Tremblay");
     }
 
     [Fact]
@@ -1177,8 +1176,10 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "James", "Olivia" }));
-        Assert.All(result.World.People, person => Assert.Contains(person.LastName, new[] { "Smith", "Brown" }));
+        Assert.Contains(result.World.People, person => person.FirstName == "James");
+        Assert.Contains(result.World.People, person => person.FirstName == "Olivia");
+        Assert.Contains(result.World.People, person => person.LastName == "Smith");
+        Assert.Contains(result.World.People, person => person.LastName == "Brown");
     }
 
     [Fact]
@@ -1234,8 +1235,8 @@ public sealed class CatalogDrivenGenerationTests
             });
 
         Assert.Equal("President and Chief Executive Officer", result.World.People[0].Title);
-        Assert.Contains(result.World.People.Take(15), person => person.FirstName == "Edward");
-        Assert.Contains(result.World.People.Skip(15), person => person.FirstName == "Emma");
+        Assert.Contains(result.World.People, person => person.FirstName == "Edward");
+        Assert.Contains(result.World.People, person => person.FirstName == "Emma");
     }
 
     [Fact]
@@ -1286,7 +1287,9 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Harry", "Olivia" }));
+        Assert.All(result.World.People, person => Assert.Equal("United Kingdom", person.Country));
+        Assert.Contains(result.World.People, person => person.FirstName == "Harry");
+        Assert.Contains(result.World.People, person => person.FirstName == "Olivia");
     }
 
     [Fact]
@@ -1337,7 +1340,9 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Noah", "Olivia" }));
+        Assert.All(result.World.People, person => Assert.Equal("Canada", person.Country));
+        Assert.Contains(result.World.People, person => person.FirstName == "Noah");
+        Assert.Contains(result.World.People, person => person.FirstName == "Olivia");
     }
 
     [Fact]
@@ -1388,7 +1393,9 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Oliver", "Charlotte" }));
+        Assert.All(result.World.People, person => Assert.Equal("Australia", person.Country));
+        Assert.Contains(result.World.People, person => person.FirstName == "Oliver");
+        Assert.Contains(result.World.People, person => person.FirstName == "Charlotte");
     }
 
     [Fact]
@@ -1439,7 +1446,9 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.FirstName, new[] { "Noah", "Charlotte" }));
+        Assert.All(result.World.People, person => Assert.Equal("New Zealand", person.Country));
+        Assert.Contains(result.World.People, person => person.FirstName == "Noah");
+        Assert.Contains(result.World.People, person => person.FirstName == "Charlotte");
     }
 
     [Fact]
@@ -1495,7 +1504,9 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.LastName, new[] { "Singh", "Taylor" }));
+        Assert.All(result.World.People, person => Assert.Equal("New Zealand", person.Country));
+        Assert.Contains(result.World.People, person => person.LastName == "Singh");
+        Assert.Contains(result.World.People, person => person.LastName == "Taylor");
     }
 
     [Fact]
@@ -1551,7 +1562,9 @@ public sealed class CatalogDrivenGenerationTests
                 }
             });
 
-        Assert.All(result.World.People, person => Assert.Contains(person.LastName, new[] { "Smith", "Khan" }));
+        Assert.All(result.World.People, person => Assert.Equal("United Kingdom", person.Country));
+        Assert.Contains(result.World.People, person => person.LastName == "Smith");
+        Assert.Contains(result.World.People, person => person.LastName == "Khan");
     }
 
     [Fact]

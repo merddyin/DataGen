@@ -34,6 +34,7 @@ internal static class WorldQualityReportBuilder
         "people_office_country_mismatch",
         "duplicate_person_upns",
         "duplicate_account_upns",
+        "duplicate_account_sam_account_names",
         "duplicate_generated_passwords",
         "duplicate_external_org_names"
     ];
@@ -132,6 +133,7 @@ internal static class WorldQualityReportBuilder
                 IssueInput("people_office_country_mismatch", "People/office country mismatch", 10m, "count", "People should align with the country of their assigned office."),
                 IssueInput("duplicate_person_upns", "Duplicate person UPNs", 16m, "count", "People should not share user principal names."),
                 IssueInput("duplicate_account_upns", "Duplicate account UPNs", 16m, "count", "Directory accounts should not share user principal names."),
+                IssueInput("duplicate_account_sam_account_names", "Duplicate account sAMAccountNames", 16m, "count", "Directory accounts should not share sAMAccountName values within the same directory surface."),
                 IssueInput("duplicate_generated_passwords", "Duplicate generated passwords", 8m, "count", "Generated passwords should not collide across accounts."),
                 IssueInput("duplicate_external_org_names", "Duplicate external organization names", 8m, "count", "Counterparty names should be unique enough to avoid graph ambiguity.")
             });

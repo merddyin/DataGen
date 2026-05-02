@@ -63,4 +63,78 @@ public sealed class WorldReferenceRepairServiceTests
         Assert.Contains(world.PluginRecords, record => record.Id == "PLUGIN-001" && record.AssociatedEntityType is null && record.AssociatedEntityId is null);
         Assert.NotEmpty(result.Warnings);
     }
+
+    [Fact]
+    public void Repair_Does_Not_Flag_Blank_Account_OuIds_As_Invalid()
+    {
+        var world = new SyntheticEnterpriseWorld
+        {
+            Companies = { new Company { Id = "CO-001", Name = "Contoso", Industry = "Manufacturing" } },
+            Accounts =
+            {
+                new DirectoryAccount
+                {
+                    Id = "ACT-DEVICE-001",
+                    CompanyId = "CO-001",
+                    AccountType = "Device",
+                    IdentityProvider = "EntraID",
+                    DisplayName = "PAW-CONTOSO-001",
+                    SamAccountName = "PAW-CONTOSO-001",
+                    UserPrincipalName = "paw-contoso-001@contoso.test",
+                    DistinguishedName = "PAW-CONTOSO-001",
+                    OuId = string.Empty
+                }
+            }
+        };
+
+        var service = new WorldReferenceRepairService();
+
+        var result = service.Repair(world);
+
+        Assert.Equal(0, result.UpdatedCount);
+        Assert.DoesNotContain(result.Warnings, warning =>
+            warning.Contains("account OU references", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(world.Accounts, account =>
+            account.Id == "ACT-DEVICE-001"
+            && string.IsNullOrWhiteSpace(account.OuId)
+            && string.Equals(account.DistinguishedName, "PAW-CONTOSO-001", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Repair_Flags_Blank_Account_OuIds_For_HybridDirectory_Accounts_With_Domain()
+    {
+        var world = new SyntheticEnterpriseWorld
+        {
+            Companies = { new Company { Id = "CO-001", Name = "Contoso", Industry = "Manufacturing" } },
+            Accounts =
+            {
+                new DirectoryAccount
+                {
+                    Id = "ACT-USER-001",
+                    CompanyId = "CO-001",
+                    AccountType = "User",
+                    IdentityProvider = "HybridDirectory",
+                    DisplayName = "Ava Reed",
+                    SamAccountName = "areed",
+                    UserPrincipalName = "ava.reed@contoso.test",
+                    Mail = "ava.reed@contoso.test",
+                    Domain = "contoso.test",
+                    DistinguishedName = "CN=Ava Reed,DC=contoso,DC=test",
+                    OuId = string.Empty
+                }
+            }
+        };
+
+        var service = new WorldReferenceRepairService();
+
+        var result = service.Repair(world);
+
+        Assert.Equal(1, result.UpdatedCount);
+        Assert.Contains(result.Warnings, warning =>
+            warning.Contains("account OU references", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(world.Accounts, account =>
+            account.Id == "ACT-USER-001"
+            && string.IsNullOrWhiteSpace(account.OuId)
+            && string.Equals(account.DistinguishedName, "areed", StringComparison.Ordinal));
+    }
 }

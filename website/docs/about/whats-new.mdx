@@ -7,6 +7,21 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.7.0
+
+This release focuses on realism hardening in the flagship Duckburg dataset, especially around identity, access, endpoint coverage, and release-quality naming.
+
+### Highlights
+
+- **Group-centric access realism**
+  Major enterprise applications, shared mailboxes, and file-share resources now surface clearer governing groups instead of leaning on direct assignment patterns or synthetic-looking ACL labels.
+- **Identity and endpoint cleanup**
+  Device-account display names, `sAMAccountName` uniqueness, account OU repair behavior, and endpoint/security agent coverage are all tighter and more believable across hybrid and cloud-facing identity surfaces.
+- **Stronger organization/output polish**
+  Team and resource naming was refined further, late-stage synthetic suffix artifacts were removed, and Duckburg now reads more like an enterprise environment and less like a procedurally stitched demo bundle.
+- **Broader realism validation**
+  The quality sweep now catches more release-stage issues earlier, including duplicate directory account names, weak access-label patterns, and OU-reference cleanup noise.
+
 ## v0.6.0
 
 This release focuses on realism hardening and stronger downstream export evidence, especially for DTED-oriented validation and demo datasets.

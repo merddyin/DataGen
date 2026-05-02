@@ -80,6 +80,13 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Equal(result.World.Accounts.Count, distinctAccountIds);
         Assert.Equal(result.World.People.Count, distinctPersonUpns);
         Assert.Equal(result.World.Accounts.Count, distinctAccountUpns);
+        Assert.Equal(
+            result.World.Accounts.Count(account => !string.IsNullOrWhiteSpace(account.SamAccountName)),
+            result.World.Accounts
+                .Where(account => !string.IsNullOrWhiteSpace(account.SamAccountName))
+                .Select(account => account.SamAccountName)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count());
         Assert.All(result.World.Accounts, account =>
         {
             Assert.NotNull(account.WhenCreated);
@@ -273,6 +280,11 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.Groups, group => group.Name.StartsWith("ACL FS ", StringComparison.Ordinal));
         Assert.Contains(result.World.Groups, group => group.Name.StartsWith("ACL MBX ", StringComparison.Ordinal));
         Assert.Contains(result.World.Groups, group => group.Name.EndsWith(" Leadership", StringComparison.Ordinal));
+        var sharedAccounts = result.World.Accounts.Where(account => account.AccountType == "Shared").ToList();
+        Assert.Equal(sharedAccounts.Count, sharedAccounts.Select(account => account.DisplayName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(sharedAccounts.Count, sharedAccounts.Select(account => account.SamAccountName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.DoesNotContain(result.World.Groups, group => group.Name.Contains("helpdesk2", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Groups, group => group.Name.Contains("Help Desk", StringComparison.OrdinalIgnoreCase));
         var serviceAccounts = result.World.Accounts.Where(account => account.AccountType == "Service").ToList();
         Assert.NotEmpty(serviceAccounts);
         Assert.Equal(serviceAccounts.Count, serviceAccounts.Select(account => account.SamAccountName).Distinct(StringComparer.OrdinalIgnoreCase).Count());
@@ -426,6 +438,12 @@ public sealed class IdentityInfrastructureGenerationTests
             evidence.TargetType == "Container"
             && evidence.RightName == "RemoteAssist"
             && evidence.SourceSystem == "ActiveDirectory");
+        Assert.Contains(result.World.RepositoryAccessGrants, grant =>
+            grant.RepositoryType == "FileShare"
+            && string.Equals(grant.PrincipalType, "Group", StringComparison.OrdinalIgnoreCase)
+            && result.World.Groups.Any(group =>
+                string.Equals(group.Id, grant.PrincipalObjectId, StringComparison.OrdinalIgnoreCase)
+                && group.Name.StartsWith("ACL FS ", StringComparison.Ordinal)));
         Assert.Contains(result.World.ExternalOrganizations, organization => organization.RelationshipType == "ManagedServiceProvider");
         Assert.DoesNotContain(result.World.ExternalOrganizations, organization =>
             organization.Name.Contains("Partner Collaboration", StringComparison.OrdinalIgnoreCase)

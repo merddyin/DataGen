@@ -360,6 +360,38 @@ public sealed class ApplicationGenerationTests
             dependency.DependencyType == "QualityData"
             && result.World.Applications.Any(application => application.Id == dependency.SourceApplicationId && application.Name == "Catalog Manufacturing Supplier Quality Hub")
             && result.World.Applications.Any(application => application.Id == dependency.TargetApplicationId && application.Name == "MasterControl Quality Excellence"));
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Application"
+            && evidence.PrincipalType == "Group"
+            && evidence.RightName == "ApplicationAccess"
+            && result.World.Groups.Any(group => group.Id == evidence.PrincipalObjectId && group.Name == "GG HRIS Users")
+            && result.World.Applications.Any(application => application.Id == evidence.TargetId && application.Name == "Workday HCM"));
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Application"
+            && evidence.PrincipalType == "Group"
+            && evidence.RightName == "ApplicationAccess"
+            && result.World.Groups.Any(group => group.Id == evidence.PrincipalObjectId && group.Name == "GG CRM Users")
+            && result.World.Applications.Any(application => application.Id == evidence.TargetId && application.Name.Contains("Salesforce", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Application"
+            && evidence.PrincipalType == "Group"
+            && evidence.RightName == "ApplicationAccess"
+            && result.World.Groups.Any(group => group.Id == evidence.PrincipalObjectId && group.Name == "GG ITSM Agents")
+            && result.World.Applications.Any(application =>
+                application.Id == evidence.TargetId
+                && (application.Name.Contains("Service Management", StringComparison.OrdinalIgnoreCase)
+                    || application.Name.Contains("ServiceNow", StringComparison.OrdinalIgnoreCase)
+                    || application.Name.Contains("PagerDuty", StringComparison.OrdinalIgnoreCase))));
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Application"
+            && evidence.PrincipalType == "Group"
+            && evidence.RightName == "ApplicationAdministration"
+            && result.World.Groups.Any(group => group.Id == evidence.PrincipalObjectId && group.Name == "GG ERP Admins")
+            && result.World.Applications.Any(application =>
+                application.Id == evidence.TargetId
+                && (application.Name.Contains("ERP", StringComparison.OrdinalIgnoreCase)
+                    || application.Name.Contains("SAP", StringComparison.OrdinalIgnoreCase)
+                    || application.Name.Contains("Oracle", StringComparison.OrdinalIgnoreCase))));
         Assert.Contains(result.World.ApplicationBusinessProcessLinks, link =>
             link.RelationshipType == "PrimarySystem"
             && link.IsPrimary
