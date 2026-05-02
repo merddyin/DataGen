@@ -232,7 +232,12 @@ public sealed class FlagshipRealismAcceptanceTests
         var generator = services.GetRequiredService<IWorldGenerator>();
 
         var catalogs = catalogLoader.LoadDefault();
-        var scenario = scenarioLoader.LoadFromPath(Path.Combine(TestEnvironmentPaths.GetRepositoryRoot(), "artifacts", "duckburg-subset.scenario.json"));
+        var scenario = scenarioLoader.LoadFromPath(Path.Combine(
+            TestEnvironmentPaths.GetRepositoryRoot(),
+            "tests",
+            "SyntheticEnterprise.Core.Tests",
+            "TestData",
+            "duckburg-subset.scenario.json"));
 
         var first = generator.Generate(new GenerationContext
         {

@@ -199,7 +199,9 @@ public sealed class CatalogDrivenGenerationTests
 
         var peopleById = result.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
         var teamsById = result.World.Teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
-        var ceo = Assert.Single(result.World.People.Where(person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase)));
+        var ceo = Assert.Single(
+            result.World.People,
+            person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase));
 
         Assert.All(
             result.World.People.Where(person => !string.Equals(person.Id, ceo.Id, StringComparison.OrdinalIgnoreCase)),

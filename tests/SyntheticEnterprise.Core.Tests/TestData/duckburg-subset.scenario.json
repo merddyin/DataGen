@@ -1,0 +1,32 @@
+{
+  "name": "Duckburg Subset Determinism",
+  "companies": [
+    {
+      "name": "Duckburg Industries",
+      "industry": "Manufacturing",
+      "employeeCount": 120,
+      "businessUnitCount": 3,
+      "departmentCountPerBusinessUnit": 3,
+      "teamCountPerDepartment": 2,
+      "officeCount": 3,
+      "addressMode": "Hybrid",
+      "includeGeocodes": true,
+      "sharedMailboxCount": 5,
+      "serviceAccountCount": 8,
+      "includePrivilegedAccounts": true,
+      "workstationCoverageRatio": 0.94,
+      "serverCount": 18,
+      "networkAssetCountPerOffice": 5,
+      "telephonyAssetCountPerOffice": 12,
+      "databaseCount": 12,
+      "fileShareCount": 8,
+      "collaborationSiteCount": 12,
+      "countries": [ "United States", "Canada" ]
+    }
+  ],
+  "anomalies": [
+    { "name": "PrivilegedNoMfa", "category": "Identity", "intensity": 0.25 },
+    { "name": "NonCompliantEndpoints", "category": "Infrastructure", "intensity": 0.2 },
+    { "name": "OpenShares", "category": "Repository", "intensity": 0.15 }
+  ]
+}

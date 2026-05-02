@@ -224,8 +224,9 @@ public sealed class IdentityInfrastructureGenerationTests
             member.EndpointType == "Device" && member.LocalGroupName == "Administrators");
         Assert.Contains(result.World.EndpointLocalGroupMembers, member =>
             member.EndpointType == "Server" && member.LocalGroupName == "Remote Desktop Users");
-        var falconPackage = Assert.Single(result.World.SoftwarePackages.Where(package =>
-            string.Equals(package.Name, "CrowdStrike Falcon", StringComparison.OrdinalIgnoreCase)));
+        var falconPackage = Assert.Single(
+            result.World.SoftwarePackages,
+            package => string.Equals(package.Name, "CrowdStrike Falcon", StringComparison.OrdinalIgnoreCase));
         var deviceFalconInstallations = result.World.DeviceSoftwareInstallations
             .Where(installation => string.Equals(installation.SoftwareId, falconPackage.Id, StringComparison.OrdinalIgnoreCase))
             .Select(installation => installation.DeviceId)
@@ -246,7 +247,9 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.People, person => person.EmploymentType == "ManagedServiceProvider");
         Assert.Contains(result.World.People, person => person.EmploymentType == "Guest");
         var teamsById = result.World.Teams.ToDictionary(team => team.Id, StringComparer.OrdinalIgnoreCase);
-        var ceo = Assert.Single(result.World.People.Where(person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase)));
+        var ceo = Assert.Single(
+            result.World.People,
+            person => person.Title.Contains("Chief Executive Officer", StringComparison.OrdinalIgnoreCase));
         Assert.All(
             result.World.People.Where(person => !string.Equals(person.Id, ceo.Id, StringComparison.OrdinalIgnoreCase)),
             person =>
