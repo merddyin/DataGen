@@ -108,7 +108,27 @@ That means:
 
 ## Getting started
 
-### 1. Build the solution
+### Install from PowerShell Gallery
+
+For normal module use, install the published package from PowerShell Gallery:
+
+```powershell
+Install-PSResource SyntheticEnterprise.PowerShell -Repository PSGallery
+Import-Module SyntheticEnterprise.PowerShell
+```
+
+The Gallery package includes the seeded runtime catalog at `catalogs\catalogs.sqlite` inside the module. You do not need to download the separate `catalogs.sqlite` GitHub release asset for standard generation commands.
+
+`New-SEEnterpriseWorld` loads the bundled catalog automatically when you omit `-CatalogRootPath`:
+
+```powershell
+$scenario = New-SEScenarioFromArchetype -Archetype RegionalManufacturer | Resolve-SEScenario
+$world = New-SEEnterpriseWorld -Scenario $scenario -Seed 4242
+```
+
+Use `-CatalogRootPath` only when you want to override the bundled catalog with a custom catalog directory or SQLite database.
+
+### Build from source
 
 If you do not already have a local seeded catalog database, generate it first:
 
@@ -116,9 +136,11 @@ If you do not already have a local seeded catalog database, generate it first:
 .\scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot
 ```
 
-That command writes the canonical build output to `artifacts\catalog\catalogs.sqlite` and installs a local working copy to `catalogs\catalogs.sqlite` for module builds.
+That command writes the canonical build output to `artifacts\catalog\catalogs.sqlite` and installs a local working copy to `catalogs\catalogs.sqlite` for source builds.
 
-### 2. Build the solution
+The separate `catalogs.sqlite` GitHub release asset is provided for inspection, custom catalog workflows, and direct consumers that want the SQLite file outside the module package.
+
+### Build the solution
 
 ```powershell
 dotnet build .\DataGen.slnx -v minimal
@@ -130,13 +152,13 @@ To enable the repo-managed pre-push hook that catches machine-specific path leak
 .\scripts\enable-git-hooks.ps1
 ```
 
-### 3. Run the tests
+### Run the tests
 
 ```powershell
 dotnet test .\DataGen.slnx -v minimal /p:UseSharedCompilation=false -m:1
 ```
 
-### 4. Import the PowerShell module
+### Import the PowerShell module
 
 ```powershell
 $modulePath = Join-Path $PWD 'src\SyntheticEnterprise.PowerShell\bin\Debug\net8.0\SyntheticEnterprise.PowerShell.dll'
@@ -151,7 +173,7 @@ If you want a release-style module bundle with a real manifest, package it first
 Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.7.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
-### 5. Generate a first world
+### Generate a first world
 
 ```powershell
 $scenario = New-SEScenarioFromArchetype -Archetype RegionalManufacturer
@@ -160,7 +182,7 @@ $world = New-SEEnterpriseWorld -Scenario $scenario -Seed 4242
 $world | Get-SEWorldSummary
 ```
 
-### 6. Export normalized artifacts
+### Export normalized artifacts
 
 ```powershell
 $world | Export-SEEnterpriseWorld `
@@ -172,7 +194,7 @@ $world | Export-SEEnterpriseWorld `
   -Overwrite
 ```
 
-### 7. Review realism and quality
+### Review realism and quality
 
 ```powershell
 .\scripts\invoke-realism-review.ps1 `

@@ -25,6 +25,8 @@ Additional controls include:
 - `-Seed`
 - plugin execution and trust parameters
 
+`-CatalogRootPath` is optional for normal Gallery installs. The module package includes `catalogs/catalogs.sqlite`, and `New-SEEnterpriseWorld` loads that bundled catalog automatically when you do not provide an override. Use `-CatalogRootPath` only for a custom catalog directory or a specific SQLite catalog database.
+
 The returned generation result now also carries a structured `Quality` report for realism, completeness, consistency, exportability, and operational coverage.
 
 ## `Get-SEWorldSummary`
