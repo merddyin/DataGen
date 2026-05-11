@@ -476,6 +476,9 @@ public sealed class LayerProcessor : ILayerProcessor
             GroupCount = input.World.Groups.Count,
             ApplicationCount = input.World.Applications.Count,
             DeviceCount = input.World.Devices.Count + input.World.Servers.Count,
+            ActiveDirectorySiteCount = input.World.ActiveDirectorySites.Count,
+            SiteLinkCount = input.World.ActiveDirectorySiteLinks.Count,
+            NetworkSubnetCount = input.World.NetworkSubnets.Count,
             RepositoryCount = input.World.Databases.Count
                 + input.World.FileShares.Count
                 + input.World.CollaborationSites.Count

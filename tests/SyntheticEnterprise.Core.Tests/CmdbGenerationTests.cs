@@ -124,6 +124,30 @@ public sealed class CmdbGenerationTests
         Assert.Contains(result.World.CmdbSourceRecords, record => record.MatchStatus == "CatalogOnly");
         Assert.Contains(result.World.CmdbSourceRecords, record => record.MatchStatus == "Orphaned");
         Assert.Contains(result.World.CmdbSourceRecords, record => record.CiClass == "BusinessApplication");
+        Assert.Contains(result.World.ConfigurationItems, item =>
+            item.CiClass == "TelephonyDevice"
+            && !item.Name.StartsWith("+1-", StringComparison.OrdinalIgnoreCase)
+            && !item.DisplayName.StartsWith("+1-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.ConfigurationItems, item =>
+            item.CiClass == "TelephonyDevice"
+            && !string.IsNullOrWhiteSpace(item.Vendor)
+            && !string.IsNullOrWhiteSpace(item.Model));
+        Assert.DoesNotContain(result.World.CmdbSourceRecords, record =>
+            record.SourceRecordId.Contains("telephony:", StringComparison.OrdinalIgnoreCase)
+            || record.SourceRecordId.Contains("device:", StringComparison.OrdinalIgnoreCase)
+            || record.SourceRecordId.Contains("file-share:", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.CmdbSourceRecords, record =>
+            record.SourceSystem == "CMDB"
+            && record.SourceRecordId.StartsWith("CI", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.CmdbSourceRecords, record =>
+            record.SourceSystem == "AutoDiscovery"
+            && record.SourceRecordId.StartsWith("DISC-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.CmdbSourceRecords, record =>
+            record.SourceSystem == "ServiceCatalog"
+            && record.SourceRecordId.StartsWith("CAT-", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.CmdbSourceRecords, record =>
+            record.SourceSystem == "SpreadsheetImport"
+            && record.SourceRecordId.StartsWith("XLS-", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.CmdbSourceLinks, link => !string.IsNullOrWhiteSpace(link.ConfigurationItemId));
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "InstalledOn");
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "HostedOn");

@@ -10,6 +10,7 @@ using SyntheticEnterprise.Contracts.Plugins;
 public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPluginHostAdapter
 {
     private const string HostAssemblyName = "SyntheticEnterprise.PluginHost.dll";
+    private const string HostExecutableName = "SyntheticEnterprise.PluginHost.exe";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -33,8 +34,8 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
             };
         }
 
-        var hostPath = ResolveHostPath();
-        if (hostPath is null)
+        var hostLaunch = ResolveHostPath();
+        if (hostLaunch is null)
         {
             return new ExternalPluginExecutionResult
             {
@@ -85,16 +86,20 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
 
             File.WriteAllBytes(requestPath, requestBytes);
 
-            var processStartInfo = new ProcessStartInfo("dotnet")
+            var processStartInfo = hostLaunch.UseDotNetHost
+                ? new ProcessStartInfo("dotnet")
+                : new ProcessStartInfo(hostLaunch.HostPath);
+            processStartInfo.RedirectStandardOutput = true;
+            processStartInfo.RedirectStandardError = true;
+            processStartInfo.UseShellExecute = false;
+            processStartInfo.CreateNoWindow = true;
+            processStartInfo.WorkingDirectory = tempRoot;
+            if (hostLaunch.UseDotNetHost)
             {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = tempRoot
-            };
-            processStartInfo.ArgumentList.Add("exec");
-            processStartInfo.ArgumentList.Add(hostPath);
+                processStartInfo.ArgumentList.Add("exec");
+                processStartInfo.ArgumentList.Add(hostLaunch.HostPath);
+            }
+
             processStartInfo.ArgumentList.Add("--request");
             processStartInfo.ArgumentList.Add(requestPath);
             processStartInfo.ArgumentList.Add("--response");
@@ -230,7 +235,7 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
         }
     }
 
-    private static string? ResolveHostPath()
+    private static HostLaunchSpec? ResolveHostPath()
     {
         var searchRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var startPath in new[]
@@ -239,10 +244,12 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
                      Path.GetDirectoryName(typeof(OutOfProcessAssemblyExternalPluginHostAdapter).Assembly.Location) ?? string.Empty
                  }.Where(path => !string.IsNullOrWhiteSpace(path)))
         {
-            var directCandidate = Path.Combine(startPath, "plugin-host", HostAssemblyName);
-            if (File.Exists(directCandidate))
+            foreach (var candidate in ResolveBundledHostCandidates(startPath))
             {
-                return directCandidate;
+                if (CanLaunchHostCandidate(candidate))
+                {
+                    return candidate;
+                }
             }
 
             foreach (var root in EnumerateSelfAndParents(startPath))
@@ -254,16 +261,57 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
 
                 foreach (var configuration in new[] { "Debug", "Release" })
                 {
-                    var sourceCandidate = Path.Combine(root, "src", "SyntheticEnterprise.PluginHost", "bin", configuration, "net8.0", HostAssemblyName);
-                    if (File.Exists(sourceCandidate))
+                    foreach (var candidate in ResolveSourceHostCandidates(root, configuration))
                     {
-                        return sourceCandidate;
+                        if (CanLaunchHostCandidate(candidate))
+                        {
+                            return candidate;
+                        }
                     }
                 }
             }
         }
 
         return null;
+    }
+
+    private static IEnumerable<HostLaunchSpec> ResolveBundledHostCandidates(string startPath)
+    {
+        yield return new HostLaunchSpec(Path.Combine(startPath, "plugin-host", HostAssemblyName), UseDotNetHost: true);
+        yield return new HostLaunchSpec(Path.Combine(startPath, HostAssemblyName), UseDotNetHost: true);
+
+        if (OperatingSystem.IsWindows())
+        {
+            yield return new HostLaunchSpec(Path.Combine(startPath, "plugin-host", HostExecutableName), UseDotNetHost: false);
+            yield return new HostLaunchSpec(Path.Combine(startPath, HostExecutableName), UseDotNetHost: false);
+        }
+    }
+
+    private static IEnumerable<HostLaunchSpec> ResolveSourceHostCandidates(string root, string configuration)
+    {
+        var sourceRoot = Path.Combine(root, "src", "SyntheticEnterprise.PluginHost", "bin", configuration, "net8.0");
+        yield return new HostLaunchSpec(Path.Combine(sourceRoot, HostAssemblyName), UseDotNetHost: true);
+
+        if (OperatingSystem.IsWindows())
+        {
+            yield return new HostLaunchSpec(Path.Combine(sourceRoot, HostExecutableName), UseDotNetHost: false);
+        }
+    }
+
+    private static bool CanLaunchHostCandidate(HostLaunchSpec candidate)
+    {
+        if (!File.Exists(candidate.HostPath))
+        {
+            return false;
+        }
+
+        if (candidate.UseDotNetHost)
+        {
+            return true;
+        }
+
+        var companionAssemblyPath = Path.ChangeExtension(candidate.HostPath, ".dll");
+        return !string.IsNullOrWhiteSpace(companionAssemblyPath) && File.Exists(companionAssemblyPath);
     }
 
     private static IEnumerable<string> EnumerateSelfAndParents(string startPath)
@@ -347,4 +395,6 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
 
         return $"{message[..maxCharacters]}...(truncated)";
     }
+
+    private sealed record HostLaunchSpec(string HostPath, bool UseDotNetHost);
 }

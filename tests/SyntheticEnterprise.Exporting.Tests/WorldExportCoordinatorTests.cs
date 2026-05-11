@@ -1171,6 +1171,215 @@ public sealed class WorldExportCoordinatorTests
     }
 
     [Fact]
+    public void Export_Writes_Active_Directory_Site_And_Subnet_Artifacts()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        Companies = { new Company { Id = "CO-001", Name = "Contoso", PrimaryDomain = "contoso.test" } },
+                        Offices =
+                        {
+                            new Office
+                            {
+                                Id = "OFF-001",
+                                CompanyId = "CO-001",
+                                Name = "New York Headquarters",
+                                Region = "North America",
+                                Country = "United States",
+                                StateOrProvince = "New York",
+                                City = "New York",
+                                PostalCode = "10001",
+                                TimeZone = "America/New_York",
+                                BusinessPhone = "+1 212 555 0100",
+                                IsHeadquarters = true,
+                                Latitude = "40.7128",
+                                Longitude = "-74.0060",
+                                Geocoded = true
+                            }
+                        },
+                        IdentityStores =
+                        {
+                            new IdentityStore
+                            {
+                                Id = "IDS-001",
+                                CompanyId = "CO-001",
+                                Name = "Contoso Active Directory",
+                                StoreType = "ActiveDirectory",
+                                PrimaryDomain = "contoso.test"
+                            }
+                        },
+                        ActiveDirectorySites =
+                        {
+                            new ActiveDirectorySite
+                            {
+                                Id = "ADS-001",
+                                CompanyId = "CO-001",
+                                IdentityStoreId = "IDS-001",
+                                Name = "US-NEWYOR-HQ",
+                                SiteType = "PhysicalOffice",
+                                SiteRole = "Hub",
+                                OfficeId = "OFF-001",
+                                Region = "North America",
+                                Country = "United States",
+                                City = "New York",
+                                IsPrimaryHub = true
+                            }
+                        },
+                        ActiveDirectorySiteLinks =
+                        {
+                            new ActiveDirectorySiteLink
+                            {
+                                Id = "ADL-001",
+                                CompanyId = "CO-001",
+                                IdentityStoreId = "IDS-001",
+                                Name = "CONTOSO-DEFAULT-IP-LINK",
+                                TopologyStyle = "FullMesh",
+                                Transport = "IP",
+                                Cost = 100,
+                                ReplicationIntervalMinutes = 180
+                            }
+                        },
+                        ActiveDirectorySiteLinkMemberships =
+                        {
+                            new ActiveDirectorySiteLinkMembership
+                            {
+                                Id = "SLM-001",
+                                SiteLinkId = "ADL-001",
+                                SiteId = "ADS-001",
+                                MemberOrder = 1
+                            }
+                        },
+                        NetworkSubnets =
+                        {
+                            new NetworkSubnet
+                            {
+                                Id = "SUB-001",
+                                CompanyId = "CO-001",
+                                IdentityStoreId = "IDS-001",
+                                ActiveDirectorySiteId = "ADS-001",
+                                Name = "NEWYOR-B1-F1-WS",
+                                AddressCidr = "10.20.0.0/24",
+                                GatewayAddress = "10.20.0.1",
+                                UsableStartAddress = "10.20.0.10",
+                                UsableEndAddress = "10.20.0.249",
+                                SubnetType = "Workstation",
+                                LocationType = "Office",
+                                OfficeId = "OFF-001",
+                                Region = "North America",
+                                Country = "United States",
+                                City = "New York",
+                                BuildingLabel = "Building 1",
+                                FloorLabel = "Floor 1",
+                                SegmentLabel = "B1-F1",
+                                VlanId = "100",
+                                IsDhcpScope = true
+                            }
+                        },
+                        Devices =
+                        {
+                            new ManagedDevice
+                            {
+                                Id = "DEV-001",
+                                CompanyId = "CO-001",
+                                DeviceType = "Workstation",
+                                Hostname = "WS-CONTOSO-001",
+                                AssetTag = "AT-001",
+                                SerialNumber = "SN-001",
+                                Manufacturer = "Dell",
+                                Model = "Latitude 7450",
+                                OperatingSystem = "Windows 11 Enterprise",
+                                OperatingSystemVersion = "23H2",
+                                AssignedOfficeId = "OFF-001",
+                                ActiveDirectorySiteId = "ADS-001",
+                                NetworkSubnetId = "SUB-001",
+                                IpAddress = "10.20.0.10"
+                            }
+                        },
+                        Servers =
+                        {
+                            new ServerAsset
+                            {
+                                Id = "SRV-001",
+                                CompanyId = "CO-001",
+                                Hostname = "SRV-CONTOSO-APP-001",
+                                ServerRole = "Application Server",
+                                Environment = "Production",
+                                OperatingSystem = "Windows Server",
+                                OperatingSystemVersion = "2022",
+                                OfficeId = "OFF-001",
+                                HostingLocationType = "Cloud",
+                                CloudProvider = "Azure",
+                                CloudRegion = "eastus2",
+                                ActiveDirectorySiteId = "ADS-001",
+                                NetworkSubnetId = "SUB-001",
+                                IpAddress = "10.20.0.20",
+                                OwnerTeamId = "TEAM-001"
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics
+                    {
+                        CompanyCount = 1,
+                        OfficeCount = 1,
+                        DeviceCount = 2,
+                        ActiveDirectorySiteCount = 1,
+                        SiteLinkCount = 1,
+                        NetworkSubnetCount = 1
+                    }
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp,
+                    IncludeManifest = true,
+                    IncludeSummary = true
+                });
+
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "active_directory_sites");
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "active_directory_site_links");
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "active_directory_site_link_memberships");
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "network_subnets");
+            Assert.True(File.Exists(Path.Combine(manifest.OutputPath, "entities", "active_directory_sites.json")));
+            Assert.True(File.Exists(Path.Combine(manifest.OutputPath, "entities", "active_directory_site_links.json")));
+            Assert.True(File.Exists(Path.Combine(manifest.OutputPath, "entities", "active_directory_site_link_memberships.json")));
+            Assert.True(File.Exists(Path.Combine(manifest.OutputPath, "entities", "network_subnets.json")));
+
+            var devicesJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "devices.json"));
+            var serversJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "servers.json"));
+            var subnetsJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "network_subnets.json"));
+            var sitesJson = File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "active_directory_sites.json"));
+
+            Assert.Contains("active_directory_site_id", devicesJson);
+            Assert.Contains("network_subnet_id", devicesJson);
+            Assert.Contains("ip_address", devicesJson);
+            Assert.Contains("hosting_location_type", serversJson);
+            Assert.Contains("cloud_provider", serversJson);
+            Assert.Contains("cloud_region", serversJson);
+            Assert.Contains("10.20.0.0/24", subnetsJson);
+            Assert.Contains("US-NEWYOR-HQ", sitesJson);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
     public void Export_Writes_Office_StreetAddress_Field()
     {
         var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());

@@ -86,6 +86,9 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
             GroupCount = world.Groups.Count,
             ApplicationCount = world.Applications.Count,
             DeviceCount = world.Devices.Count + world.Servers.Count,
+            ActiveDirectorySiteCount = world.ActiveDirectorySites.Count,
+            SiteLinkCount = world.ActiveDirectorySiteLinks.Count,
+            NetworkSubnetCount = world.NetworkSubnets.Count,
             RepositoryCount = world.Databases.Count
                 + world.FileShares.Count
                 + world.CollaborationSites.Count

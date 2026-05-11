@@ -76,8 +76,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
     {
         var engines = new[] { "SQL Server", "PostgreSQL", "MySQL", "Oracle" };
         var sensitivities = new[] { "Internal", "Confidential", "Restricted" };
-        var prefixes = new[] { "ERP", "HRIS", "CRM", "MES", "DWH", "OPS", "FIN", "PAY", "SUP" };
         var patterns = ReadRepositoryPatterns(catalogs, "Database");
+        var databaseNameUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         for (var i = 0; i < Math.Max(1, definition.DatabaseCount); i++)
         {
@@ -90,16 +90,27 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 dept.Name,
                 null,
                 null,
-                prefixes[i % prefixes.Length],
+                "ERP",
+                "CRM",
+                "HRIS",
+                "MES",
+                "DWH",
+                "OPS",
+                "FIN",
+                "PAY",
+                "SUP",
                 dept.Id);
             var pattern = patterns.Count == 0 ? null : patterns[i % patterns.Count];
+            var environment = i % 6 == 0 ? "Staging" : "Production";
             var database = new DatabaseRepository
             {
                 Id = _idFactory.Next("DB"),
                 CompanyId = company.Id,
-                Name = pattern is null ? $"{prefixes[i % prefixes.Length]}_{Slug(dept.Name)}_{i + 1:00}" : ApplySlugPattern(pattern.Pattern, dept.Name, i + 1),
+                Name = pattern is null
+                    ? BuildDatabaseName(selection?.Application, dept.Name, environment, databaseNameUsage)
+                    : ApplySlugPattern(pattern.Pattern, dept.Name, i + 1),
                 Engine = engines[i % engines.Length],
-                Environment = i % 6 == 0 ? "Staging" : "Production",
+                Environment = environment,
                 SizeGb = ((i + 1) * 25 + _randomSource.Next(5, 90)).ToString(),
                 OwnerDepartmentId = dept.Id,
                 AssociatedApplicationId = selection?.Application.Id,
@@ -549,12 +560,13 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         var createdChannels = new List<CollaborationChannel>();
         foreach (var channel in channels.Distinct())
         {
+            var channelName = NormalizeChannelName(channel.ChannelName, site.Name, site.WorkspaceType, channel.ChannelType);
             var created = new CollaborationChannel
             {
                 Id = _idFactory.Next("CHAN"),
                 CompanyId = company.Id,
                 CollaborationSiteId = site.Id,
-                Name = channel.ChannelName,
+                Name = channelName,
                 ChannelType = channel.ChannelType,
                 MemberCount = (6 + _randomSource.Next(0, 180)).ToString(),
                 MessageCount = (100 + _randomSource.Next(0, 12000)).ToString(),
@@ -1487,32 +1499,39 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
     private static string BuildDepartmentShareName(string departmentName, string sharePurpose, IDictionary<string, int> usage)
     {
         var stem = BuildShareStem(departmentName);
-        var baseName = sharePurpose switch
+        foreach (var descriptor in GetSharePurposeDescriptors(departmentName, sharePurpose))
         {
-            "DepartmentLeadership" => $"{stem}-leadership",
-            "DepartmentProjects" => $"{stem}-projects",
-            "DepartmentReference" => $"{stem}-reference",
-            "DepartmentArchive" => $"{stem}-archive",
-            _ => $"{stem}-shared"
-        };
+            var candidate = $"{stem}-{SlugWords(descriptor)}";
+            if (usage.ContainsKey(candidate))
+            {
+                continue;
+            }
 
-        if (!usage.TryGetValue(baseName, out var count))
-        {
-            usage[baseName] = 1;
-            return baseName;
+            usage[candidate] = 1;
+            return candidate;
         }
 
-        count++;
-        usage[baseName] = count;
-        return $"{baseName}-{count}";
+        var fallbackSequence = 0;
+        while (true)
+        {
+            var fallback = $"{stem}-{SlugWords(BuildFallbackShareDescriptor(departmentName, sharePurpose, fallbackSequence))}";
+            if (!usage.ContainsKey(fallback))
+            {
+                usage[fallback] = 1;
+                return fallback;
+            }
+
+            fallbackSequence++;
+        }
     }
 
     private static string BuildDefaultSiteName(string departmentName, string platform, string workspaceType, int occurrenceIndex)
     {
-        var descriptor = GetSiteNameDescriptors(platform, workspaceType)
-            .Skip(occurrenceIndex % GetSiteNameDescriptors(platform, workspaceType).Count)
-            .Concat(GetSiteNameDescriptors(platform, workspaceType).Take(occurrenceIndex % GetSiteNameDescriptors(platform, workspaceType).Count))
-            .First();
+        var descriptors = GetSiteNameDescriptors(departmentName, platform, workspaceType);
+        var descriptor = RefineDescriptorForDepartment(
+            departmentName,
+            descriptors[Math.Max(0, occurrenceIndex % descriptors.Count)],
+            workspaceType);
 
         return $"{departmentName} {descriptor}";
     }
@@ -1812,7 +1831,21 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
             if (departmentName.EndsWith(siteSuffix, StringComparison.OrdinalIgnoreCase))
             {
-                return $"{departmentName} Workspace";
+                return siteSuffix switch
+                {
+                    "Operations" => $"{departmentName} Coordination",
+                    "Projects" => $"{departmentName} Programs",
+                    _ => $"{departmentName} Planning"
+                };
+            }
+        }
+
+        if (trimmedName.StartsWith($"{departmentName} ", StringComparison.OrdinalIgnoreCase))
+        {
+            var descriptor = trimmedName[departmentName.Length..].Trim();
+            if (IsGenericSiteDescriptor(descriptor))
+            {
+                return $"{departmentName} {GetSiteNameDescriptors(departmentName, "SharePoint", InferWorkspaceTypeFromDescriptor(descriptor)).First()}";
             }
         }
 
@@ -1863,11 +1896,11 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         AddCandidate(candidates, siteName);
 
-        var descriptors = GetSiteNameDescriptors(platform, workspaceType);
+        var descriptors = GetSiteNameDescriptors(departmentName, platform, workspaceType);
         var startIndex = descriptors.Count == 0 ? 0 : occurrenceIndex % descriptors.Count;
         for (var offset = 0; offset < descriptors.Count; offset++)
         {
-            AddCandidate(candidates, $"{departmentName} {descriptors[(startIndex + offset) % descriptors.Count]}");
+            AddCandidate(candidates, $"{departmentName} {RefineDescriptorForDepartment(departmentName, descriptors[(startIndex + offset) % descriptors.Count], workspaceType)}");
         }
 
         if (siteName.StartsWith($"{departmentName} ", StringComparison.OrdinalIgnoreCase))
@@ -1879,39 +1912,71 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         return candidates;
     }
 
-    private static IReadOnlyList<string> GetSiteNameDescriptors(string platform, string workspaceType)
+    private static IReadOnlyList<string> GetSiteNameDescriptors(string departmentName, string platform, string workspaceType)
     {
-        if (string.Equals(platform, "Teams", StringComparison.OrdinalIgnoreCase))
-        {
-            return workspaceType switch
-            {
-                "Project" => new[] { "Delivery Workspace", "Project Hub", "Program Workspace", "Initiative Room", "Launch Workspace", "Execution Hub" },
-                "Department" => new[] { "Collaboration Hub", "Working Session", "Leadership Hub", "Coordination Room", "Department Workspace", "Operating Rhythm" },
-                "Knowledge" => new[] { "Knowledge Hub", "Reference Center", "Playbook Workspace", "Guide Center", "Standards Hub", "Information Space" },
-                _ => new[] { "Team Hub", "Working Session", "Leadership Hub", "Collaboration Space", "Operations Room", "Pod Workspace" }
-            };
-        }
+        var family = ResolveDepartmentFamily(departmentName);
 
-        return workspaceType switch
+        return (family, workspaceType, platform) switch
         {
-            "Project" => new[] { "Project Workspace", "Delivery Workspace", "Program Workspace", "Initiative Center", "Milestone Hub", "Launch Workspace" },
-            "Knowledge" => new[] { "Knowledge Center", "Reference Center", "Standards Portal", "Playbook Hub", "Information Center", "Guide Library" },
-            _ => new[] { "Operations Hub", "Department Workspace", "Knowledge Center", "Reference Center", "Leadership Hub", "Operating Model" }
+            ("Revenue", "Project", _) => new[] { "Territory Launch", "Pipeline Planning", "Deal Readiness", "Partner Execution", "Forecast Reviews", "Commercial Programs" },
+            ("Revenue", "Knowledge", _) => new[] { "Sales Playbooks", "Partner Reference", "Pricing Standards", "Opportunity Intelligence", "Deal Desk Guides", "Commercial Library" },
+            ("Revenue", _, "Teams") => new[] { "Revenue Cadence", "Pipeline Reviews", "Deal Desk", "Partner Planning", "Forecast Forum", "Commercial Operations" },
+            ("Revenue", _, _) => new[] { "Revenue Planning", "Deal Reviews", "Commercial Insights", "Partner Programs", "Sales Coordination", "Forecast Planning" },
+
+            ("Marketing", "Project", _) => new[] { "Campaign Launch", "Event Readiness", "Content Production", "Brand Initiatives", "Field Programs", "Market Planning" },
+            ("Marketing", "Knowledge", _) => new[] { "Content Library", "Brand Standards", "Campaign Playbooks", "Message Architecture", "Reference Assets", "Editorial Guides" },
+            ("Marketing", _, "Teams") => new[] { "Campaign Planning", "Brand Studio", "Content Calendar", "Program Coordination", "Launch Readiness", "Field Marketing" },
+            ("Marketing", _, _) => new[] { "Marketing Planning", "Brand Operations", "Content Reviews", "Campaign Insights", "Program Workspace", "Communications Hub" },
+
+            ("Customer", "Project", _) => new[] { "Customer Programs", "Renewal Readiness", "Adoption Initiatives", "Service Delivery", "Escalation Response", "Field Coordination" },
+            ("Customer", "Knowledge", _) => new[] { "Support Playbooks", "Customer Guides", "Enablement Library", "Case Reference", "Delivery Standards", "Success Resources" },
+            ("Customer", _, "Teams") => new[] { "Support Readiness", "Escalation Management", "Customer Care", "Renewal Planning", "Service Operations", "Adoption Programs" },
+            ("Customer", _, _) => new[] { "Support Operations", "Success Planning", "Customer Insights", "Service Coordination", "Enablement Programs", "Delivery Rhythm" },
+
+            ("Engineering", "Project", _) => new[] { "Release Readiness", "Sprint Delivery", "Platform Programs", "Architecture Reviews", "Quality Initiatives", "Design Launch" },
+            ("Engineering", "Knowledge", _) => new[] { "Engineering Playbooks", "Architecture Standards", "Quality Guides", "Design Patterns", "Test Reference", "Developer Library" },
+            ("Engineering", _, "Teams") => new[] { "Engineering Cadence", "Architecture Review", "Quality Operations", "Platform Coordination", "Design Critiques", "Release Management" },
+            ("Engineering", _, _) => new[] { "Product Planning", "Engineering Operations", "Quality Reviews", "Architecture Reviews", "Developer Enablement", "Engineering Standards" },
+
+            ("Operations", "Project", _) => new[] { "Production Planning", "Supplier Programs", "Inventory Readiness", "Quality Improvements", "Warehouse Launch", "Logistics Initiatives" },
+            ("Operations", "Knowledge", _) => new[] { "Operations Standards", "Supplier Reference", "Process Guides", "Inventory Playbooks", "Quality Library", "Safety Procedures" },
+            ("Operations", _, "Teams") => new[] { "Production Operations", "Supplier Coordination", "Inventory Planning", "Quality Controls", "Warehouse Operations", "Logistics Readiness" },
+            ("Operations", _, _) => new[] { "Operations Planning", "Materials Coordination", "Supplier Reviews", "Quality Reviews", "Logistics Hub", "Production Planning" },
+
+            ("Finance", "Project", _) => new[] { "Close Readiness", "Budget Programs", "Treasury Initiatives", "Forecast Delivery", "Control Reviews", "Payment Launch" },
+            ("Finance", "Knowledge", _) => new[] { "Accounting Policies", "Forecast Models", "Control Library", "Treasury Procedures", "Vendor Payment Guides", "Finance Reference" },
+            ("Finance", _, "Teams") => new[] { "Close Calendar", "Budget Planning", "Controls Review", "Treasury Operations", "Forecast Forum", "Vendor Payments" },
+            ("Finance", _, _) => new[] { "Finance Planning", "Control Reviews", "Forecast Reviews", "Treasury Hub", "Accounting Operations", "Budget Reviews" },
+
+            ("People", "Project", _) => new[] { "Talent Programs", "Benefits Rollout", "Learning Launch", "People Operations", "Workforce Planning", "Culture Initiatives" },
+            ("People", "Knowledge", _) => new[] { "People Policies", "Benefits Guides", "Learning Library", "Employee Resources", "Talent Playbooks", "Workforce Reference" },
+            ("People", _, "Teams") => new[] { "People Operations", "Benefits Administration", "Talent Reviews", "Learning Programs", "Employee Relations", "Workforce Coordination" },
+            ("People", _, _) => new[] { "People Planning", "Talent Operations", "Benefits Programs", "Learning Hub", "Employee Programs", "Workforce Planning" },
+
+            ("Legal", "Project", _) => new[] { "Contract Programs", "Compliance Readiness", "Matter Delivery", "Regulatory Response", "Policy Rollout", "Vendor Terms" },
+            ("Legal", "Knowledge", _) => new[] { "Contract Library", "Compliance Reference", "Policy Repository", "Legal Playbooks", "Matter Guides", "Regulatory Standards" },
+            ("Legal", _, "Teams") => new[] { "Contract Review", "Compliance Counsel", "Matter Intake", "Regulatory Response", "Policy Management", "Obligation Tracking" },
+            ("Legal", _, _) => new[] { "Legal Operations", "Contract Programs", "Compliance Reviews", "Policy Coordination", "Matter Planning", "Contract Planning" },
+
+            ("Technology", "Project", _) => new[] { "Platform Delivery", "Change Readiness", "Service Launch", "Data Programs", "Access Initiatives", "Digital Rollout" },
+            ("Technology", "Knowledge", _) => new[] { "Platform Runbooks", "Access Standards", "Data Reference", "Service Library", "Architecture Guides", "Technology Playbooks" },
+            ("Technology", _, "Teams") => new[] { "Service Operations", "Platform Engineering", "Change Coordination", "Access Governance", "Data Operations", "Digital Workplace" },
+            ("Technology", _, _) => new[] { "Technology Planning", "Platform Operations", "Service Coordination", "Data Services", "Change Management", "Service Reviews" },
+
+            ("Corporate", "Project", _) => new[] { "Enterprise Programs", "Planning Initiatives", "Leadership Delivery", "Governance Reviews", "Strategy Rollout", "Operations Alignment" },
+            ("Corporate", "Knowledge", _) => new[] { "Reference Library", "Operating Standards", "Governance Guides", "Strategy Playbooks", "Leadership Reference", "Policy Hub" },
+            ("Corporate", _, "Teams") => new[] { "Executive Planning", "Leadership Forum", "Program Coordination", "Governance Reviews", "Operations Alignment", "Planning Cadence" },
+            _ => new[] { "Program Office", "Reference Library", "Planning Forum", "Coordination Center", "Leadership Planning", "Strategy Reviews" }
         };
     }
 
     private static string BuildFallbackSiteDescriptor(string workspaceType, int index)
     {
-        var qualifiers = new[]
+        var qualifiers = workspaceType switch
         {
-            "Planning Center",
-            "Execution Desk",
-            "Coordination Room",
-            "Enablement Hub",
-            "Operations Studio",
-            "Service Hub",
-            "Reference Center",
-            "Leadership Forum"
+            "Project" => new[] { "Program Delivery", "Milestone Review", "Launch Planning", "Execution Forum", "Project Coordination", "Implementation Planning" },
+            "Knowledge" => new[] { "Reference Library", "Standards Desk", "Playbook Repository", "Guide Center", "Policy Forum", "Knowledge Library" },
+            _ => new[] { "Program Coordination", "Leadership Reviews", "Planning Forum", "Service Operations", "Reference Library", "Strategy Reviews" }
         };
 
         var normalizedIndex = Math.Max(0, index);
@@ -1928,6 +1993,793 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             _ => descriptor
         };
     }
+
+    private string BuildDatabaseName(
+        ApplicationRecord? application,
+        string departmentName,
+        string environment,
+        IDictionary<string, int> usage)
+    {
+        var stem = BuildDatabaseStem(application, departmentName);
+        foreach (var role in GetDatabaseRoleDescriptors(application, departmentName, environment))
+        {
+            var candidate = $"{stem}-{SlugWords(role)}";
+            if (usage.ContainsKey(candidate))
+            {
+                continue;
+            }
+
+            usage[candidate] = 1;
+            return candidate;
+        }
+
+        var fallbackSequence = 0;
+        while (true)
+        {
+            var fallback = $"{stem}-{SlugWords(BuildFallbackDatabaseDescriptor(departmentName, environment, fallbackSequence))}";
+            if (!usage.ContainsKey(fallback))
+            {
+                usage[fallback] = 1;
+                return fallback;
+            }
+
+            fallbackSequence++;
+        }
+    }
+
+    private static string BuildDatabaseStem(ApplicationRecord? application, string departmentName)
+    {
+        var source = !string.IsNullOrWhiteSpace(application?.Name)
+            ? application!.Name
+            : departmentName;
+        return SlugWords(source, 4);
+    }
+
+    private static IReadOnlyList<string> GetDatabaseRoleDescriptors(ApplicationRecord? application, string departmentName, string environment)
+    {
+        var sourceText = $"{application?.Name} {application?.Category} {departmentName}";
+        var descriptors = (ResolveDepartmentFamily(departmentName) switch
+        {
+            "Revenue" => new[] { "pipeline", "forecasting", "pricing", "partners", "reporting", "analytics" },
+            "Marketing" => new[] { "campaigns", "content", "events", "analytics", "launch", "reference" },
+            "Customer" => new[] { "cases", "success", "renewals", "adoption", "delivery", "insights" },
+            "Engineering" => new[] { "core", "integration", "releases", "quality", "telemetry", "reporting" },
+            "Operations" => new[] { "operations", "planning", "inventory", "suppliers", "quality", "history" },
+            "Finance" => new[] { "ledger", "forecast", "controls", "payments", "reporting", "archive" },
+            "People" => new[] { "people", "payroll", "benefits", "talent", "learning", "archive" },
+            "Legal" => new[] { "matters", "contracts", "policies", "compliance", "obligations", "archive" },
+            "Technology" => new[] { "core", "identity", "services", "platform", "telemetry", "reporting" },
+            _ => new[] { "primary", "operations", "analytics", "integration", "history", "archive" }
+        }).ToList();
+
+        if (sourceText.Contains("ERP", StringComparison.OrdinalIgnoreCase)
+            || sourceText.Contains("SAP", StringComparison.OrdinalIgnoreCase)
+            || sourceText.Contains("Oracle Fusion", StringComparison.OrdinalIgnoreCase))
+        {
+            descriptors.InsertRange(0, new[] { "core", "finance", "operations", "reporting" });
+        }
+        else if (sourceText.Contains("CRM", StringComparison.OrdinalIgnoreCase)
+                 || sourceText.Contains("Salesforce", StringComparison.OrdinalIgnoreCase))
+        {
+            descriptors.InsertRange(0, new[] { "core", "service", "analytics", "automation" });
+        }
+        else if (sourceText.Contains("HRIS", StringComparison.OrdinalIgnoreCase)
+                 || sourceText.Contains("Workday", StringComparison.OrdinalIgnoreCase)
+                 || sourceText.Contains("People", StringComparison.OrdinalIgnoreCase))
+        {
+            descriptors.InsertRange(0, new[] { "core", "payroll", "benefits", "talent" });
+        }
+        else if (sourceText.Contains("Warehouse", StringComparison.OrdinalIgnoreCase)
+                 || sourceText.Contains("Data", StringComparison.OrdinalIgnoreCase)
+                 || sourceText.Contains("Analytics", StringComparison.OrdinalIgnoreCase))
+        {
+            descriptors.InsertRange(0, new[] { "warehouse", "mart", "reporting", "analytics" });
+        }
+
+        descriptors.Insert(0, string.Equals(environment, "Staging", StringComparison.OrdinalIgnoreCase) ? "staging" : "primary");
+
+        return descriptors
+            .Where(descriptor => !string.IsNullOrWhiteSpace(descriptor))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string BuildFallbackDatabaseDescriptor(string departmentName, string environment, int index)
+    {
+        var baseDescriptors = string.Equals(environment, "Staging", StringComparison.OrdinalIgnoreCase)
+            ? new[] { "staging", "validation", "testing", "preview", "integration", "sandbox" }
+            : new[] { "primary", "reporting", "integration", "analytics", "history", "archive" };
+        var departmentDescriptors = GetSharePurposeDescriptors(departmentName, "DepartmentProjects")
+            .Concat(GetSharePurposeDescriptors(departmentName, "DepartmentReference"))
+            .Select(descriptor => SlugWords(descriptor))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var candidates = baseDescriptors
+            .Concat(departmentDescriptors)
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            return "primary";
+        }
+
+        var normalizedIndex = Math.Max(0, index);
+        var candidate = candidates[normalizedIndex % candidates.Length];
+        return ApplyUniquenessModifiers(candidate, normalizedIndex / candidates.Length);
+    }
+
+    private static IReadOnlyList<string> GetSharePurposeDescriptors(string departmentName, string sharePurpose)
+    {
+        var family = ResolveDepartmentFamily(departmentName);
+        return (family, sharePurpose) switch
+        {
+            ("Revenue", "DepartmentLeadership") => new[] { "forecast-reviews", "deal-desk", "leadership", "territory-planning", "partner-reviews" },
+            ("Revenue", "DepartmentProjects") => new[] { "pipeline-planning", "deal-readiness", "partner-programs", "market-expansion", "commercial-initiatives" },
+            ("Revenue", "DepartmentReference") => new[] { "pricing-reference", "sales-playbooks", "partner-guides", "opportunity-intel", "commercial-reference" },
+            ("Revenue", "DepartmentArchive") => new[] { "closed-deals", "forecast-history", "partner-archive", "pricing-archive", "commercial-records" },
+
+            ("Marketing", "DepartmentLeadership") => new[] { "brand-reviews", "campaign-leadership", "editorial-planning", "program-reviews", "launch-reviews" },
+            ("Marketing", "DepartmentProjects") => new[] { "campaign-planning", "content-production", "event-programs", "launch-workstreams", "field-marketing" },
+            ("Marketing", "DepartmentReference") => new[] { "brand-standards", "content-library", "message-house", "campaign-reference", "creative-assets" },
+            ("Marketing", "DepartmentArchive") => new[] { "campaign-archive", "content-history", "event-archive", "brand-records", "program-history" },
+
+            ("Customer", "DepartmentLeadership") => new[] { "service-reviews", "renewal-reviews", "support-leadership", "customer-programs", "delivery-reviews" },
+            ("Customer", "DepartmentProjects") => new[] { "escalation-programs", "renewal-planning", "adoption-initiatives", "service-delivery", "customer-readiness" },
+            ("Customer", "DepartmentReference") => new[] { "support-playbooks", "customer-guides", "service-reference", "renewal-guides", "enablement-library" },
+            ("Customer", "DepartmentArchive") => new[] { "case-history", "customer-archive", "renewal-archive", "service-history", "delivery-records" },
+
+            ("Engineering", "DepartmentLeadership") => new[] { "release-reviews", "architecture-council", "quality-reviews", "design-critique", "engineering-leadership" },
+            ("Engineering", "DepartmentProjects") => new[] { "release-planning", "platform-delivery", "sprint-operations", "quality-initiatives", "design-workstreams" },
+            ("Engineering", "DepartmentReference") => new[] { "engineering-playbooks", "architecture-standards", "quality-guides", "design-patterns", "developer-reference" },
+            ("Engineering", "DepartmentArchive") => new[] { "release-archive", "architecture-history", "quality-archive", "design-archive", "engineering-records" },
+
+            ("Operations", "DepartmentLeadership") => new[] { "operations-reviews", "supplier-reviews", "quality-council", "warehouse-leadership", "planning-reviews" },
+            ("Operations", "DepartmentProjects") => new[] { "production-planning", "supplier-programs", "inventory-readiness", "quality-improvements", "logistics-initiatives" },
+            ("Operations", "DepartmentReference") => new[] { "operations-standards", "supplier-reference", "process-guides", "quality-reference", "safety-procedures" },
+            ("Operations", "DepartmentArchive") => new[] { "production-history", "inventory-archive", "supplier-archive", "quality-history", "operations-records" },
+
+            ("Finance", "DepartmentLeadership") => new[] { "close-reviews", "budget-council", "treasury-reviews", "controls-forum", "forecast-reviews" },
+            ("Finance", "DepartmentProjects") => new[] { "budget-planning", "forecast-models", "controls-programs", "payment-operations", "treasury-initiatives" },
+            ("Finance", "DepartmentReference") => new[] { "accounting-policies", "forecast-reference", "controls-library", "payment-guides", "treasury-procedures" },
+            ("Finance", "DepartmentArchive") => new[] { "close-archive", "budget-history", "forecast-archive", "payment-records", "finance-history" },
+
+            ("People", "DepartmentLeadership") => new[] { "talent-reviews", "benefits-council", "learning-reviews", "people-leadership", "workforce-planning" },
+            ("People", "DepartmentProjects") => new[] { "people-programs", "benefits-operations", "learning-initiatives", "employee-relations", "workforce-programs" },
+            ("People", "DepartmentReference") => new[] { "people-policies", "benefits-guides", "learning-library", "employee-resources", "talent-reference" },
+            ("People", "DepartmentArchive") => new[] { "people-archive", "benefits-history", "learning-archive", "workforce-records", "relations-history" },
+
+            ("Legal", "DepartmentLeadership") => new[] { "matter-reviews", "compliance-council", "contract-governance", "policy-reviews", "regulatory-forum" },
+            ("Legal", "DepartmentProjects") => new[] { "contract-workstreams", "compliance-programs", "matter-intake", "regulatory-response", "policy-rollout" },
+            ("Legal", "DepartmentReference") => new[] { "contract-library", "compliance-reference", "policy-repository", "matter-guides", "regulatory-standards" },
+            ("Legal", "DepartmentArchive") => new[] { "matter-archive", "contract-archive", "compliance-history", "policy-history", "obligation-records" },
+
+            ("Technology", "DepartmentLeadership") => new[] { "service-reviews", "platform-council", "change-reviews", "access-governance", "data-leadership" },
+            ("Technology", "DepartmentProjects") => new[] { "platform-programs", "service-delivery", "change-readiness", "access-initiatives", "data-operations" },
+            ("Technology", "DepartmentReference") => new[] { "platform-runbooks", "service-reference", "access-standards", "data-guides", "architecture-playbooks" },
+            ("Technology", "DepartmentArchive") => new[] { "service-history", "platform-archive", "change-history", "access-archive", "technology-records" },
+
+            ("Corporate", "DepartmentLeadership") => new[] { "leadership-forum", "governance-reviews", "strategy-council", "planning-reviews", "operating-rhythm" },
+            ("Corporate", "DepartmentProjects") => new[] { "program-coordination", "planning-initiatives", "governance-workstreams", "strategy-rollout", "operations-alignment" },
+            ("Corporate", "DepartmentReference") => new[] { "reference-library", "operating-standards", "governance-guides", "strategy-playbooks", "policy-reference" },
+            ("Corporate", "DepartmentArchive") => new[] { "program-archive", "planning-history", "governance-archive", "strategy-history", "corporate-records" },
+
+            _ when string.Equals(sharePurpose, "DepartmentArchive", StringComparison.OrdinalIgnoreCase) => new[] { "archive", "history", "records", "prior-years", "closed-items" },
+            _ when string.Equals(sharePurpose, "DepartmentReference", StringComparison.OrdinalIgnoreCase) => new[] { "reference", "playbooks", "standards", "guides", "library" },
+            _ when string.Equals(sharePurpose, "DepartmentProjects", StringComparison.OrdinalIgnoreCase) => new[] { "projects", "delivery", "planning", "initiatives", "workstreams" },
+            _ when string.Equals(sharePurpose, "DepartmentLeadership", StringComparison.OrdinalIgnoreCase) => new[] { "leadership", "reviews", "planning", "governance", "operating-rhythm" },
+            _ => new[] { "shared", "working", "coordination", "operations", "workspace" }
+        };
+    }
+
+    private static string BuildFallbackShareDescriptor(string departmentName, string sharePurpose, int index)
+    {
+        var descriptors = GetSharePurposeDescriptors(departmentName, sharePurpose);
+        var normalizedIndex = Math.Max(0, index);
+        var descriptor = descriptors[normalizedIndex % descriptors.Count];
+        return ApplyUniquenessModifiers(descriptor, normalizedIndex / descriptors.Count);
+    }
+
+    private static string ApplyUniquenessModifiers(string value, int variant)
+    {
+        if (string.IsNullOrWhiteSpace(value) || variant <= 0)
+        {
+            return value;
+        }
+
+        var modifiers = new[]
+        {
+            "north",
+            "central",
+            "south",
+            "east",
+            "west",
+            "prime",
+            "core",
+            "alpha",
+            "beta",
+            "gamma",
+            "delta",
+            "summit"
+        };
+
+        var suffixParts = new List<string>();
+        var sequence = variant - 1;
+        do
+        {
+            suffixParts.Add(modifiers[sequence % modifiers.Length]);
+            sequence = (sequence / modifiers.Length) - 1;
+        }
+        while (sequence >= 0);
+
+        return $"{value}-{string.Join('-', suffixParts)}";
+    }
+
+    private static string NormalizeChannelName(string channelName, string siteName, string workspaceType, string channelType)
+    {
+        if (string.IsNullOrWhiteSpace(channelName))
+        {
+            return channelName;
+        }
+
+        var family = ResolveDepartmentFamily(ExtractDepartmentNameFromSiteName(siteName));
+        var context = ExtractChannelContext(siteName);
+
+        return channelName switch
+        {
+            "Leadership" => BuildContextualChannelName(
+                context,
+                "Leadership",
+                family switch
+                {
+                    "Revenue" => "Deal Leadership",
+                    "Marketing" => "Brand Leadership",
+                    "Customer" => "Service Leadership",
+                    "Engineering" => "Engineering Leadership",
+                    "Operations" => "Operations Leadership",
+                    "Finance" => "Finance Leadership",
+                    "People" => "People Leadership",
+                    "Legal" => "Legal Leadership",
+                    "Technology" => "Technology Leadership",
+                    _ => "Executive Leadership"
+                }),
+            "Risk Review" => BuildContextualChannelName(
+                context,
+                "Risk Review",
+                family switch
+                {
+                    "Revenue" => "Commercial Risk Review",
+                    "Marketing" => "Campaign Risk Review",
+                    "Operations" => "Operational Risk Review",
+                    "Finance" => "Control Risk Review",
+                    "Legal" => "Compliance Risk Review",
+                    "Technology" => "Service Risk Review",
+                    "Customer" => "Delivery Risk Review",
+                    "People" => "People Risk Review",
+                    "Corporate" => "Strategy Risk Review",
+                    _ => "Program Risk Review"
+                }),
+            "External Coordination" => BuildContextualChannelName(
+                context,
+                "Coordination",
+                family switch
+                {
+                    "Revenue" => "Partner Coordination",
+                    "Marketing" => "Agency Coordination",
+                    "Customer" => "Customer Coordination",
+                    "Engineering" => "Vendor Coordination",
+                    "Operations" => "Supplier Coordination",
+                    "Finance" => "Vendor Coordination",
+                    "Legal" => "Outside Counsel Coordination",
+                    "Technology" => "Provider Coordination",
+                    "People" => "Candidate Coordination",
+                    "Corporate" => "Stakeholder Coordination",
+                    _ => "External Coordination"
+                }),
+            "Project Delivery" => BuildContextualChannelName(
+                context,
+                "Delivery",
+                family switch
+                {
+                    "Engineering" => "Release Delivery",
+                    "Operations" => "Implementation Delivery",
+                    "Customer" => "Service Delivery",
+                    "Revenue" => "Commercial Delivery",
+                    "Marketing" => "Campaign Delivery",
+                    "Finance" => "Finance Delivery",
+                    "People" => "Workforce Delivery",
+                    "Legal" => "Policy Delivery",
+                    "Technology" => "Platform Delivery",
+                    "Corporate" => "Strategy Delivery",
+                    _ => "Program Delivery"
+                }),
+            "Knowledge Exchange" => BuildContextualChannelName(
+                context,
+                "Exchange",
+                family switch
+                {
+                    "Revenue" => "Sales Exchange",
+                    "Marketing" => "Content Exchange",
+                    "Engineering" => "Engineering Exchange",
+                    "Operations" => "Operations Exchange",
+                    "Technology" => "Technology Exchange",
+                    "Customer" => "Support Exchange",
+                    "Finance" => "Finance Exchange",
+                    "People" => "People Exchange",
+                    "Legal" => "Legal Exchange",
+                    "Corporate" => "Leadership Exchange",
+                    _ => "Knowledge Exchange"
+                }),
+            _ => channelName
+        };
+    }
+
+    private static string BuildContextualChannelName(string? context, string suffix, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(context) || IsWeakChannelContext(context, suffix))
+        {
+            return fallback;
+        }
+
+        return $"{context} {suffix}";
+    }
+
+    private static string? ExtractChannelContext(string siteName)
+    {
+        if (string.IsNullOrWhiteSpace(siteName))
+        {
+            return null;
+        }
+
+        var contextKeywords = new[]
+        {
+            "Forecast",
+            "Deal Desk",
+            "Partner",
+            "Commercial",
+            "Campaign",
+            "Brand",
+            "Content",
+            "Support",
+            "Renewal",
+            "Adoption",
+            "Service",
+            "Escalation",
+            "Delivery",
+            "Release",
+            "Architecture",
+            "Platform",
+            "Quality",
+            "Design",
+            "Engineering",
+            "Production",
+            "Supplier",
+            "Inventory",
+            "Logistics",
+            "Treasury",
+            "Budget",
+            "Forecast",
+            "Controls",
+            "Benefits",
+            "Learning",
+            "Talent",
+            "Contract",
+            "Compliance",
+            "Policy",
+            "Identity",
+            "Data",
+            "Change",
+            "Access"
+        };
+
+        foreach (var keyword in contextKeywords)
+        {
+            if (siteName.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return keyword;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsWeakChannelContext(string context, string suffix)
+    {
+        if (string.IsNullOrWhiteSpace(context))
+        {
+            return true;
+        }
+
+        if (string.Equals(context, suffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var weakTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Delivery",
+            "Operations",
+            "Planning",
+            "Program",
+            "Programs",
+            "Knowledge",
+            "Reference",
+            "Library",
+            "Workspace",
+            "Cadence",
+            "Forum",
+            "Center",
+            "Hub",
+            "Reviews",
+            "Review"
+        };
+
+        return weakTokens.Contains(context);
+    }
+
+    private static string ExtractDepartmentNameFromSiteName(string siteName)
+    {
+        if (string.IsNullOrWhiteSpace(siteName))
+        {
+            return "Operations";
+        }
+
+        foreach (var descriptor in GenericSiteDescriptors)
+        {
+            if (siteName.EndsWith($" {descriptor}", StringComparison.OrdinalIgnoreCase))
+            {
+                return siteName[..^(descriptor.Length + 1)];
+            }
+        }
+
+        return ExtractPrimaryDepartmentToken(siteName);
+    }
+
+    private static string NormalizeDescriptorForDepartment(string departmentName, string descriptor)
+    {
+        if (string.IsNullOrWhiteSpace(departmentName) || string.IsNullOrWhiteSpace(descriptor))
+        {
+            return descriptor;
+        }
+
+        var normalizedDescriptor = descriptor.Trim();
+        if (normalizedDescriptor.StartsWith($"{departmentName} ", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedDescriptor = normalizedDescriptor[departmentName.Length..].Trim();
+        }
+
+        var departmentTokens = departmentName
+            .Split(new[] { ' ', '-', '/', '&' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var descriptorTokens = normalizedDescriptor
+            .Split(new[] { ' ', '-', '/', '&' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        while (descriptorTokens.Count > 1
+               && departmentTokens.Length > 0
+               && departmentTokens.Any(token => string.Equals(descriptorTokens[0], token, StringComparison.OrdinalIgnoreCase)))
+        {
+            descriptorTokens.RemoveAt(0);
+        }
+
+        return descriptorTokens.Count == 0 ? descriptor : string.Join(' ', descriptorTokens);
+    }
+
+    private static string RefineDescriptorForDepartment(string departmentName, string descriptor, string workspaceType)
+    {
+        var normalized = NormalizeDescriptorForDepartment(departmentName, descriptor);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return descriptor;
+        }
+
+        if (departmentName.Contains("Customer Success", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = ReplaceLeadingWord(normalized, "Support", "Success");
+            normalized = ReplaceLeadingWord(normalized, "Service", "Success");
+            if (string.Equals(normalized, "Delivery Rhythm", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = "Success Operations";
+            }
+        }
+        else if (departmentName.Contains("Customer Support", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = ReplaceLeadingWord(normalized, "Success", "Support");
+        }
+        else if (departmentName.Contains("Business Development", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(normalized, "Revenue Planning", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = "Growth Planning";
+            }
+            else if (string.Equals(normalized, "Sales Coordination", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = "Partner Planning";
+            }
+        }
+        else if (departmentName.Contains("Partnership", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = ReplaceLeadingWord(normalized, "Sales", "Partner");
+            normalized = ReplaceLeadingWord(normalized, "Commercial", "Alliance");
+        }
+        else if (departmentName.Contains("Customer Education", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = ReplaceLeadingWord(normalized, "Support", "Education");
+            normalized = ReplaceLeadingWord(normalized, "Service", "Education");
+            normalized = ReplaceLeadingWord(normalized, "Success", "Education");
+        }
+        else if (departmentName.Contains("Product Management", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(normalized, "Planning", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = "Roadmap Planning";
+            }
+            else if (string.Equals(normalized, "Reviews", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = "Portfolio Reviews";
+            }
+        }
+        else if (departmentName.Contains("Revenue Systems", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Systems Planning";
+        }
+        else if (departmentName.Contains("Sales Operations", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Coordination", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Process Coordination";
+        }
+        else if (departmentName.Contains("Revenue Operations", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Operational Planning";
+        }
+        else if (departmentName.Contains("Human Resources", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "People Policies", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "HR Policies";
+        }
+        else if (departmentName.Contains("Corporate Communications", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Marketing Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Communications Planning";
+        }
+        else if (departmentName.Contains("Cybersecurity", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Technology Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Security Operations";
+        }
+        else if (departmentName.Contains("Enterprise Applications", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Technology Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Application Operations";
+        }
+        else if (departmentName.Contains("Data Platform", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Technology Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Data Operations";
+        }
+        else if (departmentName.Contains("Digital Workplace", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Technology Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Workplace Coordination";
+        }
+        else if (departmentName.Contains("Workplace Services", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Program Office", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Service Coordination";
+        }
+        else if (departmentName.Contains("Procurement", StringComparison.OrdinalIgnoreCase)
+                 && (string.Equals(normalized, "Operations Planning", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(normalized, "Operational Planning", StringComparison.OrdinalIgnoreCase)))
+        {
+            normalized = "Supplier Planning";
+        }
+        else if (departmentName.Contains("Warehouse Operations", StringComparison.OrdinalIgnoreCase)
+                 && (string.Equals(normalized, "Operations Planning", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(normalized, "Operational Planning", StringComparison.OrdinalIgnoreCase)))
+        {
+            normalized = "Inventory Planning";
+        }
+        else if (departmentName.Contains("Production Operations", StringComparison.OrdinalIgnoreCase)
+                 && (string.Equals(normalized, "Operations Planning", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(normalized, "Operational Planning", StringComparison.OrdinalIgnoreCase)))
+        {
+            normalized = "Production Planning";
+        }
+        else if ((departmentName.Contains("Manufacturing Engineering", StringComparison.OrdinalIgnoreCase)
+                  || departmentName.Contains("Process Engineering", StringComparison.OrdinalIgnoreCase))
+                 && string.Equals(normalized, "Product Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Process Planning";
+        }
+        else if ((departmentName.Contains("Quality Assurance", StringComparison.OrdinalIgnoreCase)
+                  || departmentName.Contains("Supplier Quality", StringComparison.OrdinalIgnoreCase))
+                 && string.Equals(normalized, "Product Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Quality Planning";
+        }
+        else if (departmentName.Contains("Test Engineering", StringComparison.OrdinalIgnoreCase)
+                 && string.Equals(normalized, "Product Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Validation Planning";
+        }
+
+        if (departmentName.Contains("Operations", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(normalized, "Operations", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = workspaceType switch
+                {
+                    "Knowledge" => "Standards",
+                    "Project" => "Program Coordination",
+                    _ => "Coordination"
+                };
+            }
+            else if (string.Equals(normalized, "Planning", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = "Operational Planning";
+            }
+        }
+
+        if (departmentName.Contains("Customer Success", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(normalized, "Success Operations", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Adoption Programs";
+        }
+
+        if (departmentName.Contains("Logistics and Planning", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(normalized, "Operations Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Logistics Planning";
+        }
+
+        if (departmentName.Contains("Warehouse Operations", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(normalized, "Operational Planning", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "Inventory Planning";
+        }
+
+        return normalized;
+    }
+
+    private static string ReplaceLeadingWord(string value, string current, string replacement)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || string.IsNullOrWhiteSpace(current)
+            || string.IsNullOrWhiteSpace(replacement)
+            || !value.StartsWith($"{current} ", StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        return $"{replacement}{value[current.Length..]}";
+    }
+
+    private static bool IsGenericSiteDescriptor(string descriptor)
+        => GenericSiteDescriptors.Contains(descriptor, StringComparer.OrdinalIgnoreCase);
+
+    private static string InferWorkspaceTypeFromDescriptor(string descriptor)
+        => descriptor.Contains("Knowledge", StringComparison.OrdinalIgnoreCase)
+           || descriptor.Contains("Reference", StringComparison.OrdinalIgnoreCase)
+           || descriptor.Contains("Guide", StringComparison.OrdinalIgnoreCase)
+           || descriptor.Contains("Library", StringComparison.OrdinalIgnoreCase)
+            ? "Knowledge"
+            : descriptor.Contains("Project", StringComparison.OrdinalIgnoreCase)
+              || descriptor.Contains("Delivery", StringComparison.OrdinalIgnoreCase)
+              || descriptor.Contains("Initiative", StringComparison.OrdinalIgnoreCase)
+              || descriptor.Contains("Launch", StringComparison.OrdinalIgnoreCase)
+                ? "Project"
+                : "Department";
+
+    private static string ResolveDepartmentFamily(string departmentName)
+    {
+        var normalized = departmentName ?? string.Empty;
+        if (normalized.Contains("Sales", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Revenue", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Commercial", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Business Development", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Partnership", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Pricing", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Revenue";
+        }
+
+        if (normalized.Contains("Marketing", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Communication", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Marketing";
+        }
+
+        if (normalized.Contains("Customer", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Support", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Success", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Professional Services", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Field Services", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Renewals", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Customer";
+        }
+
+        if (normalized.Contains("Engineering", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Architecture", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Developer Experience", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Product Design", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Product Management", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Quality", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Test", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Engineering";
+        }
+
+        if (normalized.Contains("Production", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Procurement", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Logistics", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Supplier", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Warehouse", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Manufacturing", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Process", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Operations";
+        }
+
+        if (normalized.Contains("Finance", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Finance";
+        }
+
+        if (normalized.Contains("Human Resources", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("People", StringComparison.OrdinalIgnoreCase))
+        {
+            return "People";
+        }
+
+        if (normalized.Contains("Legal", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Legal";
+        }
+
+        if (normalized.Contains("Technology", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Security", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Cyber", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Data", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Digital", StringComparison.OrdinalIgnoreCase)
+            || normalized.Contains("Enterprise Applications", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Technology";
+        }
+
+        return "Corporate";
+    }
+
+    private static string SlugWords(string value, int maxTokens = 6)
+    {
+        var tokens = value
+            .Split(new[] { ' ', '-', '/', '&', '_' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(token => new string(token.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant())
+            .Where(token => token.Length > 0)
+            .Take(Math.Max(1, maxTokens))
+            .ToArray();
+
+        return tokens.Length == 0 ? "workspace" : string.Join('-', tokens);
+    }
+
+    private static readonly string[] GenericSiteDescriptors =
+    {
+        "Department Workspace",
+        "Knowledge Center",
+        "Leadership Hub",
+        "Reference Center",
+        "Planning Center",
+        "Execution Desk",
+        "Coordination Room",
+        "Enablement Hub",
+        "Operations Hub",
+        "Operating Model",
+        "Collaboration Hub",
+        "Working Session",
+        "Operating Rhythm"
+    };
 
     private static void AddCandidate(ICollection<string> candidates, string? candidate)
     {

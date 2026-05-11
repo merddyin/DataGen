@@ -372,11 +372,15 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     CompanyId = asset.CompanyId,
                     CiKey = $"telephony:{asset.Id}",
                     Name = asset.Identifier,
-                    DisplayName = asset.Identifier,
+                    DisplayName = string.IsNullOrWhiteSpace(asset.DisplayName) ? asset.Identifier : asset.DisplayName,
                     CiType = "Infrastructure",
                     CiClass = "TelephonyDevice",
                     SourceEntityType = "TelephonyAsset",
                     SourceEntityId = asset.Id,
+                    Manufacturer = asset.Vendor,
+                    Vendor = asset.Vendor,
+                    Model = asset.Model,
+                    SerialNumber = asset.Extension,
                     Environment = "Production",
                     OperationalStatus = "Active",
                     LifecycleStatus = "InService",
@@ -389,7 +393,10 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     ServiceTier = "Tier3",
                     ServiceClassification = "VoiceEndpoint",
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, asset.AssignedOfficeId), "Endpoint"),
-                    LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(30, 180))
+                    LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(30, 180)),
+                    Notes = string.IsNullOrWhiteSpace(asset.PhoneNumber)
+                        ? asset.Extension
+                        : $"{asset.PhoneNumber}{(string.IsNullOrWhiteSpace(asset.Extension) ? string.Empty : $" ext. {asset.Extension}")}"
                 });
         }
 
@@ -782,8 +789,8 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             {
                 Id = _idFactory.Next("CMS"),
                 CompanyId = companyContext.Company.Id,
-                SourceSystem = "ServiceCatalog",
-                SourceRecordId = $"CAT-{companyContext.Company.Id}-{_randomSource.Next(1000, 9999)}",
+            SourceSystem = "ServiceCatalog",
+            SourceRecordId = $"CAT-APP-{StableRecordNumber(companyContext.Company.Id, 6)}",
                 CiType = "Application",
                 CiClass = "BusinessApplication",
                 Name = $"{companyContext.Company.Name} Innovation Lab POC",
@@ -806,8 +813,8 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             {
                 Id = _idFactory.Next("CMS"),
                 CompanyId = companyContext.Company.Id,
-                SourceSystem = "SpreadsheetImport",
-                SourceRecordId = $"XLS-{companyContext.Company.Id}-{_randomSource.Next(1000, 9999)}",
+            SourceSystem = "SpreadsheetImport",
+            SourceRecordId = $"XLS-SRV-{StableRecordNumber($"{companyContext.Company.Id}-legacy-archive", 6)}",
                 CiType = "Infrastructure",
                 CiClass = "Server",
                 Name = $"{Slug(companyContext.Company.Name)}-legacy-archive-01",
@@ -907,7 +914,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             Id = _idFactory.Next("CMS"),
             CompanyId = item.CompanyId,
             SourceSystem = sourceSystem,
-            SourceRecordId = $"{sourceSystem}-{item.CiKey}",
+            SourceRecordId = BuildObservedSourceRecordId(sourceSystem, item),
             CiType = item.CiType,
             CiClass = observedCiClass,
             Name = item.Name,
@@ -935,6 +942,84 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             LastSeen = ResolveLastSeen(item, sourceSystem),
             LastImported = _clock.UtcNow
         };
+    }
+
+    private static string BuildObservedSourceRecordId(string sourceSystem, ConfigurationItem item)
+    {
+        var classCode = ResolveSourceClassCode(item);
+        var recordNumber = StableRecordNumber(item.CiKey, 7);
+
+        return sourceSystem switch
+        {
+            "CMDB" => $"CI{recordNumber}",
+            "AutoDiscovery" => $"DISC-{classCode}-{recordNumber}",
+            "SpreadsheetImport" => $"XLS-{classCode}-{recordNumber}",
+            "ServiceCatalog" => $"CAT-{classCode}-{recordNumber}",
+            _ => $"{ResolveSourceSystemCode(sourceSystem)}-{classCode}-{recordNumber}"
+        };
+    }
+
+    private static string ResolveSourceClassCode(ConfigurationItem item)
+        => item.CiClass switch
+        {
+            "Workstation" => "WS",
+            "PrivilegedAccessWorkstation" => "PAW",
+            "Server" => "SRV",
+            "NetworkDevice" => "NET",
+            "TelephonyDevice" => "TEL",
+            "FileShare" => "FS",
+            "CollaborationWorkspace" => "CWS",
+            "Database" => "DB",
+            "DirectoryService" => "DIR",
+            "SaaSApplication" => "SAS",
+            "HybridApplication" => "HYB",
+            "InstalledSoftware" => "SW",
+            _ => new string(item.CiClass.Where(char.IsLetterOrDigit).Take(3).ToArray()).ToUpperInvariant() is { Length: > 0 } code ? code : "CI"
+        };
+
+    private static string ResolveSourceSystemCode(string sourceSystem)
+        => sourceSystem switch
+        {
+            "CMDB" => "CI",
+            "AutoDiscovery" => "DISC",
+            "SpreadsheetImport" => "XLS",
+            "ServiceCatalog" => "CAT",
+            _ => new string(sourceSystem.Where(char.IsLetterOrDigit).Take(4).ToArray()).ToUpperInvariant() is { Length: > 0 } code ? code : "SRC"
+        };
+
+    private static string StableRecordNumber(string value, int digits)
+    {
+        var max = 1;
+        for (var i = 0; i < digits; i++)
+        {
+            max *= 10;
+        }
+
+        var number = (int)(ComputeStableHash(value) % (uint)max);
+        if (number < 0)
+        {
+            number = -number;
+        }
+
+        return number.ToString($"D{digits}");
+    }
+
+    private static uint ComputeStableHash(string value)
+    {
+        unchecked
+        {
+            const uint offset = 2166136261;
+            const uint prime = 16777619;
+            var hash = offset;
+
+            foreach (var character in value)
+            {
+                hash ^= character;
+                hash *= prime;
+            }
+
+            return hash;
+        }
     }
 
     private bool ShouldIncludeInSource(ConfigurationItem item, string sourceSystem, string deviationProfile)

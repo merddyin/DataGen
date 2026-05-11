@@ -27,6 +27,13 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "accounts_missing_temporal_identity_evidence", "accounts are missing temporal identity evidence such as last logon or created/modified timestamps.");
         AppendMetricWarning(warnings, metrics, "workstations_missing_identity_evidence", "workstations are missing both assigned-user and directory-account evidence.");
         AppendMetricWarning(warnings, metrics, "servers_missing_directory_account_evidence", "servers are missing directory-account evidence.");
+        AppendMetricWarning(warnings, metrics, "offices_without_ad_site", "offices are missing corresponding Active Directory site records.");
+        AppendMetricWarning(warnings, metrics, "subnets_missing_site_or_scope", "network subnets are missing site, office, or usable scope metadata.");
+        AppendMetricWarning(warnings, metrics, "devices_missing_network_placement", "devices are missing AD site, subnet, or IP placement.");
+        AppendMetricWarning(warnings, metrics, "servers_missing_network_placement", "servers are missing AD site, subnet, or IP placement.");
+        AppendMetricWarning(warnings, metrics, "network_assets_missing_network_placement", "network assets are missing AD site, subnet, or IP placement.");
+        AppendMetricWarning(warnings, metrics, "telephony_assets_missing_network_placement", "telephony assets are missing AD site, subnet, or IP placement.");
+        AppendMetricWarning(warnings, metrics, "mixed_server_workstation_subnets", "server and workstation assets are sharing the same subnet assignments.");
         AppendMetricWarning(warnings, metrics, "external_people_missing_employer", "external workforce people are missing an employer organization reference.");
         AppendMetricWarning(warnings, metrics, "guest_accounts_missing_metadata", "guest or B2B accounts are missing invitation, tenant, sponsor, or invited-organization metadata.");
         AppendMetricWarning(warnings, metrics, "application_counterparty_links_missing_org", "application counterparty links reference missing external organizations.");
@@ -51,6 +58,8 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "duplicate_configuration_item_display_names", "configuration item display names were duplicated.");
         AppendMetricWarning(warnings, metrics, "duplicate_collaboration_site_names", "collaboration site names were duplicated.");
         AppendMetricWarning(warnings, metrics, "numbered_collaboration_site_names", "collaboration site names use synthetic numeric suffixes.");
+        AppendMetricWarning(warnings, metrics, "generic_collaboration_site_names", "collaboration site names still use generic template labels.");
+        AppendMetricWarning(warnings, metrics, "generic_database_names", "database names still use generic legacy naming patterns.");
         AppendMetricWarning(warnings, metrics, "generic_share_names", "file shares still use generic or legacy naming patterns.");
         AppendMetricWarning(warnings, metrics, "generic_folder_names", "document folders still use generic or sequenced naming patterns.");
         AppendMetricWarning(warnings, metrics, "generic_channel_names", "collaboration channel names still use generic template labels.");
@@ -93,6 +102,13 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["accounts_missing_temporal_identity_evidence"] = CountAccountsMissingTemporalEvidence(world),
             ["workstations_missing_identity_evidence"] = CountWorkstationsMissingIdentityEvidence(world),
             ["servers_missing_directory_account_evidence"] = CountServersMissingDirectoryAccountEvidence(world),
+            ["offices_without_ad_site"] = CountOfficesWithoutAdSite(world),
+            ["subnets_missing_site_or_scope"] = CountSubnetsMissingSiteOrScope(world),
+            ["devices_missing_network_placement"] = CountDevicesMissingNetworkPlacement(world),
+            ["servers_missing_network_placement"] = CountServersMissingNetworkPlacement(world),
+            ["network_assets_missing_network_placement"] = CountNetworkAssetsMissingNetworkPlacement(world),
+            ["telephony_assets_missing_network_placement"] = CountTelephonyAssetsMissingNetworkPlacement(world),
+            ["mixed_server_workstation_subnets"] = CountMixedServerWorkstationSubnets(world),
             ["external_people_missing_employer"] = CountExternalWorkforceWithoutEmployer(world),
             ["guest_accounts_missing_metadata"] = CountGuestAccountsMissingMetadata(world),
             ["application_counterparty_links_missing_org"] = CountLinksMissingOrganization(
@@ -121,6 +137,8 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["duplicate_configuration_item_display_names"] = CountDuplicateConfigurationItemDisplayNames(world),
             ["duplicate_collaboration_site_names"] = CountDuplicateValues(world.CollaborationSites.Select(site => site.Name)),
             ["numbered_collaboration_site_names"] = CountNumberedNames(world.CollaborationSites.Select(site => site.Name)),
+            ["generic_collaboration_site_names"] = CountGenericCollaborationSiteNames(world),
+            ["generic_database_names"] = CountGenericDatabaseNames(world),
             ["generic_share_names"] = CountGenericShareNames(world),
             ["generic_folder_names"] = CountGenericFolderNames(world),
             ["generic_channel_names"] = CountGenericChannelNames(world),
@@ -176,6 +194,8 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["accounts"] = Sample(world.Accounts.Select(account => $"{account.SamAccountName} [{account.AccountType} | {account.IdentityProvider}]")),
             ["servers"] = Sample(world.Servers.Select(server => server.Hostname)),
             ["network_assets"] = Sample(world.NetworkAssets.Select(asset => asset.Hostname)),
+            ["active_directory_sites"] = Sample(world.ActiveDirectorySites.Select(site => site.Name)),
+            ["network_subnets"] = Sample(world.NetworkSubnets.Select(subnet => $"{subnet.Name} [{subnet.AddressCidr} | {subnet.SubnetType}]")),
             ["offices"] = Sample(world.Offices.Select(office => $"{office.Name} [{office.Country} | {office.Region} | {office.BusinessPhone}]")),
             ["identity_stores"] = Sample(world.IdentityStores.Select(store => $"{store.Name} [{store.DirectoryMode} | {store.PrimaryDomain}]")),
             ["external_organizations"] = Sample(world.ExternalOrganizations.Select(organization => organization.Name)),
@@ -301,6 +321,61 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             && string.IsNullOrWhiteSpace(server.OnPremDirectoryAccountId)
             && string.IsNullOrWhiteSpace(server.CloudDirectoryAccountId));
 
+    private static int CountOfficesWithoutAdSite(SyntheticEnterpriseWorld world)
+    {
+        var officeIdsWithSites = world.ActiveDirectorySites
+            .Where(site => !string.IsNullOrWhiteSpace(site.OfficeId))
+            .Select(site => site.OfficeId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return world.Offices.Count(office => !officeIdsWithSites.Contains(office.Id));
+    }
+
+    private static int CountSubnetsMissingSiteOrScope(SyntheticEnterpriseWorld world)
+        => world.NetworkSubnets.Count(subnet =>
+            string.IsNullOrWhiteSpace(subnet.ActiveDirectorySiteId)
+            || string.IsNullOrWhiteSpace(subnet.AddressCidr)
+            || string.IsNullOrWhiteSpace(subnet.GatewayAddress)
+            || string.IsNullOrWhiteSpace(subnet.UsableStartAddress)
+            || string.IsNullOrWhiteSpace(subnet.UsableEndAddress));
+
+    private static int CountDevicesMissingNetworkPlacement(SyntheticEnterpriseWorld world)
+        => world.Devices.Count(device =>
+            string.IsNullOrWhiteSpace(device.ActiveDirectorySiteId)
+            || string.IsNullOrWhiteSpace(device.NetworkSubnetId)
+            || string.IsNullOrWhiteSpace(device.IpAddress));
+
+    private static int CountServersMissingNetworkPlacement(SyntheticEnterpriseWorld world)
+        => world.Servers.Count(server =>
+            string.IsNullOrWhiteSpace(server.ActiveDirectorySiteId)
+            || string.IsNullOrWhiteSpace(server.NetworkSubnetId)
+            || string.IsNullOrWhiteSpace(server.IpAddress));
+
+    private static int CountNetworkAssetsMissingNetworkPlacement(SyntheticEnterpriseWorld world)
+        => world.NetworkAssets.Count(asset =>
+            string.IsNullOrWhiteSpace(asset.ActiveDirectorySiteId)
+            || string.IsNullOrWhiteSpace(asset.NetworkSubnetId)
+            || string.IsNullOrWhiteSpace(asset.IpAddress));
+
+    private static int CountTelephonyAssetsMissingNetworkPlacement(SyntheticEnterpriseWorld world)
+        => world.TelephonyAssets.Count(asset =>
+            string.IsNullOrWhiteSpace(asset.ActiveDirectorySiteId)
+            || string.IsNullOrWhiteSpace(asset.NetworkSubnetId)
+            || string.IsNullOrWhiteSpace(asset.IpAddress));
+
+    private static int CountMixedServerWorkstationSubnets(SyntheticEnterpriseWorld world)
+    {
+        var deviceSubnetIds = world.Devices
+            .Where(device => !string.IsNullOrWhiteSpace(device.NetworkSubnetId))
+            .Select(device => device.NetworkSubnetId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var serverSubnetIds = world.Servers
+            .Where(server => !string.IsNullOrWhiteSpace(server.NetworkSubnetId))
+            .Select(server => server.NetworkSubnetId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        deviceSubnetIds.IntersectWith(serverSubnetIds);
+        return deviceSubnetIds.Count;
+    }
+
     private static bool ShouldExpectLastLogon(DirectoryAccount account)
     {
         if (!account.Enabled)
@@ -393,6 +468,22 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
                 || share.ShareName.StartsWith("profile-", StringComparison.OrdinalIgnoreCase)
                 || System.Text.RegularExpressions.Regex.IsMatch(share.ShareName, @"^[a-z0-9]+share\d*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)));
 
+    private static int CountGenericCollaborationSiteNames(SyntheticEnterpriseWorld world)
+        => world.CollaborationSites.Count(site =>
+            !string.IsNullOrWhiteSpace(site.Name)
+            && System.Text.RegularExpressions.Regex.IsMatch(
+                site.Name,
+                @"\b(Department Workspace|Knowledge Center|Leadership Hub|Reference Center|Planning Center|Execution Desk|Coordination Room|Enablement Hub|Operations Hub|Operating Model|Collaboration Hub|Working Session|Operating Rhythm)$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+
+    private static int CountGenericDatabaseNames(SyntheticEnterpriseWorld world)
+        => world.Databases.Count(database =>
+            !string.IsNullOrWhiteSpace(database.Name)
+            && System.Text.RegularExpressions.Regex.IsMatch(
+                database.Name,
+                @"^(ERP|HRIS|CRM|MES|DWH|OPS|FIN|PAY|SUP)_[a-z0-9]+_\d+$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+
     private static int CountGenericFolderNames(SyntheticEnterpriseWorld world)
         => world.DocumentFolders.Count(folder =>
             !string.IsNullOrWhiteSpace(folder.Name)
@@ -402,6 +493,11 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         => world.CollaborationChannels.Count(channel =>
             string.Equals(channel.Name, "Operations", StringComparison.OrdinalIgnoreCase)
             || string.Equals(channel.Name, "Projects", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Leadership", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Risk Review", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "External Coordination", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Project Delivery", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Knowledge Exchange", StringComparison.OrdinalIgnoreCase)
             || System.Text.RegularExpressions.Regex.IsMatch(channel.Name ?? string.Empty, @"\b\d+\b$", System.Text.RegularExpressions.RegexOptions.CultureInvariant));
 
     private static int CountDuplicateConfigurationItemDisplayNames(SyntheticEnterpriseWorld world)

@@ -757,6 +757,7 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         string hostingModel,
         Department ownerDepartment)
     {
+        applicationName = NormalizeInternalApplicationName(company, applicationName, company.Name);
         var applicationType = ResolveApplicationType(hostingModel, category, company.Name, company.Name);
         var deploymentType = ResolveDeploymentType(hostingModel, applicationType, company.Name, company.Name);
         return new ApplicationRecord
@@ -788,7 +789,10 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         IReadOnlyDictionary<string, VendorProfile> vendorProfiles)
     {
         var ownerDepartment = SelectOwnerDepartment(template.Category, departments, template.OwnerHints, template.Vendor, vendorProfiles);
-        var applicationName = template.Name.Replace("{Company}", company.Name, StringComparison.OrdinalIgnoreCase);
+        var applicationName = NormalizeInternalApplicationName(
+            company,
+            template.Name.Replace("{Company}", company.Name, StringComparison.OrdinalIgnoreCase),
+            template.Vendor);
         var vendorProfile = ResolveVendorProfile(template.Vendor, vendorProfiles);
         var applicationType = ResolveApplicationType(template.HostingModel, template.Category, template.Vendor, company.Name);
         var deploymentType = ResolveDeploymentType(template.HostingModel, applicationType, template.Vendor, company.Name);
@@ -823,7 +827,10 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         IReadOnlyList<Department> departments)
     {
         var ownerDepartment = SelectOwnerDepartment(pattern.Category, departments, pattern.OwnerHints);
-        var applicationName = pattern.Name.Replace("{Company}", company.Name, StringComparison.OrdinalIgnoreCase);
+        var applicationName = NormalizeInternalApplicationName(
+            company,
+            pattern.Name.Replace("{Company}", company.Name, StringComparison.OrdinalIgnoreCase),
+            company.Name);
         var applicationType = ResolveApplicationType(pattern.HostingModel, pattern.Category, company.Name, company.Name);
         var deploymentType = ResolveDeploymentType(pattern.HostingModel, applicationType, company.Name, company.Name);
 
@@ -1732,6 +1739,19 @@ public sealed class BasicApplicationGenerator : IApplicationGenerator
         return string.Equals(appSlug, "app", StringComparison.OrdinalIgnoreCase)
             ? Slugify(applicationName)
             : appSlug;
+    }
+
+    private static string NormalizeInternalApplicationName(Company company, string applicationName, string? vendor)
+    {
+        if (string.IsNullOrWhiteSpace(applicationName)
+            || !string.Equals(vendor, company.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return applicationName;
+        }
+
+        var normalized = StripCompanyPrefix(applicationName, company.Name);
+        normalized = StripCompanyPrefix(normalized, ShortCompanyKey(company));
+        return string.IsNullOrWhiteSpace(normalized) ? applicationName : normalized;
     }
 
     private static string StripCompanyPrefix(string value, string? prefix)

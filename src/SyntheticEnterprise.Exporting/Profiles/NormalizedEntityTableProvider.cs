@@ -207,6 +207,152 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                 },
                 SortKeySelector = office => office.Id
             },
+            new EntityTableDescriptor<ActiveDirectorySite>
+            {
+                LogicalName = "active_directory_sites",
+                RelativePathStem = "entities/active_directory_sites",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "identity_store_id",
+                    "name",
+                    "site_type",
+                    "site_role",
+                    "office_id",
+                    "region",
+                    "country",
+                    "city",
+                    "cloud_provider",
+                    "cloud_region",
+                    "is_primary_hub"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.ActiveDirectorySites,
+                RowProjector = site => new Dictionary<string, object?>
+                {
+                    ["id"] = site.Id,
+                    ["company_id"] = site.CompanyId,
+                    ["identity_store_id"] = site.IdentityStoreId,
+                    ["name"] = site.Name,
+                    ["site_type"] = site.SiteType,
+                    ["site_role"] = site.SiteRole,
+                    ["office_id"] = site.OfficeId,
+                    ["region"] = site.Region,
+                    ["country"] = site.Country,
+                    ["city"] = site.City,
+                    ["cloud_provider"] = site.CloudProvider,
+                    ["cloud_region"] = site.CloudRegion,
+                    ["is_primary_hub"] = site.IsPrimaryHub
+                },
+                SortKeySelector = site => site.Id
+            },
+            new EntityTableDescriptor<ActiveDirectorySiteLink>
+            {
+                LogicalName = "active_directory_site_links",
+                RelativePathStem = "entities/active_directory_site_links",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "identity_store_id",
+                    "name",
+                    "topology_style",
+                    "transport",
+                    "cost",
+                    "replication_interval_minutes"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.ActiveDirectorySiteLinks,
+                RowProjector = link => new Dictionary<string, object?>
+                {
+                    ["id"] = link.Id,
+                    ["company_id"] = link.CompanyId,
+                    ["identity_store_id"] = link.IdentityStoreId,
+                    ["name"] = link.Name,
+                    ["topology_style"] = link.TopologyStyle,
+                    ["transport"] = link.Transport,
+                    ["cost"] = link.Cost,
+                    ["replication_interval_minutes"] = link.ReplicationIntervalMinutes
+                },
+                SortKeySelector = link => link.Id
+            },
+            new EntityTableDescriptor<ActiveDirectorySiteLinkMembership>
+            {
+                LogicalName = "active_directory_site_link_memberships",
+                RelativePathStem = "entities/active_directory_site_link_memberships",
+                Columns =
+                [
+                    "id",
+                    "site_link_id",
+                    "site_id",
+                    "member_order"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.ActiveDirectorySiteLinkMemberships,
+                RowProjector = membership => new Dictionary<string, object?>
+                {
+                    ["id"] = membership.Id,
+                    ["site_link_id"] = membership.SiteLinkId,
+                    ["site_id"] = membership.SiteId,
+                    ["member_order"] = membership.MemberOrder
+                },
+                SortKeySelector = membership => membership.Id
+            },
+            new EntityTableDescriptor<NetworkSubnet>
+            {
+                LogicalName = "network_subnets",
+                RelativePathStem = "entities/network_subnets",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "identity_store_id",
+                    "active_directory_site_id",
+                    "name",
+                    "address_cidr",
+                    "gateway_address",
+                    "usable_start_address",
+                    "usable_end_address",
+                    "subnet_type",
+                    "location_type",
+                    "office_id",
+                    "region",
+                    "country",
+                    "city",
+                    "cloud_provider",
+                    "cloud_region",
+                    "building_label",
+                    "floor_label",
+                    "segment_label",
+                    "vlan_id",
+                    "is_dhcp_scope"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.NetworkSubnets,
+                RowProjector = subnet => new Dictionary<string, object?>
+                {
+                    ["id"] = subnet.Id,
+                    ["company_id"] = subnet.CompanyId,
+                    ["identity_store_id"] = subnet.IdentityStoreId,
+                    ["active_directory_site_id"] = subnet.ActiveDirectorySiteId,
+                    ["name"] = subnet.Name,
+                    ["address_cidr"] = subnet.AddressCidr,
+                    ["gateway_address"] = subnet.GatewayAddress,
+                    ["usable_start_address"] = subnet.UsableStartAddress,
+                    ["usable_end_address"] = subnet.UsableEndAddress,
+                    ["subnet_type"] = subnet.SubnetType,
+                    ["location_type"] = subnet.LocationType,
+                    ["office_id"] = subnet.OfficeId,
+                    ["region"] = subnet.Region,
+                    ["country"] = subnet.Country,
+                    ["city"] = subnet.City,
+                    ["cloud_provider"] = subnet.CloudProvider,
+                    ["cloud_region"] = subnet.CloudRegion,
+                    ["building_label"] = subnet.BuildingLabel,
+                    ["floor_label"] = subnet.FloorLabel,
+                    ["segment_label"] = subnet.SegmentLabel,
+                    ["vlan_id"] = subnet.VlanId,
+                    ["is_dhcp_scope"] = subnet.IsDhcpScope
+                },
+                SortKeySelector = subnet => subnet.Id
+            },
             new EntityTableDescriptor<DirectoryOrganizationalUnit>
             {
                 LogicalName = "organizational_units",
@@ -770,6 +916,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "cloud_directory_account_id",
                     "ou_id",
                     "distinguished_name",
+                    "active_directory_site_id",
+                    "network_subnet_id",
+                    "ip_address",
                     "domain_joined",
                     "compliance_state",
                     "last_seen"
@@ -794,6 +943,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["cloud_directory_account_id"] = device.CloudDirectoryAccountId,
                     ["ou_id"] = device.OuId,
                     ["distinguished_name"] = device.DistinguishedName,
+                    ["active_directory_site_id"] = device.ActiveDirectorySiteId,
+                    ["network_subnet_id"] = device.NetworkSubnetId,
+                    ["ip_address"] = device.IpAddress,
                     ["domain_joined"] = device.DomainJoined,
                     ["compliance_state"] = device.ComplianceState,
                     ["last_seen"] = device.LastSeen
@@ -819,6 +971,12 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "cloud_directory_account_id",
                     "ou_id",
                     "distinguished_name",
+                    "hosting_location_type",
+                    "cloud_provider",
+                    "cloud_region",
+                    "active_directory_site_id",
+                    "network_subnet_id",
+                    "ip_address",
                     "domain_joined",
                     "owner_team_id",
                     "criticality"
@@ -839,6 +997,12 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["cloud_directory_account_id"] = server.CloudDirectoryAccountId,
                     ["ou_id"] = server.OuId,
                     ["distinguished_name"] = server.DistinguishedName,
+                    ["hosting_location_type"] = server.HostingLocationType,
+                    ["cloud_provider"] = server.CloudProvider,
+                    ["cloud_region"] = server.CloudRegion,
+                    ["active_directory_site_id"] = server.ActiveDirectorySiteId,
+                    ["network_subnet_id"] = server.NetworkSubnetId,
+                    ["ip_address"] = server.IpAddress,
                     ["domain_joined"] = server.DomainJoined,
                     ["owner_team_id"] = server.OwnerTeamId,
                     ["criticality"] = server.Criticality
@@ -856,6 +1020,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "hostname",
                     "asset_type",
                     "office_id",
+                    "active_directory_site_id",
+                    "network_subnet_id",
+                    "ip_address",
                     "vendor",
                     "model"
                 ],
@@ -867,6 +1034,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["hostname"] = asset.Hostname,
                     ["asset_type"] = asset.AssetType,
                     ["office_id"] = asset.OfficeId,
+                    ["active_directory_site_id"] = asset.ActiveDirectorySiteId,
+                    ["network_subnet_id"] = asset.NetworkSubnetId,
+                    ["ip_address"] = asset.IpAddress,
                     ["vendor"] = asset.Vendor,
                     ["model"] = asset.Model
                 },

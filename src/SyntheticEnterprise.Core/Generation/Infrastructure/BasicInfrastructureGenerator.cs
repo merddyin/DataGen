@@ -45,6 +45,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             CreateServers(world, company, definition, offices, teams, ous);
             CreateNetworkAssets(world, company, definition, offices);
             CreateTelephonyAssets(world, company, definition, people, offices);
+            CreateDirectorySitesAndSubnets(world, company, offices);
             CreateSoftwareInstallations(world, company);
             CreateAdministrativeEndpointControls(world, company, privilegedAccounts);
             CreateEndpointPolicyAndLocalGroupState(world, company);
@@ -558,17 +559,965 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var office = person is not null && !string.IsNullOrWhiteSpace(person.OfficeId)
                 ? offices.FirstOrDefault(o => o.Id == person.OfficeId)
                 : (offices.Count > 0 ? offices[i % offices.Count] : null);
+            var isConferencePhone = i % 5 == 0;
+            var officeCity = office?.City ?? "Site";
+            var locationCode = BuildLocationCode(officeCity);
+            var companyCode = Slug(company.Name);
+            var phoneIndex = i + 1;
+            var extension = $"{2000 + (phoneIndex % 7000):0000}";
+            var conferenceVendors = new[] { "Poly", "Cisco" };
+            var deskVendors = new[] { "Cisco", "Poly", "Yealink" };
+            var vendor = isConferencePhone
+                ? conferenceVendors[_randomSource.Next(0, conferenceVendors.Length)]
+                : deskVendors[_randomSource.Next(0, deskVendors.Length)];
+            var model = ResolveTelephonyModel(vendor, isConferencePhone);
+            var identifierPrefix = isConferencePhone ? "CPH" : "DPH";
+            var identifier = $"{identifierPrefix}-{companyCode[..Math.Min(6, companyCode.Length)]}-{locationCode[..Math.Min(6, locationCode.Length)]}-{phoneIndex:000}";
+            var displayName = isConferencePhone
+                ? $"{officeCity} Conference Phone {phoneIndex:000}"
+                : $"{officeCity} Desk Phone {phoneIndex:000}";
 
             world.TelephonyAssets.Add(new TelephonyAsset
             {
                 Id = _idFactory.Next("TEL"),
                 CompanyId = company.Id,
-                AssetType = i % 5 == 0 ? "Conference Phone" : "DeskPhone",
-                Identifier = $"+1-555-{_randomSource.Next(200,999)}-{_randomSource.Next(1000,9999)}",
-                AssignedPersonId = i % 5 == 0 ? null : person?.Id,
+                AssetType = isConferencePhone ? "Conference Phone" : "DeskPhone",
+                Identifier = identifier.ToUpperInvariant(),
+                DisplayName = displayName,
+                PhoneNumber = $"+1-555-{_randomSource.Next(200,999)}-{_randomSource.Next(1000,9999)}",
+                Extension = extension,
+                Vendor = vendor,
+                Model = model,
+                AssignedPersonId = isConferencePhone ? null : person?.Id,
                 AssignedOfficeId = office?.Id
             });
         }
+    }
+
+    private void CreateDirectorySitesAndSubnets(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<Office> offices)
+    {
+        var identityStore = world.IdentityStores.FirstOrDefault(store =>
+            string.Equals(store.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(store.StoreType, "ActiveDirectoryDomain", StringComparison.OrdinalIgnoreCase));
+        if (identityStore is null || offices.Count == 0)
+        {
+            return;
+        }
+
+        var companyDevices = world.Devices.Where(device => string.Equals(device.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+        var companyServers = world.Servers.Where(server => string.Equals(server.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+        var companyNetworkAssets = world.NetworkAssets.Where(asset => string.Equals(asset.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+        var companyTelephonyAssets = world.TelephonyAssets.Where(asset => string.Equals(asset.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (companyDevices.Count == 0 && companyServers.Count == 0 && companyNetworkAssets.Count == 0 && companyTelephonyAssets.Count == 0)
+        {
+            return;
+        }
+
+        var peopleByOffice = world.People
+            .Where(person => string.Equals(person.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(person.OfficeId))
+            .GroupBy(person => person.OfficeId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+        var officeSites = CreatePhysicalOfficeSites(world, company, identityStore, offices, peopleByOffice);
+        if (officeSites.Count == 0)
+        {
+            return;
+        }
+
+        PromoteCloudServerPlacement(world, company.Id, offices);
+        companyServers = world.Servers.Where(server => string.Equals(server.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var regionalHubOffices = BuildRegionalHubOfficeMap(offices, peopleByOffice);
+        var cloudSites = CreateCloudSites(world, company, identityStore, companyServers);
+        CreateSiteLinks(world, company, identityStore, officeSites.Values.ToList(), cloudSites);
+
+        var onPremAllocator = new SubnetAllocator(CreateOnPremPool(company.Id));
+        var cloudAllocator = new SubnetAllocator(CreateCloudPool(company.Id));
+
+        var subnetsById = new Dictionary<string, NetworkSubnet>(StringComparer.OrdinalIgnoreCase);
+        var officeSubnetPlans = BuildOfficeSubnetPlans(
+            world,
+            company,
+            identityStore,
+            offices,
+            officeSites,
+            companyDevices,
+            companyNetworkAssets,
+            companyTelephonyAssets,
+            onPremAllocator,
+            subnetsById);
+        var serverSubnetPlans = BuildServerSubnetPlans(
+            world,
+            company,
+            identityStore,
+            companyServers,
+            offices,
+            officeSites,
+            cloudSites,
+            regionalHubOffices,
+            onPremAllocator,
+            cloudAllocator,
+            subnetsById);
+
+        AssignDeviceNetworkPlacement(world, company.Id, officeSubnetPlans, officeSites);
+        AssignNetworkAssetPlacement(world, company.Id, officeSubnetPlans, officeSites);
+        AssignTelephonyPlacement(world, company.Id, officeSubnetPlans, officeSites);
+        AssignServerNetworkPlacement(world, company.Id, offices, serverSubnetPlans, regionalHubOffices);
+    }
+
+    private Dictionary<string, ActiveDirectorySite> CreatePhysicalOfficeSites(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IdentityStore identityStore,
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, int> peopleByOffice)
+    {
+        var sites = new Dictionary<string, ActiveDirectorySite>(StringComparer.OrdinalIgnoreCase);
+        foreach (var office in offices)
+        {
+            var site = new ActiveDirectorySite
+            {
+                Id = _idFactory.Next("ADS"),
+                CompanyId = company.Id,
+                IdentityStoreId = identityStore.Id,
+                Name = BuildPhysicalSiteName(office),
+                SiteType = "PhysicalOffice",
+                SiteRole = office.IsHeadquarters || IsRegionalHubOffice(office, offices, peopleByOffice) ? "Hub" : "Spoke",
+                OfficeId = office.Id,
+                Region = office.Region,
+                Country = office.Country,
+                City = office.City,
+                IsPrimaryHub = office.IsHeadquarters
+            };
+
+            world.ActiveDirectorySites.Add(site);
+            sites[office.Id] = site;
+        }
+
+        return sites;
+    }
+
+    private List<ActiveDirectorySite> CreateCloudSites(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IdentityStore identityStore,
+        IReadOnlyList<ServerAsset> servers)
+    {
+        var cloudSites = new List<ActiveDirectorySite>();
+        foreach (var footprint in servers
+                     .Where(server => string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase)
+                                      && !string.IsNullOrWhiteSpace(server.CloudProvider)
+                                      && !string.IsNullOrWhiteSpace(server.CloudRegion))
+                     .GroupBy(server => $"{server.CloudProvider}|{server.CloudRegion}", StringComparer.OrdinalIgnoreCase))
+        {
+            var sample = footprint.First();
+            var office = servers
+                .Where(server => string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase)
+                                 && string.Equals(server.CloudProvider, sample.CloudProvider, StringComparison.OrdinalIgnoreCase)
+                                 && string.Equals(server.CloudRegion, sample.CloudRegion, StringComparison.OrdinalIgnoreCase))
+                .Select(server => server.OfficeId)
+                .FirstOrDefault();
+            var site = new ActiveDirectorySite
+            {
+                Id = _idFactory.Next("ADS"),
+                CompanyId = company.Id,
+                IdentityStoreId = identityStore.Id,
+                Name = BuildCloudSiteName(sample.CloudProvider!, sample.CloudRegion!),
+                SiteType = "CloudRegion",
+                SiteRole = "Hub",
+                OfficeId = office,
+                Region = sample.CloudRegion!,
+                Country = string.Empty,
+                City = sample.CloudRegion!,
+                CloudProvider = sample.CloudProvider,
+                CloudRegion = sample.CloudRegion,
+                IsPrimaryHub = false
+            };
+
+            world.ActiveDirectorySites.Add(site);
+            cloudSites.Add(site);
+        }
+
+        return cloudSites;
+    }
+
+    private void CreateSiteLinks(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IdentityStore identityStore,
+        IReadOnlyList<ActiveDirectorySite> officeSites,
+        IReadOnlyList<ActiveDirectorySite> cloudSites)
+    {
+        var sites = officeSites.Concat(cloudSites).ToList();
+        if (sites.Count <= 1)
+        {
+            return;
+        }
+
+        var topologyStyle = ResolveSiteTopologyStyle(sites.Count);
+        if (string.Equals(topologyStyle, "FullMesh", StringComparison.OrdinalIgnoreCase))
+        {
+            var link = new ActiveDirectorySiteLink
+            {
+                Id = _idFactory.Next("ADL"),
+                CompanyId = company.Id,
+                IdentityStoreId = identityStore.Id,
+                Name = $"{BuildDirectoryCode(company.PrimaryDomain)}-DEFAULT-IP-LINK",
+                TopologyStyle = "FullMesh",
+                Transport = "IP",
+                Cost = 100,
+                ReplicationIntervalMinutes = 180
+            };
+            world.ActiveDirectorySiteLinks.Add(link);
+
+            for (var i = 0; i < sites.Count; i++)
+            {
+                world.ActiveDirectorySiteLinkMemberships.Add(new ActiveDirectorySiteLinkMembership
+                {
+                    Id = _idFactory.Next("SLM"),
+                    SiteLinkId = link.Id,
+                    SiteId = sites[i].Id,
+                    MemberOrder = i + 1
+                });
+            }
+
+            return;
+        }
+
+        var orderedSites = sites
+            .OrderByDescending(site => site.IsPrimaryHub)
+            .ThenBy(site => site.SiteType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(site => site.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (string.Equals(topologyStyle, "HubAndSpoke", StringComparison.OrdinalIgnoreCase))
+        {
+            var hub = orderedSites.First();
+            foreach (var spoke in orderedSites.Skip(1))
+            {
+                var link = new ActiveDirectorySiteLink
+                {
+                    Id = _idFactory.Next("ADL"),
+                    CompanyId = company.Id,
+                    IdentityStoreId = identityStore.Id,
+                    Name = $"{hub.Name}-{spoke.Name}-IPLINK",
+                    TopologyStyle = "HubAndSpoke",
+                    Transport = "IP",
+                    Cost = 100,
+                    ReplicationIntervalMinutes = 180
+                };
+                world.ActiveDirectorySiteLinks.Add(link);
+                world.ActiveDirectorySiteLinkMemberships.Add(new ActiveDirectorySiteLinkMembership
+                {
+                    Id = _idFactory.Next("SLM"),
+                    SiteLinkId = link.Id,
+                    SiteId = hub.Id,
+                    MemberOrder = 1
+                });
+                world.ActiveDirectorySiteLinkMemberships.Add(new ActiveDirectorySiteLinkMembership
+                {
+                    Id = _idFactory.Next("SLM"),
+                    SiteLinkId = link.Id,
+                    SiteId = spoke.Id,
+                    MemberOrder = 2
+                });
+            }
+
+            return;
+        }
+
+        for (var i = 0; i < orderedSites.Count - 1; i++)
+        {
+            var source = orderedSites[i];
+            var target = orderedSites[i + 1];
+            var link = new ActiveDirectorySiteLink
+            {
+                Id = _idFactory.Next("ADL"),
+                CompanyId = company.Id,
+                IdentityStoreId = identityStore.Id,
+                Name = $"{source.Name}-{target.Name}-LEGACY",
+                TopologyStyle = "LegacyChain",
+                Transport = "IP",
+                Cost = 150,
+                ReplicationIntervalMinutes = 180
+            };
+            world.ActiveDirectorySiteLinks.Add(link);
+            world.ActiveDirectorySiteLinkMemberships.Add(new ActiveDirectorySiteLinkMembership
+            {
+                Id = _idFactory.Next("SLM"),
+                SiteLinkId = link.Id,
+                SiteId = source.Id,
+                MemberOrder = 1
+            });
+            world.ActiveDirectorySiteLinkMemberships.Add(new ActiveDirectorySiteLinkMembership
+            {
+                Id = _idFactory.Next("SLM"),
+                SiteLinkId = link.Id,
+                SiteId = target.Id,
+                MemberOrder = 2
+            });
+        }
+    }
+
+    private Dictionary<string, OfficeSubnetPlan> BuildOfficeSubnetPlans(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IdentityStore identityStore,
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, ActiveDirectorySite> officeSites,
+        IReadOnlyList<ManagedDevice> devices,
+        IReadOnlyList<NetworkAsset> networkAssets,
+        IReadOnlyList<TelephonyAsset> telephonyAssets,
+        SubnetAllocator allocator,
+        IDictionary<string, NetworkSubnet> subnetsById)
+    {
+        var plans = new Dictionary<string, OfficeSubnetPlan>(StringComparer.OrdinalIgnoreCase);
+        foreach (var office in offices)
+        {
+            if (!officeSites.TryGetValue(office.Id, out var site))
+            {
+                continue;
+            }
+
+            var officeDevices = devices.Where(device => string.Equals(device.AssignedOfficeId, office.Id, StringComparison.OrdinalIgnoreCase)).ToList();
+            var standardWorkstations = officeDevices.Count(device => string.Equals(device.DeviceType, "Workstation", StringComparison.OrdinalIgnoreCase));
+            var paws = officeDevices.Count(device => string.Equals(device.DeviceType, "PrivilegedAccessWorkstation", StringComparison.OrdinalIgnoreCase));
+            var networkCount = networkAssets.Count(asset => string.Equals(asset.OfficeId, office.Id, StringComparison.OrdinalIgnoreCase));
+            var voiceCount = telephonyAssets.Count(asset => string.Equals(asset.AssignedOfficeId, office.Id, StringComparison.OrdinalIgnoreCase));
+
+            var workstationSubnets = new List<SubnetAllocationPlan>();
+            var workstationSegments = Math.Max(1, (int)Math.Ceiling(Math.Max(1, standardWorkstations) / 180.0));
+            for (var i = 0; i < workstationSegments; i++)
+            {
+                var building = (i / 6) + 1;
+                var floor = (i % 6) + 1;
+                var subnet = CreateSubnet(
+                    allocator,
+                    company,
+                    identityStore,
+                    site,
+                    office,
+                    name: $"{BuildLocationCode(office.City).ToUpperInvariant()}-B{building}-F{floor}-WS",
+                    subnetType: "Workstation",
+                    locationType: "Office",
+                    buildingLabel: $"Building {building}",
+                    floorLabel: $"Floor {floor}",
+                    segmentLabel: $"B{building}-F{floor}",
+                    vlanId: $"{100 + i:000}");
+                world.NetworkSubnets.Add(subnet);
+                subnetsById[subnet.Id] = subnet;
+                workstationSubnets.Add(new SubnetAllocationPlan(subnet));
+            }
+
+            var pawSubnet = paws > 0
+                ? new SubnetAllocationPlan(CreateAndRegisterSubnet(
+                    world,
+                    subnetsById,
+                    allocator,
+                    company,
+                    identityStore,
+                    site,
+                    office,
+                    $"{BuildLocationCode(office.City).ToUpperInvariant()}-PAW",
+                    "PrivilegedWorkstation",
+                    "Office",
+                    "Admin Zone",
+                    null,
+                    "PAW",
+                    "190"))
+                : null;
+
+            var networkSubnet = new SubnetAllocationPlan(CreateAndRegisterSubnet(
+                world,
+                subnetsById,
+                allocator,
+                company,
+                identityStore,
+                site,
+                office,
+                $"{BuildLocationCode(office.City).ToUpperInvariant()}-NETMGMT",
+                "NetworkManagement",
+                "Office",
+                null,
+                null,
+                "NetworkMgmt",
+                "210"));
+
+            var voiceSubnets = Enumerable.Range(0, Math.Max(1, (int)Math.Ceiling(Math.Max(1, voiceCount) / 180.0)))
+                .Select(index =>
+                {
+                    var subnet = CreateAndRegisterSubnet(
+                        world,
+                        subnetsById,
+                        allocator,
+                        company,
+                        identityStore,
+                        site,
+                        office,
+                        index == 0
+                            ? $"{BuildLocationCode(office.City).ToUpperInvariant()}-VOICE"
+                            : $"{BuildLocationCode(office.City).ToUpperInvariant()}-VOICE-{index + 1:00}",
+                        "Voice",
+                        "Office",
+                        null,
+                        null,
+                        index == 0 ? "Voice" : $"Voice-{index + 1:00}",
+                        $"{220 + index:000}");
+                    return new SubnetAllocationPlan(subnet);
+                })
+                .ToList();
+
+            plans[office.Id] = new OfficeSubnetPlan(
+                site,
+                workstationSubnets,
+                pawSubnet,
+                networkSubnet,
+                voiceSubnets,
+                networkCount,
+                voiceCount);
+        }
+
+        return plans;
+    }
+
+    private Dictionary<string, List<SubnetAllocationPlan>> BuildServerSubnetPlans(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IdentityStore identityStore,
+        IReadOnlyList<ServerAsset> servers,
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, ActiveDirectorySite> officeSites,
+        IReadOnlyList<ActiveDirectorySite> cloudSites,
+        IReadOnlyDictionary<string, Office> regionalHubOffices,
+        SubnetAllocator onPremAllocator,
+        SubnetAllocator cloudAllocator,
+        IDictionary<string, NetworkSubnet> subnetsById)
+    {
+        var cloudSitesByKey = cloudSites.ToDictionary(
+            site => $"{site.CloudProvider}|{site.CloudRegion}",
+            site => site,
+            StringComparer.OrdinalIgnoreCase);
+
+        var plans = new Dictionary<string, List<SubnetAllocationPlan>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var server in servers)
+        {
+            var office = offices.FirstOrDefault(candidate => string.Equals(candidate.Id, server.OfficeId, StringComparison.OrdinalIgnoreCase))
+                        ?? regionalHubOffices.Values.FirstOrDefault();
+            var regionKey = ResolveRegionalKey(office);
+            if (!plans.ContainsKey(regionKey))
+            {
+                plans[regionKey] = new List<SubnetAllocationPlan>();
+            }
+        }
+
+        foreach (var group in servers.GroupBy(server =>
+                 string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase)
+                     ? $"Cloud|{server.CloudProvider}|{server.CloudRegion}|{server.Environment}"
+                     : $"OnPrem|{ResolveRegionalKey(offices.FirstOrDefault(candidate => string.Equals(candidate.Id, server.OfficeId, StringComparison.OrdinalIgnoreCase)) ?? regionalHubOffices.Values.First())}|{server.Environment}",
+                 StringComparer.OrdinalIgnoreCase))
+        {
+            var sample = group.First();
+            var isCloud = string.Equals(sample.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase);
+            var subnetCount = Math.Max(1, (int)Math.Ceiling(group.Count() / 220.0));
+
+            if (isCloud)
+            {
+                if (!cloudSitesByKey.TryGetValue($"{sample.CloudProvider}|{sample.CloudRegion}", out var site))
+                {
+                    continue;
+                }
+
+                var cloudOffice = offices.FirstOrDefault(candidate => string.Equals(candidate.Id, site.OfficeId, StringComparison.OrdinalIgnoreCase));
+                plans[$"{sample.HostingLocationType}|{sample.CloudProvider}|{sample.CloudRegion}|{sample.Environment}"] =
+                    Enumerable.Range(0, subnetCount)
+                        .Select(index =>
+                        {
+                            var subnet = CreateAndRegisterSubnet(
+                                world,
+                                subnetsById,
+                                cloudAllocator,
+                                company,
+                                identityStore,
+                                site,
+                                cloudOffice,
+                                subnetCount == 1
+                                    ? $"{BuildCloudSiteName(sample.CloudProvider!, sample.CloudRegion!)}-{sample.Environment.ToUpperInvariant()}"
+                                    : $"{BuildCloudSiteName(sample.CloudProvider!, sample.CloudRegion!)}-{sample.Environment.ToUpperInvariant()}-{index + 1:00}",
+                                "ServerCloud",
+                                "CloudRegion",
+                                null,
+                                null,
+                                subnetCount == 1
+                                    ? sample.Environment
+                                    : $"{sample.Environment}-{index + 1:00}",
+                                $"{230 + ((world.ActiveDirectorySites.Count + index) % 20):000}",
+                                sample.CloudProvider,
+                                sample.CloudRegion);
+                            return new SubnetAllocationPlan(subnet);
+                        })
+                        .ToList();
+            }
+            else
+            {
+                var office = offices.FirstOrDefault(candidate => string.Equals(candidate.Id, sample.OfficeId, StringComparison.OrdinalIgnoreCase))
+                            ?? regionalHubOffices.Values.First();
+                var site = officeSites[office.Id];
+                plans[$"OnPrem|{ResolveRegionalKey(office)}|{sample.Environment}"] =
+                    Enumerable.Range(0, subnetCount)
+                        .Select(index =>
+                        {
+                            var subnet = CreateAndRegisterSubnet(
+                                world,
+                                subnetsById,
+                                onPremAllocator,
+                                company,
+                                identityStore,
+                                site,
+                                office,
+                                subnetCount == 1
+                                    ? $"{BuildLocationCode(office.City).ToUpperInvariant()}-SRV-{sample.Environment.ToUpperInvariant()}"
+                                    : $"{BuildLocationCode(office.City).ToUpperInvariant()}-SRV-{sample.Environment.ToUpperInvariant()}-{index + 1:00}",
+                                "ServerOnPrem",
+                                "Office",
+                                null,
+                                null,
+                                subnetCount == 1
+                                    ? sample.Environment
+                                    : $"{sample.Environment}-{index + 1:00}",
+                                $"{300 + ((world.ActiveDirectorySites.Count + index) % 50):000}");
+                            return new SubnetAllocationPlan(subnet);
+                        })
+                        .ToList();
+            }
+        }
+
+        return plans;
+    }
+
+    private void AssignDeviceNetworkPlacement(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        IReadOnlyDictionary<string, OfficeSubnetPlan> officeSubnetPlans,
+        IReadOnlyDictionary<string, ActiveDirectorySite> officeSites)
+    {
+        for (var i = 0; i < world.Devices.Count; i++)
+        {
+            var device = world.Devices[i];
+            if (!string.Equals(device.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(device.AssignedOfficeId)
+                || !officeSubnetPlans.TryGetValue(device.AssignedOfficeId, out var plan)
+                || !officeSites.TryGetValue(device.AssignedOfficeId, out var site))
+            {
+                continue;
+            }
+
+            var subnet = string.Equals(device.DeviceType, "PrivilegedAccessWorkstation", StringComparison.OrdinalIgnoreCase) && plan.PrivilegedAccessWorkstationSubnet is not null
+                ? plan.PrivilegedAccessWorkstationSubnet
+                : plan.WorkstationSubnets[FindLeastAllocatedSubnetIndex(plan.WorkstationSubnets)];
+            world.Devices[i] = device with
+            {
+                ActiveDirectorySiteId = site.Id,
+                NetworkSubnetId = subnet.Subnet.Id,
+                IpAddress = subnet.NextHostAddress()
+            };
+        }
+    }
+
+    private void AssignNetworkAssetPlacement(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        IReadOnlyDictionary<string, OfficeSubnetPlan> officeSubnetPlans,
+        IReadOnlyDictionary<string, ActiveDirectorySite> officeSites)
+    {
+        for (var i = 0; i < world.NetworkAssets.Count; i++)
+        {
+            var asset = world.NetworkAssets[i];
+            if (!string.Equals(asset.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(asset.OfficeId)
+                || !officeSubnetPlans.TryGetValue(asset.OfficeId, out var plan)
+                || !officeSites.TryGetValue(asset.OfficeId, out var site))
+            {
+                continue;
+            }
+
+            world.NetworkAssets[i] = asset with
+            {
+                ActiveDirectorySiteId = site.Id,
+                NetworkSubnetId = plan.NetworkManagementSubnet.Subnet.Id,
+                IpAddress = plan.NetworkManagementSubnet.NextHostAddress()
+            };
+        }
+    }
+
+    private void AssignTelephonyPlacement(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        IReadOnlyDictionary<string, OfficeSubnetPlan> officeSubnetPlans,
+        IReadOnlyDictionary<string, ActiveDirectorySite> officeSites)
+    {
+        for (var i = 0; i < world.TelephonyAssets.Count; i++)
+        {
+            var asset = world.TelephonyAssets[i];
+            if (!string.Equals(asset.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (string.IsNullOrWhiteSpace(asset.AssignedOfficeId)
+                || !officeSubnetPlans.TryGetValue(asset.AssignedOfficeId, out var plan)
+                || !officeSites.TryGetValue(asset.AssignedOfficeId, out var site))
+            {
+                continue;
+            }
+
+            var subnet = plan.VoiceSubnets[FindLeastAllocatedSubnetIndex(plan.VoiceSubnets)];
+            world.TelephonyAssets[i] = asset with
+            {
+                ActiveDirectorySiteId = site.Id,
+                NetworkSubnetId = subnet.Subnet.Id,
+                IpAddress = subnet.NextHostAddress()
+            };
+        }
+    }
+
+    private void AssignServerNetworkPlacement(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, List<SubnetAllocationPlan>> serverSubnetPlans,
+        IReadOnlyDictionary<string, Office> regionalHubOffices)
+    {
+        var officesById = offices.ToDictionary(office => office.Id, StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < world.Servers.Count; i++)
+        {
+            var server = world.Servers[i];
+            if (!string.Equals(server.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase))
+            {
+                var key = $"{server.HostingLocationType}|{server.CloudProvider}|{server.CloudRegion}|{server.Environment}";
+                if (!serverSubnetPlans.TryGetValue(key, out var subnets))
+                {
+                    continue;
+                }
+
+                var subnet = subnets[FindLeastAllocatedSubnetIndex(subnets)];
+                world.Servers[i] = server with
+                {
+                    ActiveDirectorySiteId = subnet.Subnet.ActiveDirectorySiteId,
+                    NetworkSubnetId = subnet.Subnet.Id,
+                    IpAddress = subnet.NextHostAddress()
+                };
+            }
+            else
+            {
+                var currentOffice = officesById.TryGetValue(server.OfficeId, out var resolvedOffice)
+                    ? resolvedOffice
+                    : regionalHubOffices.Values.First();
+                var office = regionalHubOffices.TryGetValue(ResolveRegionalKey(currentOffice), out var regionalOffice)
+                    ? regionalOffice
+                    : currentOffice;
+                var key = $"OnPrem|{ResolveRegionalKey(office)}|{server.Environment}";
+                if (!serverSubnetPlans.TryGetValue(key, out var subnets))
+                {
+                    continue;
+                }
+
+                var subnet = subnets[FindLeastAllocatedSubnetIndex(subnets)];
+                world.Servers[i] = server with
+                {
+                    OfficeId = office.Id,
+                    ActiveDirectorySiteId = subnet.Subnet.ActiveDirectorySiteId,
+                    NetworkSubnetId = subnet.Subnet.Id,
+                    IpAddress = subnet.NextHostAddress()
+                };
+            }
+        }
+    }
+
+    private void PromoteCloudServerPlacement(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        IReadOnlyList<Office> offices)
+    {
+        var companyIndexes = world.Servers
+            .Select((server, index) => (Server: server, Index: index))
+            .Where(entry => string.Equals(entry.Server.CompanyId, companyId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (companyIndexes.Count < 10)
+        {
+            return;
+        }
+
+        var eligibleIndexes = companyIndexes
+            .Where(entry =>
+                ((entry.Server.ServerRole is "Application Server" or "Web Server" or "SQL Server" or "Management Server")
+                 && !string.Equals(entry.Server.Environment, "Production", StringComparison.OrdinalIgnoreCase))
+                || entry.Server.ServerRole is "Application Server" or "Web Server")
+            .Select(entry => entry.Index)
+            .Distinct()
+            .ToList();
+        if (eligibleIndexes.Count == 0)
+        {
+            return;
+        }
+
+        var targetCount = Math.Max(1, (int)Math.Round(eligibleIndexes.Count * 0.25, MidpointRounding.AwayFromZero));
+        foreach (var index in eligibleIndexes.Take(targetCount))
+        {
+            var server = world.Servers[index];
+            var office = offices.FirstOrDefault(candidate => string.Equals(candidate.Id, server.OfficeId, StringComparison.OrdinalIgnoreCase));
+            var provider = "Azure";
+            var cloudRegion = ResolveCloudRegion(provider, office);
+            world.Servers[index] = server with
+            {
+                HostingLocationType = "Cloud",
+                CloudProvider = provider,
+                CloudRegion = cloudRegion
+            };
+        }
+    }
+
+    private static bool IsRegionalHubOffice(
+        Office office,
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, int> peopleByOffice)
+    {
+        var regionalPeers = offices.Where(candidate => string.Equals(candidate.Region, office.Region, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (regionalPeers.Count <= 1)
+        {
+            return true;
+        }
+
+        var maxPopulation = regionalPeers.Max(candidate => peopleByOffice.TryGetValue(candidate.Id, out var count) ? count : 0);
+        return peopleByOffice.TryGetValue(office.Id, out var officeCount) && officeCount == maxPopulation;
+    }
+
+    private static Dictionary<string, Office> BuildRegionalHubOfficeMap(
+        IReadOnlyList<Office> offices,
+        IReadOnlyDictionary<string, int> peopleByOffice)
+    {
+        return offices
+            .GroupBy(ResolveRegionalKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(office => office.IsHeadquarters)
+                    .ThenByDescending(office => peopleByOffice.TryGetValue(office.Id, out var count) ? count : 0)
+                    .ThenBy(office => office.Name, StringComparer.OrdinalIgnoreCase)
+                    .First(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private NetworkSubnet CreateSubnet(
+        SubnetAllocator allocator,
+        Company company,
+        IdentityStore identityStore,
+        ActiveDirectorySite site,
+        Office? office,
+        string name,
+        string subnetType,
+        string locationType,
+        string? buildingLabel,
+        string? floorLabel,
+        string? segmentLabel,
+        string? vlanId,
+        string? cloudProvider = null,
+        string? cloudRegion = null)
+    {
+        var cidr = allocator.NextCidr();
+        var network = IPv4Cidr.Parse(cidr);
+        return new NetworkSubnet
+        {
+            Id = _idFactory.Next("SUB"),
+            CompanyId = company.Id,
+            IdentityStoreId = identityStore.Id,
+            ActiveDirectorySiteId = site.Id,
+            Name = name,
+            AddressCidr = cidr,
+            GatewayAddress = network.Address(1),
+            UsableStartAddress = network.Address(10),
+            UsableEndAddress = network.Address(249),
+            SubnetType = subnetType,
+            LocationType = locationType,
+            OfficeId = office?.Id,
+            Region = office?.Region ?? site.Region,
+            Country = office?.Country ?? site.Country,
+            City = office?.City ?? site.City,
+            CloudProvider = cloudProvider,
+            CloudRegion = cloudRegion,
+            BuildingLabel = buildingLabel,
+            FloorLabel = floorLabel,
+            SegmentLabel = segmentLabel,
+            VlanId = vlanId,
+            IsDhcpScope = !string.Equals(subnetType, "ServerOnPrem", StringComparison.OrdinalIgnoreCase)
+                          && !string.Equals(subnetType, "ServerCloud", StringComparison.OrdinalIgnoreCase)
+        };
+    }
+
+    private NetworkSubnet CreateAndRegisterSubnet(
+        SyntheticEnterpriseWorld world,
+        IDictionary<string, NetworkSubnet> subnetsById,
+        SubnetAllocator allocator,
+        Company company,
+        IdentityStore identityStore,
+        ActiveDirectorySite site,
+        Office? office,
+        string name,
+        string subnetType,
+        string locationType,
+        string? buildingLabel,
+        string? floorLabel,
+        string? segmentLabel,
+        string? vlanId,
+        string? cloudProvider = null,
+        string? cloudRegion = null)
+    {
+        var subnet = CreateSubnet(
+            allocator,
+            company,
+            identityStore,
+            site,
+            office,
+            name,
+            subnetType,
+            locationType,
+            buildingLabel,
+            floorLabel,
+            segmentLabel,
+            vlanId,
+            cloudProvider,
+            cloudRegion);
+        world.NetworkSubnets.Add(subnet);
+        subnetsById[subnet.Id] = subnet;
+        return subnet;
+    }
+
+    private static int FindLeastAllocatedSubnetIndex(IReadOnlyList<SubnetAllocationPlan> subnets)
+    {
+        var bestIndex = 0;
+        var bestAllocated = int.MaxValue;
+        for (var i = 0; i < subnets.Count; i++)
+        {
+            if (subnets[i].AllocatedHostCount < bestAllocated)
+            {
+                bestAllocated = subnets[i].AllocatedHostCount;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    private static string ResolveSiteTopologyStyle(int siteCount)
+    {
+        if (siteCount <= 3)
+        {
+            return "FullMesh";
+        }
+
+        if (siteCount <= 6)
+        {
+            return "HubAndSpoke";
+        }
+
+        return "LegacyChain";
+    }
+
+    private static string ResolveRegionalKey(Office? office)
+        => office is null
+            ? "Global"
+            : !string.IsNullOrWhiteSpace(office.Region)
+                ? office.Region
+                : office.Country;
+
+    private static string ResolveCloudRegion(string provider, Office? office)
+    {
+        var country = office?.Country ?? string.Empty;
+        if (!string.Equals(provider, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            return country switch
+            {
+                "Canada" => "ca-central-1",
+                "United Kingdom" => "eu-west-2",
+                "Germany" => "eu-central-1",
+                "France" => "eu-west-3",
+                "India" => "ap-south-1",
+                "Japan" => "ap-northeast-1",
+                "Brazil" => "sa-east-1",
+                _ => "us-east-2"
+            };
+        }
+
+        return country switch
+        {
+            "Canada" => "canadacentral",
+            "Mexico" => "mexicocentral",
+            "United Kingdom" => "uksouth",
+            "Germany" => "germanywestcentral",
+            "France" => "francecentral",
+            "India" => "centralindia",
+            "Japan" => "japaneast",
+            "Brazil" => "brazilsouth",
+            _ when office?.StateOrProvince.Contains("California", StringComparison.OrdinalIgnoreCase) == true => "westus2",
+            _ when office?.StateOrProvince.Contains("Washington", StringComparison.OrdinalIgnoreCase) == true => "westus2",
+            _ when office?.StateOrProvince.Contains("Texas", StringComparison.OrdinalIgnoreCase) == true => "southcentralus",
+            _ => "eastus2"
+        };
+    }
+
+    private static string BuildPhysicalSiteName(Office office)
+    {
+        var countryCode = ResolveCountryCode(office.Country);
+        var locationCode = BuildLocationCode(office.City).ToUpperInvariant();
+        return office.IsHeadquarters
+            ? $"{countryCode}-{locationCode}-HQ"
+            : $"{countryCode}-{locationCode}";
+    }
+
+    private static string BuildCloudSiteName(string provider, string cloudRegion)
+        => $"{provider[..Math.Min(2, provider.Length)].ToUpperInvariant()}-{cloudRegion.Replace(" ", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant()}";
+
+    private static string ResolveCountryCode(string country)
+        => country switch
+        {
+            "United States" => "US",
+            "Canada" => "CA",
+            "Mexico" => "MX",
+            "United Kingdom" => "UK",
+            "Germany" => "DE",
+            "France" => "FR",
+            "India" => "IN",
+            "Japan" => "JP",
+            "Brazil" => "BR",
+            _ => new string(country.Where(char.IsLetter).Take(2).ToArray()).ToUpperInvariant()
+        };
+
+    private static string BuildDirectoryCode(string primaryDomain)
+        => primaryDomain.Split('.', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToUpperInvariant() ?? "CORP";
+
+    private static IPv4Pool CreateOnPremPool(string companyId)
+    {
+        var hash = Math.Abs(StringComparer.OrdinalIgnoreCase.GetHashCode(companyId));
+        var secondStart = 10 + (hash % 120);
+        return new IPv4Pool(10, secondStart, 255);
+    }
+
+    private static IPv4Pool CreateCloudPool(string companyId)
+    {
+        var hash = Math.Abs(StringComparer.OrdinalIgnoreCase.GetHashCode(companyId + "-cloud"));
+        var secondStart = 16 + (hash % 8);
+        return new IPv4Pool(172, secondStart, 31);
     }
 
     private void CreateSoftwareInstallations(SyntheticEnterpriseWorld world, Company company)
@@ -1298,8 +2247,140 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         return $"{first[..Math.Min(3, first.Length)]}{last[..Math.Min(3, last.Length)]}";
     }
 
+    private static string ResolveTelephonyModel(string vendor, bool isConferencePhone)
+        => (vendor, isConferencePhone) switch
+        {
+            ("Cisco", true) => "8832",
+            ("Poly", true) => "Trio C60",
+            ("Cisco", false) => "8841",
+            ("Poly", false) => "VVX 450",
+            ("Yealink", false) => "MP54",
+            _ when isConferencePhone => "Conference Station",
+            _ => "Desk Phone"
+        };
+
     private static string Slug(string value)
         => new string(value.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+
+    private sealed class OfficeSubnetPlan
+    {
+        public OfficeSubnetPlan(
+            ActiveDirectorySite site,
+            IReadOnlyList<SubnetAllocationPlan> workstationSubnets,
+            SubnetAllocationPlan? privilegedAccessWorkstationSubnet,
+            SubnetAllocationPlan networkManagementSubnet,
+            IReadOnlyList<SubnetAllocationPlan> voiceSubnets,
+            int networkAssetCount,
+            int telephonyAssetCount)
+        {
+            Site = site;
+            WorkstationSubnets = workstationSubnets;
+            PrivilegedAccessWorkstationSubnet = privilegedAccessWorkstationSubnet;
+            NetworkManagementSubnet = networkManagementSubnet;
+            VoiceSubnets = voiceSubnets;
+            NetworkAssetCount = networkAssetCount;
+            TelephonyAssetCount = telephonyAssetCount;
+        }
+
+        public ActiveDirectorySite Site { get; }
+        public IReadOnlyList<SubnetAllocationPlan> WorkstationSubnets { get; }
+        public SubnetAllocationPlan? PrivilegedAccessWorkstationSubnet { get; }
+        public SubnetAllocationPlan NetworkManagementSubnet { get; }
+        public IReadOnlyList<SubnetAllocationPlan> VoiceSubnets { get; }
+        public int NetworkAssetCount { get; }
+        public int TelephonyAssetCount { get; }
+    }
+
+    private sealed class SubnetAllocationPlan
+    {
+        private int _nextHost = 10;
+
+        public SubnetAllocationPlan(NetworkSubnet subnet)
+        {
+            Subnet = subnet;
+        }
+
+        public NetworkSubnet Subnet { get; }
+
+        public int AllocatedHostCount => Math.Max(0, _nextHost - 10);
+
+        public string NextHostAddress()
+        {
+            if (_nextHost > 249)
+            {
+                throw new InvalidOperationException($"Subnet {Subnet.AddressCidr} exhausted during host allocation.");
+            }
+
+            var address = IPv4Cidr.Parse(Subnet.AddressCidr).Address(_nextHost);
+            _nextHost++;
+            return address;
+        }
+    }
+
+    private sealed record IPv4Pool(int FirstOctet, int SecondStart, int SecondMax);
+
+    private sealed class SubnetAllocator
+    {
+        private readonly IPv4Pool _pool;
+        private int _second;
+        private int _third;
+
+        public SubnetAllocator(IPv4Pool pool)
+        {
+            _pool = pool;
+            _second = pool.SecondStart;
+            _third = 0;
+        }
+
+        public string NextCidr()
+        {
+            if (_second > _pool.SecondMax)
+            {
+                throw new InvalidOperationException("Subnet allocator exhausted the available private address pool.");
+            }
+
+            var cidr = $"{_pool.FirstOctet}.{_second}.{_third}.0/24";
+            _third++;
+            if (_third > 255)
+            {
+                _third = 0;
+                _second++;
+            }
+
+            return cidr;
+        }
+    }
+
+    private sealed class IPv4Cidr
+    {
+        private readonly int _first;
+        private readonly int _second;
+        private readonly int _third;
+
+        private IPv4Cidr(int first, int second, int third)
+        {
+            _first = first;
+            _second = second;
+            _third = third;
+        }
+
+        public static IPv4Cidr Parse(string cidr)
+        {
+            var address = cidr.Split('/')[0];
+            var octets = address.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (octets.Length != 4)
+            {
+                throw new InvalidOperationException($"Invalid IPv4 CIDR '{cidr}'.");
+            }
+
+            return new IPv4Cidr(
+                int.Parse(octets[0]),
+                int.Parse(octets[1]),
+                int.Parse(octets[2]));
+        }
+
+        public string Address(int hostOctet) => $"{_first}.{_second}.{_third}.{hostOctet}";
+    }
 
     private sealed record NetworkAssetProfile(string AssetType, string Vendor, string Model, string HostPrefix);
     private sealed record JoinProfile(bool CreateOnPremAccount, bool CreateCloudAccount);

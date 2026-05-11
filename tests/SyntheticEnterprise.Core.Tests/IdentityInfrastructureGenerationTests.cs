@@ -715,7 +715,7 @@ public sealed class IdentityInfrastructureGenerationTests
     }
 
     [Fact]
-    public void WorldGenerator_Concentrates_Server_Footprint_At_Headquarters()
+    public void WorldGenerator_Concentrates_OnPrem_Server_Footprint_To_Regional_Hubs()
     {
         var services = new ServiceCollection()
             .AddSyntheticEnterpriseCore()
@@ -754,14 +754,137 @@ public sealed class IdentityInfrastructureGenerationTests
             .GroupBy(server => server.OfficeId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
 
-        var headquarters = Assert.Single(result.World.Offices, office => office.IsHeadquarters);
-        Assert.True(serverCounts.TryGetValue(headquarters.Id, out var headquartersCount));
-        Assert.True(headquartersCount > 0);
-        Assert.True(headquartersCount > serverCounts.Values.Min());
-        Assert.True(serverCounts.Count >= 3);
+        var onPremServers = result.World.Servers
+            .Where(server => !string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.NotEmpty(onPremServers);
+        var onPremOfficesByRegion = onPremServers
+            .Where(server => !string.IsNullOrWhiteSpace(server.OfficeId) && officesById.ContainsKey(server.OfficeId))
+            .GroupBy(server => officesById[server.OfficeId].Region, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(server => server.OfficeId).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                StringComparer.OrdinalIgnoreCase);
+        Assert.All(onPremOfficesByRegion, entry => Assert.True(entry.Value <= 1));
+        Assert.True(serverCounts.Count <= result.World.Offices.Count);
         Assert.All(
             result.World.Servers.Where(server => !string.IsNullOrWhiteSpace(server.OfficeId)),
             server => Assert.True(officesById.ContainsKey(server.OfficeId)));
+    }
+
+    [Fact]
+    public void WorldGenerator_Generates_Ad_Sites_Subnets_And_Assigned_Ip_Addresses()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 90210,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "AD Site and Subnet Realism Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeHybridDirectory = true,
+                        IncludeM365StyleGroups = true,
+                        IncludeAdministrativeTiers = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Topology Test Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 600,
+                            BusinessUnitCount = 3,
+                            DepartmentCountPerBusinessUnit = 4,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 4,
+                            ServerCount = 20,
+                            NetworkAssetCountPerOffice = 6,
+                            TelephonyAssetCountPerOffice = 8,
+                            Countries = new() { "United States", "Canada", "Mexico" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.NotEmpty(result.World.ActiveDirectorySites);
+        Assert.NotEmpty(result.World.ActiveDirectorySiteLinks);
+        Assert.NotEmpty(result.World.ActiveDirectorySiteLinkMemberships);
+        Assert.NotEmpty(result.World.NetworkSubnets);
+
+        var officesById = result.World.Offices.ToDictionary(office => office.Id, StringComparer.OrdinalIgnoreCase);
+        Assert.All(result.World.Offices, office =>
+            Assert.Contains(result.World.ActiveDirectorySites, site => string.Equals(site.OfficeId, office.Id, StringComparison.OrdinalIgnoreCase)));
+
+        Assert.All(result.World.NetworkSubnets, subnet =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(subnet.ActiveDirectorySiteId));
+            Assert.Matches(@"^\d+\.\d+\.\d+\.0/24$", subnet.AddressCidr);
+            Assert.Matches(@"^\d+\.\d+\.\d+\.1$", subnet.GatewayAddress);
+            Assert.Matches(@"^\d+\.\d+\.\d+\.10$", subnet.UsableStartAddress);
+            Assert.Matches(@"^\d+\.\d+\.\d+\.249$", subnet.UsableEndAddress);
+        });
+
+        Assert.All(result.World.Devices, device =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(device.ActiveDirectorySiteId));
+            Assert.False(string.IsNullOrWhiteSpace(device.NetworkSubnetId));
+            Assert.False(string.IsNullOrWhiteSpace(device.IpAddress));
+            Assert.DoesNotMatch(@"\.(1|2|254|255)$", device.IpAddress!);
+        });
+
+        Assert.All(result.World.Servers, server =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(server.ActiveDirectorySiteId));
+            Assert.False(string.IsNullOrWhiteSpace(server.NetworkSubnetId));
+            Assert.False(string.IsNullOrWhiteSpace(server.IpAddress));
+            Assert.DoesNotMatch(@"\.(1|2|254|255)$", server.IpAddress!);
+        });
+
+        var deviceSubnets = result.World.NetworkSubnets
+            .Where(subnet => subnet.SubnetType is "Workstation" or "PrivilegedWorkstation")
+            .Select(subnet => subnet.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var serverSubnets = result.World.NetworkSubnets
+            .Where(subnet => subnet.SubnetType is "ServerOnPrem" or "ServerCloud")
+            .Select(subnet => subnet.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.All(result.World.Devices, device => Assert.Contains(device.NetworkSubnetId!, deviceSubnets));
+        Assert.All(result.World.Servers, server => Assert.Contains(server.NetworkSubnetId!, serverSubnets));
+
+        var cloudServers = result.World.Servers
+            .Where(server => string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.NotEmpty(cloudServers);
+        Assert.All(cloudServers, server =>
+        {
+            Assert.Equal("Azure", server.CloudProvider);
+            Assert.False(string.IsNullOrWhiteSpace(server.CloudRegion));
+            Assert.StartsWith("172.", server.IpAddress!, StringComparison.OrdinalIgnoreCase);
+        });
+
+        var onPremServers = result.World.Servers
+            .Where(server => !string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.NotEmpty(onPremServers);
+        Assert.All(onPremServers, server => Assert.StartsWith("10.", server.IpAddress!, StringComparison.OrdinalIgnoreCase));
+
+        var onPremOfficesByRegion = onPremServers
+            .Where(server => !string.IsNullOrWhiteSpace(server.OfficeId) && officesById.ContainsKey(server.OfficeId))
+            .GroupBy(server => officesById[server.OfficeId].Region, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(server => server.OfficeId).Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+                StringComparer.OrdinalIgnoreCase);
+        Assert.All(onPremOfficesByRegion, entry => Assert.True(entry.Value <= 1));
     }
 
     [Fact]

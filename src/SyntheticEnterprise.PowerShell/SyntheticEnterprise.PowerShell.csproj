@@ -36,4 +36,14 @@
     </ItemGroup>
     <Copy SourceFiles="@(SqliteNative)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(SqliteNative.FullPath)')" />
   </Target>
+
+  <Target Name="CopyPluginHostArtifacts" AfterTargets="Build">
+    <ItemGroup>
+      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.dll" />
+      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.deps.json" />
+      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.runtimeconfig.json" />
+      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.exe" Condition="'$(OS)' == 'Windows_NT'" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PluginHostArtifact)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(PluginHostArtifact.FullPath)')" />
+  </Target>
 </Project>

@@ -176,22 +176,22 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Cisco AnyConnect");
         Assert.Contains(result.World.SoftwarePackages, package => package.Name == "CrowdStrike Falcon");
         Assert.Contains(result.World.SoftwarePackages, package => package.Name == "Windows Server Backup");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Supplier Quality Hub");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Production Planning");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Quality Portal");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Supplier Exchange");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Cash Position Board");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Quote Desk");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Territory Planner");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Web Content Studio");
+        Assert.Contains(result.World.Applications, application => application.Name == "Supplier Quality Hub");
+        Assert.Contains(result.World.Applications, application => application.Name == "Production Planning");
+        Assert.Contains(result.World.Applications, application => application.Name == "Quality Portal");
+        Assert.Contains(result.World.Applications, application => application.Name == "Supplier Exchange");
+        Assert.Contains(result.World.Applications, application => application.Name == "Cash Position Board");
+        Assert.Contains(result.World.Applications, application => application.Name == "Quote Desk");
+        Assert.Contains(result.World.Applications, application => application.Name == "Territory Planner");
+        Assert.Contains(result.World.Applications, application => application.Name == "Web Content Studio");
         Assert.Contains(result.World.Applications, application =>
-            application.Name == "Catalog Manufacturing Escalation Desk"
-            || application.Name == "Catalog Manufacturing Warranty Resolution Center");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Release Readiness Board");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Capacity Commit Console");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing ERP Core");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Warehouse Management");
-        Assert.Contains(result.World.Applications, application => application.Name == "Catalog Manufacturing Business Continuity Console");
+            application.Name == "Escalation Desk"
+            || application.Name == "Warranty Resolution Center");
+        Assert.Contains(result.World.Applications, application => application.Name == "Release Readiness Board");
+        Assert.Contains(result.World.Applications, application => application.Name == "Capacity Commit Console");
+        Assert.Contains(result.World.Applications, application => application.Name == "ERP Core");
+        Assert.Contains(result.World.Applications, application => application.Name == "Warehouse Management");
+        Assert.Contains(result.World.Applications, application => application.Name == "Business Continuity Console");
         Assert.Contains(result.World.Applications, application => application.Name.EndsWith("Workplace Coordination", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.Applications, application => application.Name.EndsWith("Plant Operations Console", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.Applications, application => application.Vendor == "Plex");
@@ -204,10 +204,13 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.Applications, application => application.Name == "ServiceNow IT Service Management" && application.Url is not null && application.Url.Contains("servicenow.com", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.Applications, application => application.Name == "Siemens Teamcenter" && application.Url is not null && application.Url.Contains("siemens.com", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.Applications, application =>
-            application.Name == "Catalog Manufacturing Supplier Quality Hub"
+            application.Name == "Supplier Quality Hub"
             && string.Equals(application.Vendor, "Catalog Manufacturing", StringComparison.OrdinalIgnoreCase)
             && application.Url is not null
             && application.Url.Contains(".catalogmanufacturing.com", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.Applications, application =>
+            string.Equals(application.Vendor, "Catalog Manufacturing", StringComparison.OrdinalIgnoreCase)
+            && application.Name.StartsWith("Catalog Manufacturing ", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.CloudTenants, tenant =>
             tenant.Provider == "Workday"
             && tenant.TenantType == "HumanCapitalManagement"
@@ -358,7 +361,7 @@ public sealed class ApplicationGenerationTests
             && result.World.Applications.Any(application => application.Id == dependency.TargetApplicationId && application.Name == "SAP S/4HANA"));
         Assert.Contains(result.World.ApplicationDependencies, dependency =>
             dependency.DependencyType == "QualityData"
-            && result.World.Applications.Any(application => application.Id == dependency.SourceApplicationId && application.Name == "Catalog Manufacturing Supplier Quality Hub")
+            && result.World.Applications.Any(application => application.Id == dependency.SourceApplicationId && application.Name == "Supplier Quality Hub")
             && result.World.Applications.Any(application => application.Id == dependency.TargetApplicationId && application.Name == "MasterControl Quality Excellence"));
         Assert.Contains(result.World.AccessControlEvidence, evidence =>
             evidence.TargetType == "Application"
@@ -406,7 +409,7 @@ public sealed class ApplicationGenerationTests
             link.RelationshipType == "PrimarySystem"
             && link.IsPrimary
             && result.World.BusinessProcesses.Any(process => process.Id == link.BusinessProcessId && process.Name == "Quality to Release")
-            && result.World.Applications.Any(application => application.Id == link.ApplicationId && application.Name == "Catalog Manufacturing Supplier Quality Hub"));
+            && result.World.Applications.Any(application => application.Id == link.ApplicationId && application.Name == "Supplier Quality Hub"));
         Assert.Contains(result.World.BusinessProcesses, process => process.Name == "Plan to Produce");
         Assert.Contains(result.World.BusinessProcesses, process => process.Name == "Source to Deliver");
         Assert.Contains(result.World.BusinessProcesses, process => process.Name == "Quality to Release");
@@ -417,7 +420,7 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.ApplicationServices, service => service.Name == "Workday HCM Integration Service" && service.Runtime == "saas");
         Assert.DoesNotContain(result.World.ApplicationServices, service => service.Name == "Databricks Lakehouse Platform Web Portal");
         Assert.Contains(result.World.ApplicationServices, service => service.Name == "Databricks Lakehouse Platform Spark Jobs" && service.Runtime == "spark");
-        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Catalog Manufacturing Supplier Quality Hub Integration Service" && service.Runtime == "dotnet");
+        Assert.Contains(result.World.ApplicationServices, service => service.Name == "Supplier Quality Hub Integration Service" && service.Runtime == "dotnet");
         Assert.Contains(result.World.ApplicationServiceHostings, hosting =>
             hosting.HostType == "Server"
             && string.Equals(hosting.HostingRole, "SQL Server", StringComparison.OrdinalIgnoreCase)
@@ -447,7 +450,7 @@ public sealed class ApplicationGenerationTests
             && dependency.InterfaceType == "REST"
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.SourceServiceId
-                && service.Name == "Catalog Manufacturing Supplier Quality Hub Integration Service")
+                && service.Name == "Supplier Quality Hub Integration Service")
             && result.World.ApplicationServices.Any(service =>
                 service.Id == dependency.TargetServiceId
                 && service.Name.Contains("MasterControl Quality Excellence", StringComparison.OrdinalIgnoreCase)
@@ -640,7 +643,7 @@ public sealed class ApplicationGenerationTests
             catalogs);
 
         Assert.Contains(result.World.Applications, application =>
-            application.Name == "Catalog Manufacturing ERP Core"
+            application.Name == "ERP Core"
             && string.Equals(application.Vendor, "Catalog Manufacturing", StringComparison.OrdinalIgnoreCase)
             && string.Equals(application.Url, "https://erpcore.catalogmanufacturing.com", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.Applications, application =>

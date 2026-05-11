@@ -294,15 +294,48 @@ public sealed class RepositoryGenerationTests
             new CatalogSet());
 
         Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-shared", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-leadership", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-projects", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.FileShares, share => share.ShareName.Contains("-archive", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => System.Text.RegularExpressions.Regex.IsMatch(
+            share.ShareName,
+            @"-(reviews|planning|programs|readiness|workstreams|coordination|operations)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains(result.World.FileShares, share => System.Text.RegularExpressions.Regex.IsMatch(
+            share.ShareName,
+            @"-(reference|library|guides|playbooks|standards|policies)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.Contains(result.World.FileShares, share => System.Text.RegularExpressions.Regex.IsMatch(
+            share.ShareName,
+            @"-(archive|history|records)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
         Assert.Contains(result.World.FileShares, share => share.ShareName.StartsWith("Personal Drive - ", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.FileShares, share => share.ShareName.StartsWith("Profile Store - ", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.CollaborationSites, site => site.Name.EndsWith("Hub", StringComparison.OrdinalIgnoreCase)
-            || site.Name.EndsWith("Session", StringComparison.OrdinalIgnoreCase)
-            || site.Name.EndsWith("Center", StringComparison.OrdinalIgnoreCase)
-            || site.Name.EndsWith("Workspace", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(
+            site.Name,
+            @"\b(Department Workspace|Knowledge Center|Leadership Hub|Reference Center|Planning Center|Execution Desk|Coordination Room|Enablement Hub|Operations Hub|Operating Model|Collaboration Hub|Working Session|Operating Rhythm)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.DoesNotContain(result.World.Databases, database => System.Text.RegularExpressions.Regex.IsMatch(
+            database.Name,
+            @"^(ERP|HRIS|CRM|MES|DWH|OPS|FIN|PAY|SUP)_[a-z0-9]+_\d+$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.DoesNotContain(result.World.CollaborationChannels, channel =>
+            string.Equals(channel.Name, "Leadership", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Risk Review", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "External Coordination", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Project Delivery", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(channel.Name, "Knowledge Exchange", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.CollaborationChannels, channel => System.Text.RegularExpressions.Regex.IsMatch(
+            channel.Name,
+            @"\b(Delivery Delivery|Operations Operations|Planning Planning|Program Exchange)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(
+            site.Name,
+            @"\b(Delivery Delivery|Operations Operations|Planning Planning|Program Exchange)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.DoesNotContain(result.World.CollaborationSites, site =>
+            string.Equals(site.Name, "Customer Success Success Operations", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Business Development Revenue Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Logistics and Planning Operations Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Procurement Operations Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Warehouse Operations Operational Planning", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Meeting Notes", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Projects", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.DocumentLibraries, library => string.Equals(library.Name, "Working Files", StringComparison.OrdinalIgnoreCase));
@@ -361,6 +394,80 @@ public sealed class RepositoryGenerationTests
         Assert.Equal(result.World.CollaborationSites.Count, result.World.CollaborationSites.Select(site => site.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.Equal(result.World.CollaborationSites.Count, result.World.CollaborationSites.Select(site => site.Url).Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(site.Name, @"\s\d+$"));
+    }
+
+    [Fact]
+    public void WorldGenerator_Scales_Contextual_Repository_Naming_Without_Generic_Fallbacks()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var auditService = services.GetRequiredService<IWorldQualityAuditService>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 4242,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Repository Naming Scale Test",
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 12,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Benchmark Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 1200,
+                            BusinessUnitCount = 6,
+                            DepartmentCountPerBusinessUnit = 5,
+                            TeamCountPerDepartment = 3,
+                            OfficeCount = 4,
+                            FileShareCount = 80,
+                            CollaborationSiteCount = 120,
+                            DatabaseCount = 40,
+                            Countries = new() { "United States", "Canada" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        var audit = auditService.Audit(result.World);
+
+        Assert.Equal(0, audit.Metrics["generic_channel_names"]);
+        Assert.Equal(0, audit.Metrics["generic_collaboration_site_names"]);
+        Assert.Equal(0, audit.Metrics["generic_database_names"]);
+        Assert.Equal(0, audit.Metrics["numbered_collaboration_site_names"]);
+        Assert.DoesNotContain(result.World.CollaborationChannels, channel => System.Text.RegularExpressions.Regex.IsMatch(
+            channel.Name,
+            @"\b(Delivery Delivery|Operations Operations|Planning Planning|Program Exchange)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(
+            site.Name,
+            @"\b(Delivery Delivery|Operations Operations|Planning Planning|Program Exchange)\b",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
+        Assert.DoesNotContain(result.World.CollaborationSites, site =>
+            string.Equals(site.Name, "Customer Success Success Operations", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Business Development Revenue Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Logistics and Planning Operations Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Manufacturing Engineering Product Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Quality Assurance Product Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Test Engineering Product Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Process Engineering Product Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Procurement Operations Planning", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(site.Name, "Warehouse Operations Operational Planning", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.FileShares, share => System.Text.RegularExpressions.Regex.IsMatch(
+            share.ShareName,
+            @"-\d+$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant));
     }
 
     [Fact]
@@ -568,7 +675,7 @@ public sealed class RepositoryGenerationTests
             });
 
         Assert.Contains(result.World.CollaborationChannels, channel =>
-            channel.Name == "Risk Review"
+            channel.Name.Contains("Risk Review", StringComparison.OrdinalIgnoreCase)
             && channel.ChannelType == "Standard");
         Assert.Contains(result.World.DocumentLibraries, library =>
             library.Name == "Runbooks"

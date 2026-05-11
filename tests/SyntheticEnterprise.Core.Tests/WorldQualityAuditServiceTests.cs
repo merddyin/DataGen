@@ -353,4 +353,68 @@ public sealed class WorldQualityAuditServiceTests
         Assert.Contains(result.Samples["plugin_capabilities"], capability => string.Equals(capability, "firstparty.itsm", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Samples["offices"], office => office.Contains("London Office", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void Audit_Flags_Missing_Network_Topology_Placement()
+    {
+        var service = new WorldQualityAuditService();
+        var world = new SyntheticEnterpriseWorld();
+        world.Offices.Add(new Office
+        {
+            Id = "OFF-1",
+            CompanyId = "COMP-1",
+            Name = "HQ",
+            Country = "United States",
+            Region = "North America",
+            PostalCode = "60601",
+            Geocoded = true,
+            Latitude = "41.8781",
+            Longitude = "-87.6298",
+            BusinessPhone = "+1 312 555 0100",
+            IsHeadquarters = true
+        });
+        world.Devices.Add(new ManagedDevice
+        {
+            Id = "DEV-1",
+            CompanyId = "COMP-1",
+            DeviceType = "Workstation",
+            Hostname = "WS-001",
+            AssignedOfficeId = "OFF-1"
+        });
+        world.Servers.Add(new ServerAsset
+        {
+            Id = "SRV-1",
+            CompanyId = "COMP-1",
+            Hostname = "SRV-001",
+            OfficeId = "OFF-1"
+        });
+        world.NetworkAssets.Add(new NetworkAsset
+        {
+            Id = "NET-1",
+            CompanyId = "COMP-1",
+            Hostname = "SW-001",
+            OfficeId = "OFF-1"
+        });
+        world.TelephonyAssets.Add(new TelephonyAsset
+        {
+            Id = "TEL-1",
+            CompanyId = "COMP-1",
+            Identifier = "DPH-001",
+            DisplayName = "Desk Phone 1",
+            AssignedOfficeId = "OFF-1"
+        });
+
+        var result = service.Audit(world);
+
+        Assert.Contains(result.Warnings, warning => warning.Contains("Active Directory site records", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("devices are missing AD site, subnet, or IP placement", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("servers are missing AD site, subnet, or IP placement", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("network assets are missing AD site, subnet, or IP placement", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Warnings, warning => warning.Contains("telephony assets are missing AD site, subnet, or IP placement", StringComparison.OrdinalIgnoreCase));
+        Assert.True(result.Metrics["offices_without_ad_site"] > 0);
+        Assert.True(result.Metrics["devices_missing_network_placement"] > 0);
+        Assert.True(result.Metrics["servers_missing_network_placement"] > 0);
+        Assert.True(result.Metrics["network_assets_missing_network_placement"] > 0);
+        Assert.True(result.Metrics["telephony_assets_missing_network_placement"] > 0);
+    }
 }

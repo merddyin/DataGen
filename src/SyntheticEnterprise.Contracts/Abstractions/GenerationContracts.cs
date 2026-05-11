@@ -46,6 +46,9 @@ public record GenerationStatistics
     public int GroupCount { get; init; }
     public int ApplicationCount { get; init; }
     public int DeviceCount { get; init; }
+    public int ActiveDirectorySiteCount { get; init; }
+    public int SiteLinkCount { get; init; }
+    public int NetworkSubnetCount { get; init; }
     public int RepositoryCount { get; init; }
     public int ContainerCount { get; init; }
     public int OrganizationalUnitCount { get; init; }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
@@ -1186,6 +1187,31 @@ public sealed class ExternalPluginRuntimeTests
                 Directory.Delete(tempRoot, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void AssemblyHost_Bundled_Module_Candidates_Include_Root_Level_Executable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var method = typeof(OutOfProcessAssemblyExternalPluginHostAdapter)
+            .GetMethod("ResolveBundledHostCandidates", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var candidates = method!
+            .Invoke(null, new object[] { @"C:\modules\SyntheticEnterprise.PowerShell\0.7.0" }) as System.Collections.IEnumerable;
+        Assert.NotNull(candidates);
+
+        var hostPaths = candidates!
+            .Cast<object>()
+            .Select(candidate => candidate.GetType().GetProperty("HostPath")!.GetValue(candidate)?.ToString())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToList();
+
+        Assert.Contains(@"C:\modules\SyntheticEnterprise.PowerShell\0.7.0\SyntheticEnterprise.PluginHost.exe", hostPaths, StringComparer.OrdinalIgnoreCase);
     }
 
     private static string CreateTempDirectory()

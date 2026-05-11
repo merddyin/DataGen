@@ -21,6 +21,9 @@ public sealed class ExportSummaryBuilder : IExportSummaryBuilder
                 GroupCount = typedResult.Statistics.GroupCount,
                 ApplicationCount = typedResult.Statistics.ApplicationCount,
                 DeviceCount = typedResult.Statistics.DeviceCount,
+                ActiveDirectorySiteCount = typedResult.Statistics.ActiveDirectorySiteCount,
+                SiteLinkCount = typedResult.Statistics.SiteLinkCount,
+                NetworkSubnetCount = typedResult.Statistics.NetworkSubnetCount,
                 RepositoryCount = typedResult.Statistics.RepositoryCount,
                 ContainerCount = typedResult.Statistics.ContainerCount,
                 OrganizationalUnitCount = typedResult.Statistics.OrganizationalUnitCount,
@@ -46,6 +49,9 @@ public sealed class ExportSummaryBuilder : IExportSummaryBuilder
                 GroupCount = world.Groups.Count,
                 ApplicationCount = world.Applications.Count,
                 DeviceCount = world.Devices.Count + world.Servers.Count,
+                ActiveDirectorySiteCount = world.ActiveDirectorySites.Count,
+                SiteLinkCount = world.ActiveDirectorySiteLinks.Count,
+                NetworkSubnetCount = world.NetworkSubnets.Count,
                 RepositoryCount = world.Databases.Count
                     + world.FileShares.Count
                     + world.CollaborationSites.Count
