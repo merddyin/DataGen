@@ -7,12 +7,28 @@ description: Install prerequisites, build or import the module, and verify the D
 
 ## Requirements
 
-For the current build-oriented workflow, plan on:
+For the published PowerShell Gallery module, plan on:
 
 - Windows with PowerShell 7+
+- access to PowerShell Gallery
+
+For source builds, also plan on:
+
 - .NET SDK
-- access to the DataGen source tree or a packaged module build
-- the seeded catalog database and related catalog content
+- access to the DataGen source tree
+
+## Install from PowerShell Gallery
+
+Install the published module:
+
+```powershell
+Install-PSResource SyntheticEnterprise.PowerShell -Repository PSGallery
+Import-Module SyntheticEnterprise.PowerShell
+```
+
+The Gallery package includes the seeded runtime catalog at `catalogs/catalogs.sqlite` inside the module. Standard generation commands load that bundled catalog automatically when you omit `-CatalogRootPath`.
+
+The separate `catalogs.sqlite` file attached to GitHub releases is optional. Use it when you want to inspect the catalog directly, feed another tool, or maintain a custom catalog location outside the module.
 
 ## Build the module from source
 
@@ -22,7 +38,7 @@ From the repository root:
 .\scripts\build-catalog-artifact.ps1 -InstallToCatalogRoot
 ```
 
-That generates the seeded catalog to `artifacts\catalog\catalogs.sqlite` and installs a local working copy to `catalogs\catalogs.sqlite` for source builds.
+That generates the seeded catalog to `artifacts\catalog\catalogs.sqlite` and installs a local working copy to `catalogs\catalogs.sqlite` for source builds. The source build must create this file before compiling the module because the module project packages it into the build output.
 
 Then build the solution:
 
@@ -79,7 +95,9 @@ Get-SEModuleCommandSurface
 
 ## Catalog expectations
 
-Most real workflows assume the catalog bundle is available. If you do not pass `-CatalogRootPath`, DataGen will attempt to load the default catalog set.
+Most real workflows should not pass `-CatalogRootPath`. When the module is installed from PowerShell Gallery, DataGen finds the packaged `catalogs/catalogs.sqlite` file beside the module and uses it as the default catalog set.
+
+Pass `-CatalogRootPath` only when you need to override the packaged catalog with a custom directory or SQLite database.
 
 Use `New-SECatalogDatabase` when you need to rebuild the packaged SQLite catalog or produce a refreshed catalog database from the curated sources.
 

@@ -17,7 +17,19 @@ Catalogs make the generated output:
 
 ## Packaged runtime catalog
 
-The project ships a packaged SQLite catalog intended for runtime use. The catalog work in recent iterations focused on:
+The PowerShell Gallery package ships a packaged SQLite catalog intended for runtime use:
+
+```text
+SyntheticEnterprise.PowerShell/
+  catalogs/
+    catalogs.sqlite
+```
+
+When you run `New-SEEnterpriseWorld` without `-CatalogRootPath`, DataGen searches the module install location, finds that bundled `catalogs` directory, and loads `catalogs.sqlite`. Gallery users do not need to download the separate `catalogs.sqlite` release asset for normal generation.
+
+The separate release asset is useful when you want to inspect the catalog directly, compare catalog builds, feed a custom process, or pin an external catalog file independently from the installed module.
+
+The catalog work in recent iterations focused on:
 
 - keeping the packaged footprint practical
 - consolidating overlapping runtime tables
@@ -55,3 +67,5 @@ Typical reasons include:
 - refreshing seeded runtime content
 - testing catalog changes locally
 - validating packaging size and runtime contents
+
+For source builds, `scripts/build-catalog-artifact.ps1 -InstallToCatalogRoot` writes the canonical build output to `artifacts/catalog/catalogs.sqlite` and installs the working copy to `catalogs/catalogs.sqlite` so the module project can include it during packaging.
