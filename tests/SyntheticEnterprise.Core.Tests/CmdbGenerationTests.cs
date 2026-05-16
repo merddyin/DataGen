@@ -152,5 +152,17 @@ public sealed class CmdbGenerationTests
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "InstalledOn");
         Assert.Contains(result.World.CmdbSourceRelationships, relationship => relationship.RelationshipType == "HostedOn");
         Assert.Contains(result.WorldMetadata!.AppliedLayers, layer => layer == "ConfigurationManagement");
+        Assert.DoesNotContain(result.World.ConfigurationItems, item => string.IsNullOrWhiteSpace(item.BusinessCriticality));
+
+        var criticalities = result.World.ConfigurationItems
+            .Select(item => item.BusinessCriticality)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Assert.Contains("Low", criticalities);
+        Assert.Contains("Medium", criticalities);
+        Assert.Contains("High", criticalities);
+        Assert.True(criticalities.Count >= 3);
     }
 }

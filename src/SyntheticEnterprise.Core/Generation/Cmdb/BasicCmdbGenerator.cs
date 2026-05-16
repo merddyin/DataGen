@@ -76,8 +76,13 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         CmdbProfile profile,
         IDictionary<string, ConfigurationItem> ciBySourceKey)
     {
+        var applicationsById = world.Applications
+            .Where(item => item.CompanyId == companyContext.Company.Id)
+            .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+
         foreach (var store in world.IdentityStores.Where(item => item.CompanyId == companyContext.Company.Id))
         {
+            var criticality = ResolveIdentityStoreCriticality(store, companyContext.Company);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -105,9 +110,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolvePlatformSupportTeam(companyContext),
                     OwningDepartmentId = ResolvePlatformDepartmentId(companyContext),
                     OwningLobId = ResolvePlatformBusinessUnitId(companyContext),
-                    ServiceTier = "Tier1",
+                    ServiceTier = ResolveServiceTier(criticality, "Platform"),
                     ServiceClassification = "IdentityPlatform",
-                    BusinessCriticality = "High",
+                    BusinessCriticality = criticality,
                     MaintenanceWindow = ResolveMaintenanceWindow(store.Environment, ResolveTimeZone(companyContext, null), "Platform"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(5, 45))
                 });
@@ -117,6 +122,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         {
             foreach (var tenant in ResolveCanonicalCloudTenants(world, companyContext.Company.Id))
             {
+                var criticality = ResolveCloudTenantCriticality(tenant);
                 AddConfigurationItem(
                     world,
                     ciBySourceKey,
@@ -152,9 +158,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                             null),
                         OwningDepartmentId = tenant.AdminDepartmentId,
                         OwningLobId = companyContext.DepartmentsById.GetValueOrDefault(tenant.AdminDepartmentId)?.BusinessUnitId,
-                        ServiceTier = "Tier1",
+                        ServiceTier = ResolveServiceTier(criticality, "Platform"),
                         ServiceClassification = "CloudPlatform",
-                        BusinessCriticality = "High",
+                        BusinessCriticality = criticality,
                         MaintenanceWindow = ResolveMaintenanceWindow(tenant.Environment, ResolveTimeZone(companyContext, null), "Platform"),
                         LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(7, 60))
                     });
@@ -165,6 +171,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         {
             var department = companyContext.DepartmentsById.GetValueOrDefault(application.OwnerDepartmentId);
             var ciClass = ResolveApplicationCiClass(application);
+            var criticality = ResolveApplicationCiCriticality(application, ciClass);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -191,9 +198,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolveSupportTeamId(companyContext, department, null),
                     OwningDepartmentId = department?.Id,
                     OwningLobId = department?.BusinessUnitId,
-                    ServiceTier = ResolveServiceTier(application.Criticality, ciClass == "PlatformService" ? "Platform" : "Application"),
+                    ServiceTier = ResolveServiceTier(criticality, ciClass == "PlatformService" ? "Platform" : "Application"),
                     ServiceClassification = ResolveApplicationServiceClassification(application),
-                    BusinessCriticality = application.Criticality,
+                    BusinessCriticality = criticality,
                     DataSensitivity = application.DataSensitivity,
                     MaintenanceWindow = ResolveMaintenanceWindow(application.Environment, ResolveTimeZone(companyContext, null), ciClass),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(10, 120)),
@@ -203,6 +210,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         foreach (var package in ResolveInstalledSoftwarePackages(world, companyContext.Company.Id))
         {
+            var criticality = ResolveSoftwarePackageCriticality(package);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -229,14 +237,16 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolvePlatformSupportTeam(companyContext),
                     OwningDepartmentId = ResolvePlatformDepartmentId(companyContext),
                     OwningLobId = ResolvePlatformBusinessUnitId(companyContext),
-                    ServiceTier = "Tier2",
+                    ServiceTier = ResolveServiceTier(criticality, "Software"),
                     ServiceClassification = "SoftwarePackage",
+                    BusinessCriticality = criticality,
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(15, 180))
                 });
         }
 
         foreach (var server in world.Servers.Where(item => item.CompanyId == companyContext.Company.Id))
         {
+            var criticality = ResolveServerCiCriticality(server);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -267,9 +277,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = !string.IsNullOrWhiteSpace(server.OwnerTeamId) ? server.OwnerTeamId : ResolvePlatformSupportTeam(companyContext),
                     OwningDepartmentId = ResolveTeamDepartmentId(companyContext, server.OwnerTeamId),
                     OwningLobId = companyContext.DepartmentsById.GetValueOrDefault(ResolveTeamDepartmentId(companyContext, server.OwnerTeamId) ?? string.Empty)?.BusinessUnitId,
-                    ServiceTier = ResolveServiceTier(server.Criticality, "Server"),
+                    ServiceTier = ResolveServiceTier(criticality, "Server"),
                     ServiceClassification = "ServerInfrastructure",
-                    BusinessCriticality = server.Criticality,
+                    BusinessCriticality = criticality,
                     MaintenanceWindow = ResolveMaintenanceWindow(server.Environment, ResolveTimeZone(companyContext, server.OfficeId), "Infrastructure"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(7, 90)),
                     Notes = server.ServerRole
@@ -278,6 +288,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         foreach (var device in world.Devices.Where(item => item.CompanyId == companyContext.Company.Id))
         {
+            var criticality = ResolveDeviceCriticality(device);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -311,10 +322,11 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolvePlatformSupportTeam(companyContext),
                     OwningDepartmentId = ResolvePersonDepartmentId(companyContext, device.AssignedPersonId),
                     OwningLobId = companyContext.DepartmentsById.GetValueOrDefault(ResolvePersonDepartmentId(companyContext, device.AssignedPersonId) ?? string.Empty)?.BusinessUnitId,
-                    ServiceTier = "Tier3",
+                    ServiceTier = ResolveServiceTier(criticality, "Endpoint"),
                     ServiceClassification = device.DeviceType.Contains("Privileged", StringComparison.OrdinalIgnoreCase)
                         ? "PrivilegedEndpoint"
                         : "EndUserEndpoint",
+                    BusinessCriticality = criticality,
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, device.AssignedOfficeId), "Endpoint"),
                     LastReviewedAt = device.LastSeen,
                     Notes = device.OperatingSystem
@@ -323,6 +335,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         foreach (var asset in world.NetworkAssets.Where(item => item.CompanyId == companyContext.Company.Id))
         {
+            var criticality = ResolveNetworkCriticality(asset);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -352,8 +365,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolvePlatformSupportTeam(companyContext),
                     OwningDepartmentId = ResolvePlatformDepartmentId(companyContext),
                     OwningLobId = ResolvePlatformBusinessUnitId(companyContext),
-                    ServiceTier = "Tier2",
+                    ServiceTier = ResolveServiceTier(criticality, "Network"),
                     ServiceClassification = "NetworkInfrastructure",
+                    BusinessCriticality = criticality,
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, asset.OfficeId), "Infrastructure"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(14, 120))
                 });
@@ -361,6 +375,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         foreach (var asset in world.TelephonyAssets.Where(item => item.CompanyId == companyContext.Company.Id))
         {
+            var criticality = ResolveTelephonyCriticality(asset);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -390,8 +405,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolvePlatformSupportTeam(companyContext),
                     OwningDepartmentId = ResolvePersonDepartmentId(companyContext, asset.AssignedPersonId),
                     OwningLobId = companyContext.DepartmentsById.GetValueOrDefault(ResolvePersonDepartmentId(companyContext, asset.AssignedPersonId) ?? string.Empty)?.BusinessUnitId,
-                    ServiceTier = "Tier3",
+                    ServiceTier = ResolveServiceTier(criticality, "Endpoint"),
                     ServiceClassification = "VoiceEndpoint",
+                    BusinessCriticality = criticality,
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, asset.AssignedOfficeId), "Endpoint"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(30, 180)),
                     Notes = string.IsNullOrWhiteSpace(asset.PhoneNumber)
@@ -403,6 +419,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         foreach (var database in world.Databases.Where(item => item.CompanyId == companyContext.Company.Id))
         {
             var department = companyContext.DepartmentsById.GetValueOrDefault(database.OwnerDepartmentId);
+            var criticality = ResolveDatabaseCriticality(database, applicationsById);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -430,9 +447,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolveSupportTeamId(companyContext, department, null),
                     OwningDepartmentId = department?.Id,
                     OwningLobId = department?.BusinessUnitId,
-                    ServiceTier = ResolveServiceTier(ResolveDatabaseCriticality(database), "Data"),
+                    ServiceTier = ResolveServiceTier(criticality, "Data"),
                     ServiceClassification = "DataRepository",
-                    BusinessCriticality = ResolveDatabaseCriticality(database),
+                    BusinessCriticality = criticality,
                     DataSensitivity = database.Sensitivity,
                     MaintenanceWindow = ResolveMaintenanceWindow(database.Environment, ResolveTimeZone(companyContext, ResolveOfficeIdForServer(world, database.HostServerId)), "Data"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(10, 120))
@@ -442,6 +459,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         foreach (var share in world.FileShares.Where(item => item.CompanyId == companyContext.Company.Id))
         {
             var department = companyContext.DepartmentsById.GetValueOrDefault(share.OwnerDepartmentId);
+            var criticality = ResolveShareCriticality(share);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -466,9 +484,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolveSupportTeamId(companyContext, department, null),
                     OwningDepartmentId = department?.Id,
                     OwningLobId = department?.BusinessUnitId,
-                    ServiceTier = ResolveServiceTier(ResolveShareCriticality(share), "Data"),
+                    ServiceTier = ResolveServiceTier(criticality, "Data"),
                     ServiceClassification = "SharedDataRepository",
-                    BusinessCriticality = ResolveShareCriticality(share),
+                    BusinessCriticality = criticality,
                     DataSensitivity = share.Sensitivity,
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, ResolveOfficeIdForServer(world, share.HostServerId)), "Data"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(20, 180)),
@@ -480,6 +498,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         foreach (var site in world.CollaborationSites.Where(item => item.CompanyId == companyContext.Company.Id))
         {
             var department = companyContext.DepartmentsById.GetValueOrDefault(site.OwnerDepartmentId);
+            var criticality = ResolveCollaborationCriticality(site);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -506,11 +525,11 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     SupportTeamId = ResolveSupportTeamId(companyContext, department, null),
                     OwningDepartmentId = department?.Id,
                     OwningLobId = department?.BusinessUnitId,
-                    ServiceTier = ResolveServiceTier(ResolveCollaborationCriticality(site), "Collaboration"),
+                    ServiceTier = ResolveServiceTier(criticality, "Collaboration"),
                     ServiceClassification = site.Platform.Contains("Teams", StringComparison.OrdinalIgnoreCase)
                         ? "TeamWorkspace"
                         : "KnowledgeWorkspace",
-                    BusinessCriticality = ResolveCollaborationCriticality(site),
+                    BusinessCriticality = criticality,
                     DataSensitivity = site.PrivacyType == "Private" ? "Internal" : "Public",
                     MaintenanceWindow = ResolveMaintenanceWindow("Production", ResolveTimeZone(companyContext, null), "Collaboration"),
                     LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(10, 150))
@@ -1476,19 +1495,183 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
     }
 
     private static string ResolveRelationshipConfidence(string? criticality)
-        => string.Equals(criticality, "High", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium";
+        => criticality is "High" or "MissionCritical" ? "High" : "Medium";
 
-    private static string ResolveDatabaseCriticality(DatabaseRepository database)
-        => !string.IsNullOrWhiteSpace(database.AssociatedApplicationId) ? "High" : "Medium";
+    private static string ResolveIdentityStoreCriticality(IdentityStore store, Company company)
+    {
+        if (string.Equals(store.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(store.PrimaryDomain, company.PrimaryDomain, StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(store.StoreType, "ActiveDirectory", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(store.StoreType, "HybridDirectory", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "MissionCritical";
+        }
+
+        return string.Equals(store.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+            ? "High"
+            : "Medium";
+    }
+
+    private static string ResolveCloudTenantCriticality(CloudTenant tenant)
+        => string.Equals(tenant.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+            && tenant.TenantType is "Identity" or "Productivity"
+                ? "High"
+                : string.Equals(tenant.Environment, "Production", StringComparison.OrdinalIgnoreCase)
+                    ? "Medium"
+                    : "Low";
+
+    private static string ResolveApplicationCiCriticality(ApplicationRecord application, string ciClass)
+    {
+        if (!string.Equals(application.Environment, "Production", StringComparison.OrdinalIgnoreCase))
+        {
+            return application.Criticality == "High" ? "Medium" : "Low";
+        }
+
+        if (ciClass == "PlatformService"
+            && (application.Name.Contains("Identity", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("Active Directory", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("ERP", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "MissionCritical";
+        }
+
+        if (string.Equals(application.Criticality, "High", StringComparison.OrdinalIgnoreCase)
+            && (application.Name.Contains("ERP", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("Warehouse", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("Production", StringComparison.OrdinalIgnoreCase)
+                || application.Name.Contains("Payroll", StringComparison.OrdinalIgnoreCase)))
+        {
+            return "MissionCritical";
+        }
+
+        return string.IsNullOrWhiteSpace(application.Criticality) ? "Medium" : application.Criticality;
+    }
+
+    private static string ResolveSoftwarePackageCriticality(SoftwarePackage package)
+    {
+        if (package.Name.Contains("CrowdStrike", StringComparison.OrdinalIgnoreCase)
+            || package.Name.Contains("Defender", StringComparison.OrdinalIgnoreCase)
+            || package.Name.Contains("Sentinel", StringComparison.OrdinalIgnoreCase)
+            || package.Name.Contains("VPN", StringComparison.OrdinalIgnoreCase))
+        {
+            return "High";
+        }
+
+        return package.Category switch
+        {
+            "Security" or "Identity" or "Infrastructure" => "Medium",
+            "Database" or "Productivity" or "Browser" => "Low",
+            _ => "Low"
+        };
+    }
+
+    private static string ResolveServerCiCriticality(ServerAsset server)
+    {
+        if (!string.Equals(server.Environment, "Production", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Medium";
+        }
+
+        if (server.ServerRole.Contains("Domain Controller", StringComparison.OrdinalIgnoreCase)
+            || server.ServerRole.Contains("SQL", StringComparison.OrdinalIgnoreCase)
+            || server.ServerRole.Contains("ERP", StringComparison.OrdinalIgnoreCase)
+            || server.ServerRole.Contains("Identity", StringComparison.OrdinalIgnoreCase))
+        {
+            return "MissionCritical";
+        }
+
+        if (server.ServerRole.Contains("Jump Host", StringComparison.OrdinalIgnoreCase)
+            || server.ServerRole.Contains("File", StringComparison.OrdinalIgnoreCase)
+            || server.ServerRole.Contains("Application", StringComparison.OrdinalIgnoreCase)
+            || server.Criticality.Equals("High", StringComparison.OrdinalIgnoreCase))
+        {
+            return "High";
+        }
+
+        return "Medium";
+    }
+
+    private static string ResolveDeviceCriticality(ManagedDevice device)
+    {
+        if (device.DeviceType.Contains("Privileged", StringComparison.OrdinalIgnoreCase))
+        {
+            return "High";
+        }
+
+        return device.DeviceType.Contains("Kiosk", StringComparison.OrdinalIgnoreCase)
+            || device.DeviceType.Contains("Shared", StringComparison.OrdinalIgnoreCase)
+                ? "Medium"
+                : "Low";
+    }
+
+    private static string ResolveNetworkCriticality(NetworkAsset asset)
+        => asset.AssetType switch
+        {
+            "Firewall" or "Router" or "Load Balancer" or "Wireless Controller" => "High",
+            "Switch" => "Medium",
+            _ => "Low"
+        };
+
+    private static string ResolveTelephonyCriticality(TelephonyAsset asset)
+        => asset.AssetType.Contains("Conference", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low";
+
+    private static string ResolveDatabaseCriticality(DatabaseRepository database, IReadOnlyDictionary<string, ApplicationRecord> applicationsById)
+    {
+        var applicationCriticality = !string.IsNullOrWhiteSpace(database.AssociatedApplicationId)
+            && applicationsById.TryGetValue(database.AssociatedApplicationId, out var application)
+            ? application.Criticality
+            : null;
+
+        if (database.Sensitivity is "Restricted" or "Confidential"
+            && string.Equals(applicationCriticality, "High", StringComparison.OrdinalIgnoreCase))
+        {
+            return "MissionCritical";
+        }
+
+        if (!string.IsNullOrWhiteSpace(applicationCriticality))
+        {
+            return database.Sensitivity is "Restricted" or "Confidential"
+                ? "High"
+                : applicationCriticality;
+        }
+
+        return database.Sensitivity switch
+        {
+            "Restricted" or "Confidential" => "High",
+            "Internal" => "Medium",
+            _ => "Low"
+        };
+    }
 
     private static string ResolveShareCriticality(FileShareRepository share)
-        => share.Sensitivity is "Confidential" or "Restricted" ? "High" : "Medium";
+    {
+        if (share.Sensitivity is "Restricted" or "Confidential")
+        {
+            return "High";
+        }
+
+        return share.SharePurpose switch
+        {
+            "UserProfile" or "UserHome" => "Low",
+            "DepartmentArchive" or "DepartmentReference" => "Medium",
+            _ => "Medium"
+        };
+    }
 
     private static string ResolveCollaborationCriticality(CollaborationSite site)
-        => string.Equals(site.WorkspaceType, "Executive", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(site.PrivacyType, "Private", StringComparison.OrdinalIgnoreCase)
-            ? "Medium"
-            : "Low";
+    {
+        if (string.Equals(site.WorkspaceType, "Executive", StringComparison.OrdinalIgnoreCase))
+        {
+            return "High";
+        }
+
+        if (string.Equals(site.PrivacyType, "Private", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Medium";
+        }
+
+        return site.Platform.Contains("Teams", StringComparison.OrdinalIgnoreCase) ? "Low" : "Medium";
+    }
 
     private string ResolveTimeZone(CompanyContext context, string? officeId)
         => !string.IsNullOrWhiteSpace(officeId)
