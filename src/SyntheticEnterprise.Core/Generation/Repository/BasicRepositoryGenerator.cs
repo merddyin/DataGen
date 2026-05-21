@@ -201,50 +201,181 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             .Where(person => userAccountsByPersonId.ContainsKey(person.Id))
             .ToList();
 
-        for (var i = 0; i < targetPeople.Count; i++)
+        if (targetPeople.Count == 0)
         {
-            var person = targetPeople[i];
-            var account = userAccountsByPersonId[person.Id];
-            var shareToken = account.SamAccountName;
-            var hostServer = fileServers.Count > 0 ? fileServers[i % fileServers.Count] : servers.FirstOrDefault();
+            return;
+        }
+
+        var departmentNamesById = world.Departments
+            .Where(department => string.Equals(department.CompanyId, company.Id, StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(department => department.Id, department => department.Name, StringComparer.OrdinalIgnoreCase);
+
+        var hostServers = fileServers.Count > 0 ? fileServers : servers.Take(1).ToList();
+        if (hostServers.Count == 0)
+        {
+            hostServers = [new ServerAsset { Id = string.Empty }];
+        }
+
+        var usersRootHost = ResolveCompanyHost(company, "files");
+        var profilesRootHost = ResolveCompanyHost(company, "profiles");
+        foreach (var hostServer in hostServers)
+        {
+            world.FileShares.Add(new FileShareRepository
+            {
+                Id = _idFactory.Next("FS"),
+                CompanyId = company.Id,
+                ShareName = "users$",
+                UncPath = $"\\\\{usersRootHost}\\users$",
+                OwnerDepartmentId = ResolvePrimaryInfrastructureDepartmentId(targetPeople, departmentNamesById) ?? string.Empty,
+                OwnerPersonId = null,
+                HostServerId = string.IsNullOrWhiteSpace(hostServer.Id) ? null : hostServer.Id,
+                SharePurpose = "UserHome",
+                FileCount = (500 + _randomSource.Next(0, 18000)).ToString(),
+                FolderCount = (Math.Max(50, targetPeople.Count / Math.Max(1, hostServers.Count)) + _randomSource.Next(0, 120)).ToString(),
+                TotalSizeGb = (250 + _randomSource.Next(0, 6000)).ToString(),
+                AccessModel = "GroupBased",
+                Sensitivity = "Internal"
+            });
 
             world.FileShares.Add(new FileShareRepository
             {
                 Id = _idFactory.Next("FS"),
                 CompanyId = company.Id,
-                ShareName = $"Personal Drive - {person.DisplayName}",
-                UncPath = $"\\\\{ResolveCompanyHost(company, "files")}\\users$\\{shareToken}",
+                ShareName = "profiles$",
+                UncPath = $"\\\\{profilesRootHost}\\profiles$",
+                OwnerDepartmentId = ResolvePrimaryInfrastructureDepartmentId(targetPeople, departmentNamesById) ?? string.Empty,
+                OwnerPersonId = null,
+                HostServerId = string.IsNullOrWhiteSpace(hostServer.Id) ? null : hostServer.Id,
+                SharePurpose = "UserProfile",
+                FileCount = (500 + _randomSource.Next(0, 18000)).ToString(),
+                FolderCount = (Math.Max(50, targetPeople.Count / Math.Max(1, hostServers.Count)) + _randomSource.Next(0, 120)).ToString(),
+                TotalSizeGb = (150 + _randomSource.Next(0, 3500)).ToString(),
+                AccessModel = "GroupBased",
+                Sensitivity = "Confidential"
+            });
+        }
+
+        var exceptionTargets = SelectDirectOwnerSharePeople(targetPeople, departmentNamesById);
+        for (var i = 0; i < exceptionTargets.Count; i++)
+        {
+            var person = exceptionTargets[i];
+            var account = userAccountsByPersonId[person.Id];
+            var hostServer = hostServers[i % hostServers.Count];
+            world.FileShares.Add(new FileShareRepository
+            {
+                Id = _idFactory.Next("FS"),
+                CompanyId = company.Id,
+                ShareName = BuildOwnerSpecificShareName(person, departmentNamesById),
+                UncPath = $"\\\\{usersRootHost}\\restricted$\\{account.SamAccountName}",
                 OwnerDepartmentId = person.DepartmentId,
                 OwnerPersonId = person.Id,
-                HostServerId = hostServer?.Id,
-                SharePurpose = "UserHome",
-                FileCount = (20 + _randomSource.Next(0, 2400)).ToString(),
-                FolderCount = (5 + _randomSource.Next(0, 120)).ToString(),
-                TotalSizeGb = (1 + _randomSource.Next(0, 120)).ToString(),
+                HostServerId = string.IsNullOrWhiteSpace(hostServer.Id) ? null : hostServer.Id,
+                SharePurpose = "RestrictedOwner",
+                FileCount = (20 + _randomSource.Next(0, 1400)).ToString(),
+                FolderCount = (5 + _randomSource.Next(0, 90)).ToString(),
+                TotalSizeGb = (1 + _randomSource.Next(0, 160)).ToString(),
                 AccessModel = "DirectOwner",
-                Sensitivity = i % 6 == 0 ? "Confidential" : "Internal"
+                Sensitivity = i % 3 == 0 ? "Confidential" : "Internal"
             });
-
-            if (i % 2 == 0)
-            {
-                world.FileShares.Add(new FileShareRepository
-                {
-                    Id = _idFactory.Next("FS"),
-                    CompanyId = company.Id,
-                    ShareName = $"Profile Store - {person.DisplayName}",
-                    UncPath = $"\\\\{ResolveCompanyHost(company, "profiles")}\\profiles$\\{shareToken}",
-                    OwnerDepartmentId = person.DepartmentId,
-                    OwnerPersonId = person.Id,
-                    HostServerId = hostServer?.Id,
-                    SharePurpose = "UserProfile",
-                    FileCount = (10 + _randomSource.Next(0, 800)).ToString(),
-                    FolderCount = (4 + _randomSource.Next(0, 80)).ToString(),
-                    TotalSizeGb = (1 + _randomSource.Next(0, 80)).ToString(),
-                    AccessModel = "DirectOwner",
-                    Sensitivity = "Confidential"
-                });
-            }
         }
+    }
+
+    private string? ResolvePrimaryInfrastructureDepartmentId(
+        IReadOnlyList<Person> people,
+        IReadOnlyDictionary<string, string> departmentNamesById)
+    {
+        return people
+            .Where(person =>
+                !string.IsNullOrWhiteSpace(person.DepartmentId)
+                && (string.Equals(GetDepartmentName(person.DepartmentId, departmentNamesById), "Information Technology", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(GetDepartmentName(person.DepartmentId, departmentNamesById), "Digital Workplace", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(GetDepartmentName(person.DepartmentId, departmentNamesById), "Enterprise Applications", StringComparison.OrdinalIgnoreCase)))
+            .Select(person => person.DepartmentId)
+            .FirstOrDefault()
+            ?? people.Select(person => person.DepartmentId).FirstOrDefault(departmentId => !string.IsNullOrWhiteSpace(departmentId));
+    }
+
+    private List<Person> SelectDirectOwnerSharePeople(
+        IReadOnlyList<Person> people,
+        IReadOnlyDictionary<string, string> departmentNamesById)
+    {
+        var maxExceptionShares = Math.Clamp((int)Math.Ceiling(people.Count / 1500d), 2, 12);
+        var ranked = people
+            .OrderByDescending(person => GetDirectOwnerSharePriority(person, departmentNamesById))
+            .ThenBy(person => person.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return ranked
+            .Where(person => GetDirectOwnerSharePriority(person, departmentNamesById) > 0)
+            .Take(maxExceptionShares)
+            .ToList();
+    }
+
+    private int GetDirectOwnerSharePriority(Person person, IReadOnlyDictionary<string, string> departmentNamesById)
+    {
+        var title = person.Title ?? string.Empty;
+        var departmentName = GetDepartmentName(person.DepartmentId, departmentNamesById);
+        if (title.Contains("President", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Chief", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("General Counsel", StringComparison.OrdinalIgnoreCase))
+        {
+            return 4;
+        }
+
+        if (title.Contains("Vice President", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Director", StringComparison.OrdinalIgnoreCase))
+        {
+            return 3;
+        }
+
+        if (string.Equals(departmentName, "Legal", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(departmentName, "Human Resources", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(departmentName, "Finance", StringComparison.OrdinalIgnoreCase))
+        {
+            return 2;
+        }
+
+        return 0;
+    }
+
+    private string BuildOwnerSpecificShareName(Person person, IReadOnlyDictionary<string, string> departmentNamesById)
+    {
+        var surname = person.DisplayName.Split(',', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        var title = person.Title ?? string.Empty;
+        var departmentName = GetDepartmentName(person.DepartmentId, departmentNamesById);
+
+        if (title.Contains("President", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Chief", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Vice President", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Executive Working Files - {surname ?? person.DisplayName}";
+        }
+
+        if (string.Equals(departmentName, "Legal", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Legal Working Files - {surname ?? person.DisplayName}";
+        }
+
+        if (string.Equals(departmentName, "Human Resources", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"HR Restricted Files - {surname ?? person.DisplayName}";
+        }
+
+        if (string.Equals(departmentName, "Finance", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Finance Working Files - {surname ?? person.DisplayName}";
+        }
+
+        return $"Restricted Working Files - {(surname ?? person.DisplayName)}";
+    }
+
+    private static string? GetDepartmentName(string? departmentId, IReadOnlyDictionary<string, string> departmentNamesById)
+    {
+        if (string.IsNullOrWhiteSpace(departmentId))
+        {
+            return null;
+        }
+
+        return departmentNamesById.TryGetValue(departmentId, out var departmentName) ? departmentName : null;
     }
 
     private void CreateCollaborationSites(

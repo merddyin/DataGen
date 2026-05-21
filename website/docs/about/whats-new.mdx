@@ -7,6 +7,19 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.8.1
+
+This release focuses on repository realism cleanup for collaboration-heavy enterprises, especially around what should and should not count as a true file share.
+
+### Highlights
+
+- **Realistic hidden-root share modeling**
+  User homes and profile paths are no longer exported as one top-level share per employee. DataGen now models a small number of real hidden roots such as `users$` and `profiles$`, which is much closer to how modern environments are actually run.
+- **Limited owner-specific exceptions**
+  The generator still emits a small number of direct-owner restricted shares for realistic edge cases like executive, legal, HR, and finance working files, but those now appear as exceptions instead of dominating the repository surface.
+- **Cleaner downstream repository counts**
+  Flagship datasets such as Duckburg now present a far more believable file-share footprint for SharePoint- and Teams-heavy organizations, which improves downstream CMDB, coverage, and repository analytics.
+
 ## v0.8.0
 
 This release focuses on realism expansion beyond the flagship Duckburg bundle, with particular emphasis on topology completeness, CMDB quality, and more believable access/resource surfaces.

@@ -63,6 +63,8 @@ public sealed class RepositoryGenerationTests
         Assert.Contains(result.World.FileShares, share => share.SharePurpose == "UserProfile");
         Assert.Contains(result.World.FileShares, share => !string.IsNullOrWhiteSpace(share.OwnerPersonId));
         Assert.Contains(result.World.FileShares, share => !string.IsNullOrWhiteSpace(share.HostServerId));
+        Assert.Contains(result.World.FileShares, share => string.Equals(share.ShareName, "users$", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => string.Equals(share.ShareName, "profiles$", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.Contains("-share-", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.StartsWith("home-", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.StartsWith("profile-", StringComparison.OrdinalIgnoreCase));
@@ -306,8 +308,10 @@ public sealed class RepositoryGenerationTests
             share.ShareName,
             @"-(archive|history|records)$",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant));
-        Assert.Contains(result.World.FileShares, share => share.ShareName.StartsWith("Personal Drive - ", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.FileShares, share => share.ShareName.StartsWith("Profile Store - ", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => string.Equals(share.ShareName, "users$", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.FileShares, share => string.Equals(share.ShareName, "profiles$", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.StartsWith("Personal Drive - ", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.World.FileShares, share => share.ShareName.StartsWith("Profile Store - ", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(result.World.CollaborationSites, site => System.Text.RegularExpressions.Regex.IsMatch(
             site.Name,
             @"\b(Department Workspace|Knowledge Center|Leadership Hub|Reference Center|Planning Center|Execution Desk|Coordination Room|Enablement Hub|Operations Hub|Operating Model|Collaboration Hub|Working Session|Operating Rhythm)$",
