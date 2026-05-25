@@ -7,6 +7,19 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.8.2
+
+This patch release focuses on stronger Active Directory realism, especially around where OU placement belongs and how delegated administration shows up in the generated directory.
+
+### Highlights
+
+- **Correct endpoint vs directory-object separation**
+  Physical workstations and servers no longer carry direct OU placement metadata. OU residency now remains on the corresponding directory accounts, while the endpoint objects themselves stay anchored to location and machine-account relationships.
+- **Location-aware OU population**
+  Hybrid user and machine accounts are now placed into the intended location-specific OU branches, so city and branch OUs actually contain realistic directory objects instead of reading like mostly empty scaffolding.
+- **Broader AD delegation evidence**
+  Generated environments now include a richer delegated-administration ACL surface across workstation, server, user, group, service-account, and administrative OUs, which makes downstream directory and control-plane analysis more believable.
+
 ## v0.8.1
 
 This release focuses on repository realism cleanup for collaboration-heavy enterprises, especially around what should and should not count as a true file share.

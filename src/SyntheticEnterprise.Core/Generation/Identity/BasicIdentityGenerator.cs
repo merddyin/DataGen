@@ -60,7 +60,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             world.OrganizationalUnits.AddRange(ous);
             world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous));
 
-            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, ous, rootDomain, issuedPasswords, issuedSamAccountNames);
+            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, companyOffices, ous, rootDomain, issuedPasswords, issuedSamAccountNames);
             world.Accounts.AddRange(peopleAccounts);
             foreach (var upn in peopleAccounts
                          .Select(account => account.UserPrincipalName)
@@ -259,6 +259,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var browserPilotUsers = FindGroup(world.Groups, company.Id, BrowserPilotUsersGroupName());
         var vpnUsers = FindGroup(world.Groups, company.Id, VpnUsersGroupName());
         var serverRdpUsers = FindGroup(world.Groups, company.Id, ServerRemoteDesktopUsersGroupName());
+        var tier0Admins = FindGroup(world.Groups, company.Id, Tier0IdentityAdminsGroupName());
+        var tier2Helpdesk = FindGroup(world.Groups, company.Id, Tier2HelpdeskGroupName());
 
         var defaultDomainPolicy = EnsurePolicy(
             world,
@@ -556,12 +558,25 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             AddPolicySetting(world, company.Id, pawPolicy.Id, "PowerShellScriptExecution", "AdministrativeTooling", "String", "Restricted");
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Container", pawContainer.Id, "Linked", true, 1, true);
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Group", pawUsers?.Id, "SecurityFilterInclude", false, 1);
-        var tier0Admins = FindGroup(world.Groups, company.Id, Tier0IdentityAdminsGroupName());
             AddAccessControlEvidence(world, company.Id, pawUsers?.Id, "Group", "Container", pawContainer.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Policy", pawPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "BlockInheritance", "Allow", false, "ActiveDirectory", notes: "Privileged access OU with explicit inheritance block");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "ResetPassword", "Allow", false, "ActiveDirectory", notes: "Tier-0 delegated recovery on privileged workstation accounts");
         }
+
+        AddActiveDirectoryOuDelegations(
+            world,
+            company,
+            activeDirectoryStore.Id,
+            workstationAdmins?.Id,
+            serverAdmins?.Id,
+            tier0Admins?.Id,
+            tier2Helpdesk?.Id,
+            passwordResetOperators?.Id,
+            workstationJoiners?.Id,
+            lapsReaders?.Id,
+            remoteSupportOperators?.Id,
+            gpoEditors?.Id);
 
         CreateLocationScopedPolicies(world, company, activeDirectoryStore.Id, gpoEditors?.Id);
         CreateDepartmentScopedPolicies(world, company, activeDirectoryStore.Id, gpoEditors?.Id);
@@ -569,6 +584,88 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         CreateModernManagementPolicies(world, company, activeDirectoryStore, allEmployeesGroup?.Id, guestGroup?.Id, officeUsers?.Id, workstationAdmins?.Id);
         CreateWindowsBenchmarkPolicies(world, company, activeDirectoryStore.Id, workstationContainer?.Id, serverContainer?.Id, gpoEditors?.Id, workstationAdmins?.Id, serverAdmins?.Id);
         CreateBrowserAndOfficeBenchmarkPolicies(world, company, activeDirectoryStore.Id, workstationContainer?.Id, allEmployeesGroup?.Id, browserPilotUsers?.Id, officeUsers?.Id, officeAdmins?.Id ?? gpoEditors?.Id);
+    }
+
+    private void AddActiveDirectoryOuDelegations(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string identityStoreId,
+        string? workstationAdminsGroupId,
+        string? serverAdminsGroupId,
+        string? tier0AdminsGroupId,
+        string? tier2HelpdeskGroupId,
+        string? passwordResetOperatorsGroupId,
+        string? workstationJoinersGroupId,
+        string? lapsReadersGroupId,
+        string? remoteSupportOperatorsGroupId,
+        string? gpoEditorsGroupId)
+    {
+        var ouContainers = world.Containers
+            .Where(container =>
+                container.CompanyId == company.Id
+                && string.Equals(container.ContainerType, "OrganizationalUnit", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(container.IdentityStoreId, identityStoreId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        foreach (var container in ouContainers)
+        {
+            switch (container.Purpose)
+            {
+                case "Location Workstations":
+                case "Corporate workstation baseline":
+                case "Remote and mobile workforce devices":
+                case "Shared kiosk and frontline devices":
+                case "IT and support workstations":
+                    AddAccessControlEvidence(world, company.Id, workstationAdminsGroupId, "Group", "Container", container.Id, "LinkGpo", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, workstationAdminsGroupId, "Group", "Container", container.Id, "CreateComputerObject", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, workstationAdminsGroupId, "Group", "Container", container.Id, "DeleteComputerObject", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, passwordResetOperatorsGroupId, "Group", "Container", container.Id, "ResetPassword", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, lapsReadersGroupId, "Group", "Container", container.Id, "ReadLapsPassword", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, remoteSupportOperatorsGroupId, "Group", "Container", container.Id, "RemoteAssist", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, workstationJoinersGroupId, "Group", "Container", container.Id, "CreateComputerObject", "Allow", false, "ActiveDirectory");
+                    break;
+
+                case "Managed Servers":
+                case "Production Servers":
+                case "Staging Servers":
+                case "Development Servers":
+                case "Identity and directory servers":
+                case "File and print servers":
+                case "Database servers":
+                case "Web servers":
+                case "Application servers":
+                case "Management and monitoring servers":
+                case "VPN and remote access servers":
+                    AddAccessControlEvidence(world, company.Id, serverAdminsGroupId, "Group", "Container", container.Id, "LinkGpo", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, serverAdminsGroupId, "Group", "Container", container.Id, "CreateChild", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, serverAdminsGroupId, "Group", "Container", container.Id, "DeleteChild", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, gpoEditorsGroupId, "Group", "Container", container.Id, "ReadPolicy", "Allow", false, "ActiveDirectory");
+                    break;
+
+                case "User Accounts":
+                case "Location Users":
+                case "Department Users":
+                case "Contractor Accounts":
+                case "Managed Service Provider Accounts":
+                case "B2B Guest Accounts":
+                    AddAccessControlEvidence(world, company.Id, passwordResetOperatorsGroupId, "Group", "Container", container.Id, "ResetPassword", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, tier2HelpdeskGroupId, "Group", "Container", container.Id, "ReadUserProperties", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, tier2HelpdeskGroupId, "Group", "Container", container.Id, "WriteUserProperties", "Allow", false, "ActiveDirectory");
+                    break;
+
+                case "Groups":
+                    AddAccessControlEvidence(world, company.Id, tier0AdminsGroupId, "Group", "Container", container.Id, "WriteGroupMembership", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, tier0AdminsGroupId, "Group", "Container", container.Id, "CreateGroupObject", "Allow", false, "ActiveDirectory");
+                    break;
+
+                case "Service Accounts":
+                case "Shared Mailboxes":
+                case "Administrative Accounts":
+                    AddAccessControlEvidence(world, company.Id, tier0AdminsGroupId, "Group", "Container", container.Id, "ResetPassword", "Allow", false, "ActiveDirectory");
+                    AddAccessControlEvidence(world, company.Id, tier0AdminsGroupId, "Group", "Container", container.Id, "WriteUserProperties", "Allow", false, "ActiveDirectory");
+                    break;
+            }
+        }
     }
 
     private void CreateCrossTenantPolicyObjects(SyntheticEnterpriseWorld world, Company company)
@@ -1832,14 +1929,20 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         Company company,
         IReadOnlyList<Person> people,
         IReadOnlyList<Department> departments,
+        IReadOnlyList<Office> offices,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         string rootDomain,
         HashSet<string> issuedPasswords,
         ISet<string> issuedSamAccountNames)
     {
         var usersOu = ous.First(o => o.Name == "Users");
+        var officeNamesById = offices.ToDictionary(office => office.Id, office => office.City, StringComparer.OrdinalIgnoreCase);
+        var locationUserOus = ous
+            .Where(o => o.ParentOuId == usersOu.Id && string.Equals(o.Purpose, "Location Users", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var departmentOus = ous
-            .Where(o => o.ParentOuId == usersOu.Id)
+            .Where(o => o.ParentOuId == usersOu.Id && string.Equals(o.Purpose, "Department Users", StringComparison.OrdinalIgnoreCase))
             .GroupBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var departmentNamesById = departments.ToDictionary(d => d.Id, d => d.Name, StringComparer.OrdinalIgnoreCase);
@@ -1847,10 +1950,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return people.Select(person =>
         {
             var sam = EnsureUniqueSamAccountName(BuildSam(person.FirstName, person.LastName, person.EmployeeId), issuedSamAccountNames);
-            var targetOu = departmentNamesById.TryGetValue(person.DepartmentId, out var departmentName) &&
-                           departmentOus.TryGetValue(departmentName, out var departmentOu)
-                ? departmentOu
-                : usersOu;
+            var targetOu = !string.IsNullOrWhiteSpace(person.OfficeId)
+                           && officeNamesById.TryGetValue(person.OfficeId, out var officeCity)
+                           && locationUserOus.TryGetValue(officeCity, out var officeOu)
+                ? officeOu
+                : !string.IsNullOrWhiteSpace(person.DepartmentId)
+                  && departmentNamesById.TryGetValue(person.DepartmentId, out var departmentName) &&
+                  departmentOus.TryGetValue(departmentName, out var departmentOu)
+                    ? departmentOu
+                    : usersOu;
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 90));
             var lifecycle = CreateAccountLifecycle(passwordLastSet, 120, 1825, 14);
 

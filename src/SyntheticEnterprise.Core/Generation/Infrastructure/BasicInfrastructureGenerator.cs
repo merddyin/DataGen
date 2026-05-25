@@ -41,7 +41,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var ous = world.OrganizationalUnits.Where(o => o.CompanyId == company.Id).ToList();
 
             var userAccounts = world.Accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "User").ToList();
-            CreateWorkstations(world, company, definition, people, userAccounts, privilegedAccounts, ous);
+            CreateWorkstations(world, company, definition, people, userAccounts, privilegedAccounts, offices, ous);
             CreateServers(world, company, definition, offices, teams, ous);
             CreateNetworkAssets(world, company, definition, offices);
             CreateTelephonyAssets(world, company, definition, people, offices);
@@ -121,6 +121,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         IReadOnlyList<Person> people,
         IReadOnlyList<DirectoryAccount> userAccounts,
         IReadOnlyList<DirectoryAccount> privilegedAccounts,
+        IReadOnlyList<Office> offices,
         IReadOnlyList<DirectoryOrganizationalUnit> ous)
     {
         var target = Math.Max(1, (int)Math.Round(people.Count * Math.Clamp(definition.WorkstationCoverageRatio, 0.1, 1.5)));
@@ -132,6 +133,11 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             ("Apple", "MacBook Pro 14", "macOS", "14.7")
         };
         var workstationOu = ous.FirstOrDefault(ou => ou.Name == "Workstations");
+        var officeCityById = offices.ToDictionary(office => office.Id, office => office.City, StringComparer.OrdinalIgnoreCase);
+        var workstationLocationOus = ous
+            .Where(ou => string.Equals(ou.Purpose, "Location Workstations", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(ou => ou.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var privilegedAccessWorkstationOu = ous.FirstOrDefault(ou => ou.Name == "Privileged Access Workstations");
 
         for (var i = 0; i < target; i++)
@@ -140,6 +146,11 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var account = userAccounts.FirstOrDefault(a => a.PersonId == person.Id);
             var model = models[i % models.Length];
             var hostname = BuildHostname(company.Name, person.LastName, i + 1, "WS");
+            var targetWorkstationOu = !string.IsNullOrWhiteSpace(person.OfficeId)
+                                      && officeCityById.TryGetValue(person.OfficeId, out var officeCity)
+                                      && workstationLocationOus.TryGetValue(officeCity, out var officeOu)
+                ? officeOu
+                : workstationOu;
             var joinProfile = ResolveWorkstationJoinProfile(model.Item3, contextSupportsHybridDirectory: world.IdentityStores.Any(store =>
                 store.CompanyId == company.Id &&
                 string.Equals(store.StoreType, "EntraTenant", StringComparison.OrdinalIgnoreCase)));
@@ -147,7 +158,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 world,
                 company,
                 hostname,
-                workstationOu,
+                targetWorkstationOu,
                 administrativeTier: null,
                 createOnPremAccount: joinProfile.CreateOnPremAccount,
                 createCloudAccount: joinProfile.CreateCloudAccount);
@@ -169,8 +180,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 DirectoryAccountId = account?.Id,
                 OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
                 CloudDirectoryAccountId = accountLinks.CloudAccountId,
-                OuId = workstationOu?.Id,
-                DistinguishedName = workstationOu is null ? null : $"CN={hostname},{workstationOu.DistinguishedName}",
+                OuId = null,
+                DistinguishedName = null,
                 DomainJoined = joinProfile.CreateOnPremAccount,
                 ComplianceState = _randomSource.NextDouble() < 0.92 ? "Compliant" : "NonCompliant",
                 LastSeen = _clock.UtcNow.AddDays(-_randomSource.Next(0, 45))
@@ -225,8 +236,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 DirectoryAccountId = privilegedAccount.Id,
                 OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
                 CloudDirectoryAccountId = accountLinks.CloudAccountId,
-                OuId = privilegedAccessWorkstationOu.Id,
-                DistinguishedName = $"CN={hostname},{privilegedAccessWorkstationOu.DistinguishedName}",
+                OuId = null,
+                DistinguishedName = null,
                 DomainJoined = true,
                 ComplianceState = "Compliant",
                 LastSeen = _clock.UtcNow.AddDays(-_randomSource.Next(0, 10))
@@ -285,8 +296,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 DirectoryAccountId = accountLinks.PrimaryAccountId,
                 OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
                 CloudDirectoryAccountId = accountLinks.CloudAccountId,
-                OuId = targetOu?.Id,
-                DistinguishedName = targetOu is null ? null : $"CN={hostname},{targetOu.DistinguishedName}",
+                OuId = null,
+                DistinguishedName = null,
                 DomainJoined = true,
                 OwnerTeamId = team?.Id ?? "",
                 Criticality = i % 5 == 0 ? "High" : "Medium"
@@ -323,8 +334,8 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 DirectoryAccountId = accountLinks.PrimaryAccountId,
                 OnPremDirectoryAccountId = accountLinks.OnPremAccountId,
                 CloudDirectoryAccountId = accountLinks.CloudAccountId,
-                OuId = targetOu?.Id,
-                DistinguishedName = targetOu is null ? null : $"CN={hostname},{targetOu.DistinguishedName}",
+                OuId = null,
+                DistinguishedName = null,
                 DomainJoined = true,
                 OwnerTeamId = team?.Id ?? "",
                 Criticality = "High"

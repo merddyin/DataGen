@@ -261,7 +261,10 @@ public sealed class LayerProcessorTests
             },
             new CatalogSet());
 
-        var originalDevice = result.World.Devices.First(device => device.DirectoryAccountId is not null);
+        var originalDevice = result.World.Devices.First(device =>
+            device.DirectoryAccountId is not null
+            && (!string.IsNullOrWhiteSpace(device.OnPremDirectoryAccountId)
+                || !string.IsNullOrWhiteSpace(device.CloudDirectoryAccountId)));
         var originalGrantCount = result.World.RepositoryAccessGrants.Count;
         var originalAccountSnapshotCount = result.World.ObservedEntitySnapshots.Count(snapshot => snapshot.EntityType == "Account");
         var originalEndpointAssignmentCount = result.World.EndpointAdministrativeAssignments.Count;
@@ -281,11 +284,12 @@ public sealed class LayerProcessorTests
 
         var remappedDevice = replaced.World.Devices.First(device => device.Id == originalDevice.Id);
         var remappedAccount = Assert.Single(replaced.World.Accounts, account => account.Id == remappedDevice.DirectoryAccountId);
-        var remappedOu = Assert.Single(replaced.World.OrganizationalUnits, ou => ou.Id == remappedDevice.OuId);
         var accountSnapshots = replaced.World.ObservedEntitySnapshots.Where(snapshot => snapshot.EntityType == "Account").ToList();
 
         Assert.Equal(remappedDevice.AssignedPersonId, remappedAccount.PersonId);
-        Assert.EndsWith(remappedOu.DistinguishedName, remappedDevice.DistinguishedName, StringComparison.OrdinalIgnoreCase);
+        Assert.True(string.IsNullOrWhiteSpace(remappedDevice.OnPremDirectoryAccountId));
+        Assert.True(string.IsNullOrWhiteSpace(remappedDevice.CloudDirectoryAccountId));
+        Assert.True(string.IsNullOrWhiteSpace(remappedDevice.DistinguishedName));
         Assert.Contains(replaced.World.Accounts, account => originalGuestAccountIds.Contains(account.Id));
         Assert.Equal(originalGrantCount, replaced.World.RepositoryAccessGrants.Count);
         Assert.Equal(originalEndpointAssignmentCount, replaced.World.EndpointAdministrativeAssignments.Count);

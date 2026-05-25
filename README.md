@@ -4,6 +4,12 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.8.2
+
+- corrected AD realism so physical workstations and servers no longer carry direct OU placement; OU residency now remains on the directory object while the physical endpoint stays tied to location and its machine-account relationship
+- improved OU realism by placing hybrid user and machine accounts into the location-aware OU branches that already existed, so location OUs are no longer mostly empty scaffolding
+- expanded Active Directory ACL delegation evidence across workstation, server, user, group, service-account, and admin-account OUs so generated environments show more believable delegated administration patterns instead of only a thin policy-adjacent surface
+
 ### v0.8.1
 
 - corrected repository realism so modern collaboration-heavy enterprises no longer emit one top-level file share per user home/profile path
@@ -182,8 +188,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.8.1 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.1\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.8.2 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.2\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

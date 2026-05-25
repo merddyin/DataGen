@@ -152,6 +152,7 @@ public sealed class IdentityInfrastructureGenerationTests
             && string.Equals(account.IdentityProvider, "EntraID", StringComparison.OrdinalIgnoreCase)
             && !account.SamAccountName.EndsWith("$", StringComparison.Ordinal));
         var peopleById = result.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
+        var officesById = result.World.Offices.ToDictionary(office => office.Id, StringComparer.OrdinalIgnoreCase);
         Assert.All(
             result.World.Accounts.Where(account => string.Equals(account.AccountType, "User", StringComparison.OrdinalIgnoreCase)),
             account =>
@@ -162,6 +163,12 @@ public sealed class IdentityInfrastructureGenerationTests
                 var person = peopleById[account.PersonId!];
                 Assert.Equal(person.DisplayName, account.DisplayName);
                 Assert.Equal(person.EmployeeId, account.EmployeeId);
+                Assert.False(string.IsNullOrWhiteSpace(person.OfficeId));
+                var office = officesById[person.OfficeId!];
+                Assert.Contains(
+                    $"OU={office.City},OU=Users,OU=Corp,",
+                    account.DistinguishedName,
+                    StringComparison.OrdinalIgnoreCase);
             });
         Assert.All(
             result.World.Accounts.Where(account => string.Equals(account.AccountType, "Privileged", StringComparison.OrdinalIgnoreCase)),
@@ -212,6 +219,12 @@ public sealed class IdentityInfrastructureGenerationTests
                 .Select(server => server.Id))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         Assert.DoesNotContain(result.World.GroupMemberships, membership => accountlessEndpointIds.Contains(membership.MemberObjectId));
+        Assert.All(
+            result.World.Devices.Where(device => string.Equals(device.DeviceType, "Workstation", StringComparison.OrdinalIgnoreCase)),
+            device =>
+            {
+                Assert.True(string.IsNullOrWhiteSpace(device.DistinguishedName));
+            });
         Assert.Contains(result.World.EndpointAdministrativeAssignments, assignment =>
             assignment.EndpointType == "Device" && assignment.AccessRole == "LocalAdministrator");
         Assert.Contains(result.World.EndpointAdministrativeAssignments, assignment =>
@@ -441,6 +454,14 @@ public sealed class IdentityInfrastructureGenerationTests
             evidence.TargetType == "Container"
             && evidence.RightName == "RemoteAssist"
             && evidence.SourceSystem == "ActiveDirectory");
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Container"
+            && evidence.RightName == "WriteUserProperties"
+            && evidence.SourceSystem == "ActiveDirectory");
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Container"
+            && evidence.RightName == "WriteGroupMembership"
+            && evidence.SourceSystem == "ActiveDirectory");
         Assert.Contains(result.World.RepositoryAccessGrants, grant =>
             grant.RepositoryType == "FileShare"
             && string.Equals(grant.PrincipalType, "Group", StringComparison.OrdinalIgnoreCase)
@@ -531,16 +552,15 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.NotEmpty(result.World.Servers);
         Assert.All(result.World.Devices, device =>
         {
-            Assert.False(string.IsNullOrWhiteSpace(device.OuId));
-            Assert.False(string.IsNullOrWhiteSpace(device.DistinguishedName));
+            Assert.True(string.IsNullOrWhiteSpace(device.OuId));
+            Assert.True(string.IsNullOrWhiteSpace(device.DistinguishedName));
         });
         Assert.All(result.World.Servers, server =>
         {
-            Assert.False(string.IsNullOrWhiteSpace(server.OuId));
-            Assert.False(string.IsNullOrWhiteSpace(server.DistinguishedName));
+            Assert.True(string.IsNullOrWhiteSpace(server.OuId));
+            Assert.True(string.IsNullOrWhiteSpace(server.DistinguishedName));
         });
         Assert.Contains(result.World.Devices, device => device.DeviceType == "PrivilegedAccessWorkstation");
-        Assert.Contains(result.World.Devices, device => device.DistinguishedName!.Contains("OU=Privileged Access Workstations", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.EndpointAdministrativeAssignments, assignment =>
             assignment.EndpointType == "Device"
             && assignment.AssignmentScope == "JustInTimeEligible");
@@ -557,9 +577,18 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.Servers, server => server.Environment == "Production");
         Assert.Contains(result.World.Servers, server => server.Environment == "Staging");
         Assert.Contains(result.World.Servers, server => server.Environment == "Development");
-        Assert.Contains(result.World.Servers, server => server.DistinguishedName!.Contains("OU=Production", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.Servers, server => server.DistinguishedName!.Contains("OU=Staging", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(result.World.Servers, server => server.DistinguishedName!.Contains("OU=Development", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Accounts, account =>
+            account.AccountType == "Device"
+            && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
+            && account.DistinguishedName!.Contains("OU=Production", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Accounts, account =>
+            account.AccountType == "Device"
+            && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
+            && account.DistinguishedName!.Contains("OU=Staging", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Accounts, account =>
+            account.AccountType == "Device"
+            && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
+            && account.DistinguishedName!.Contains("OU=Development", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
