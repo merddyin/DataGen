@@ -77,6 +77,7 @@ public record IdentityProfile
     public bool IncludeHybridDirectory { get; init; } = true;
     public bool IncludeM365StyleGroups { get; init; } = true;
     public bool IncludeAdministrativeTiers { get; init; } = true;
+    public bool IncludeEnvironmentDefaults { get; init; } = true;
     public bool IncludeExternalWorkforce { get; init; } = true;
     public bool IncludeB2BGuests { get; init; } = true;
     public double ContractorRatio { get; init; } = 0.06;

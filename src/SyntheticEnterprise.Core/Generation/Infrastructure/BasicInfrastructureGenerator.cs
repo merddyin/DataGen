@@ -258,6 +258,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             .GroupBy(ou => ou.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var serversOu = ous.FirstOrDefault(ou => ou.Name == "Servers");
+        var domainControllersGroup = world.Groups.FirstOrDefault(group =>
+            group.CompanyId == company.Id
+            && string.Equals(group.Name, "Domain Controllers", StringComparison.OrdinalIgnoreCase));
         var targetServerCount = Math.Max(1, definition.ServerCount);
         var jumpHostCount = targetServerCount >= 10 ? 1 : 0;
         var primaryServerCount = Math.Max(1, targetServerCount - jumpHostCount);
@@ -270,7 +273,12 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             var role = rolePlan[i % rolePlan.Count];
             var team = SelectServerOwnerTeam(teams, role);
             var environment = ResolveServerEnvironment(role, i, primaryServerCount);
-            var targetOu = serverEnvironments.TryGetValue(environment, out var environmentOu)
+            var targetOu = string.Equals(role, "Domain Controller", StringComparison.OrdinalIgnoreCase)
+                ? ous.FirstOrDefault(ou => string.Equals(ou.Name, "Domain Controllers", StringComparison.OrdinalIgnoreCase)
+                                            && string.Equals(ou.Purpose, "Domain Controllers", StringComparison.OrdinalIgnoreCase))
+                  ?? CreateExternalDefaultDomainControllersOu(company.PrimaryDomain)
+                : null;
+            targetOu ??= serverEnvironments.TryGetValue(environment, out var environmentOu)
                 ? environmentOu
                 : serversOu;
             var hostname = BuildServerHostname(company.Name, role, i + 1);
@@ -282,6 +290,12 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 administrativeTier: string.Equals(role, "Domain Controller", StringComparison.OrdinalIgnoreCase) ? "Tier0" : "Tier1",
                 createOnPremAccount: true,
                 createCloudAccount: false);
+            if (string.Equals(role, "Domain Controller", StringComparison.OrdinalIgnoreCase)
+                && domainControllersGroup is not null
+                && !string.IsNullOrWhiteSpace(accountLinks.OnPremAccountId))
+            {
+                AddComputerMembership(world, domainControllersGroup.Id, accountLinks.OnPremAccountId!, "Account");
+            }
 
             world.Servers.Add(new ServerAsset
             {
@@ -520,6 +534,19 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             .SelectMany(item => Enumerable.Repeat(item.Office, allocations[item.Office.Id]))
             .ToList();
     }
+
+    private static DirectoryOrganizationalUnit CreateExternalDefaultDomainControllersOu(string domain)
+        => new()
+        {
+            Name = "Domain Controllers",
+            DistinguishedName = $"OU=Domain Controllers,{BuildNamingContext(domain)}",
+            Purpose = "Domain Controllers"
+        };
+
+    private static string BuildNamingContext(string domain)
+        => string.Join(",", domain
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(part => $"DC={part}"));
 
     private void CreateNetworkAssets(
         SyntheticEnterpriseWorld world,

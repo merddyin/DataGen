@@ -472,6 +472,7 @@ public sealed class ScenarioWizardService
                 IncludeHybridDirectory = _prompter.PromptBool("Include hybrid directory", identity.IncludeHybridDirectory),
                 IncludeM365StyleGroups = _prompter.PromptBool("Include Microsoft 365 style groups", identity.IncludeM365StyleGroups),
                 IncludeAdministrativeTiers = identity.IncludeAdministrativeTiers,
+                IncludeEnvironmentDefaults = _prompter.PromptBool("Include pre-existing AD/tenant defaults", identity.IncludeEnvironmentDefaults),
                 IncludeExternalWorkforce = _prompter.PromptBool("Include external workforce", identity.IncludeExternalWorkforce),
                 IncludeB2BGuests = _prompter.PromptBool("Include Entra B2B guests", identity.IncludeB2BGuests),
                 ContractorRatio = identity.ContractorRatio,

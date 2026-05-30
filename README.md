@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.8.3
+
+- added an identity scenario option to include or omit generated AD/tenant environment defaults for lab-population workflows
+- hardened Active Directory realism with default containers, built-in groups, default accounts, Domain Controllers OU placement, and Entra Connect sync evidence
+- corrected user-focused password-never-expires defaults while preserving intentional service, shared mailbox, machine, and privileged-account deviations
+- regenerated the Duckburg ingestion freeze from the updated generator output and refreshed AD lab guidance to avoid collisions with existing domains
+
 ### v0.8.2
 
 - corrected AD realism so physical workstations and servers no longer carry direct OU placement; OU residency now remains on the directory object while the physical endpoint stays tied to location and its machine-account relationship
@@ -188,8 +195,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.8.2 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.2\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.8.3 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.3\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

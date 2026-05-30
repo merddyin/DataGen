@@ -7,6 +7,21 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.8.3
+
+This patch release tightens Active Directory realism and gives lab-population workflows explicit control over generated environment defaults.
+
+### Highlights
+
+- **Optional AD defaults**
+  Scenarios can now set `identity.includeEnvironmentDefaults` to include or omit generated default containers, built-in groups, default accounts, and tenant/default sync objects. AD lab examples disable those defaults so generated create-lists do not collide with an existing domain.
+- **More realistic directory shape**
+  Generated hybrid AD environments now include multiple top-level OUs, default containers such as `CN=Users` and `CN=Builtin`, built-in administrative groups, default accounts, Domain Controllers root OU placement, and Entra Connect sync evidence when defaults are enabled.
+- **Cleaner password-expiration signals**
+  User-focused accounts no longer default to `PasswordNeverExpires`; that signal is reserved for more intentional deviations such as service, shared mailbox, machine, and selected privileged account patterns.
+- **Duckburg freeze refresh**
+  The Duckburg ingestion freeze was regenerated from the updated generator output and verified against the deterministic Duckburg scenario.
+
 ## v0.8.2
 
 This patch release focuses on stronger Active Directory realism, especially around where OU placement belongs and how delegated administration shows up in the generated directory.

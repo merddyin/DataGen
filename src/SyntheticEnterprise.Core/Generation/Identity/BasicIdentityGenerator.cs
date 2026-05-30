@@ -56,9 +56,16 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var identityStores = CreateIdentityStores(company, rootDomain, context.Scenario.Identity);
             world.IdentityStores.AddRange(identityStores);
 
-            var ous = CreateOus(company, companyDepartments, companyOffices, rootDomain, includeAdministrativeTiers);
+            var includeEnvironmentDefaults = context.Scenario.Identity.IncludeEnvironmentDefaults;
+            var ous = CreateOus(company, companyDepartments, companyOffices, rootDomain, includeAdministrativeTiers, includeEnvironmentDefaults);
             world.OrganizationalUnits.AddRange(ous);
-            world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous));
+            world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous, includeEnvironmentDefaults));
+
+            if (includeEnvironmentDefaults)
+            {
+                var builtInAccounts = CreateBuiltInAccounts(company, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames);
+                world.Accounts.AddRange(builtInAccounts);
+            }
 
             var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, companyOffices, ous, rootDomain, issuedPasswords, issuedSamAccountNames);
             world.Accounts.AddRange(peopleAccounts);
@@ -88,6 +95,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
             var memberships = CreateMemberships(company, companyDepartments, companyTeams, companyPeople, groups, world.Accounts, includeAdministrativeTiers);
             world.GroupMemberships.AddRange(memberships);
+            if (includeEnvironmentDefaults)
+            {
+                CreateDirectoryIntegrationEvidence(world, company);
+            }
 
             if (context.Scenario.Identity.IncludeExternalWorkforce || context.Scenario.Identity.IncludeB2BGuests)
             {
@@ -171,7 +182,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private List<EnvironmentContainer> CreateDirectoryContainers(
         Company company,
         IReadOnlyList<IdentityStore> identityStores,
-        IReadOnlyList<DirectoryOrganizationalUnit> ous)
+        IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        bool includeEnvironmentDefaults)
     {
         var primaryDirectoryStore = identityStores.FirstOrDefault(store =>
             string.Equals(store.StoreType, "ActiveDirectoryDomain", StringComparison.OrdinalIgnoreCase));
@@ -199,6 +211,39 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         };
         results.Add(domainRootContainer);
 
+        var builtInContainers = includeEnvironmentDefaults
+            ? new (string Name, string RelativeDn, string Purpose)[]
+        {
+            ("Builtin", "CN=Builtin", "Built-in local domain groups"),
+            ("Users", "CN=Users", "Default user and group container"),
+            ("Computers", "CN=Computers", "Default computer account container"),
+            ("System", "CN=System", "Directory system configuration container"),
+            ("ForeignSecurityPrincipals", "CN=ForeignSecurityPrincipals", "Foreign security principal container"),
+            ("Managed Service Accounts", "CN=Managed Service Accounts", "Managed service account container"),
+            ("Program Data", "CN=Program Data", "Directory application data container")
+        }
+            : Array.Empty<(string Name, string RelativeDn, string Purpose)>();
+
+        foreach (var builtInContainer in builtInContainers)
+        {
+            results.Add(new EnvironmentContainer
+            {
+                Id = _idFactory.Next("CNT"),
+                CompanyId = company.Id,
+                Name = builtInContainer.Name,
+                ContainerType = "DirectoryContainer",
+                Platform = "ActiveDirectory",
+                ParentContainerId = domainRootContainer.Id,
+                ContainerPath = $"{builtInContainer.RelativeDn},{domainRootContainer.ContainerPath}",
+                Purpose = builtInContainer.Purpose,
+                Environment = primaryDirectoryStore.Environment,
+                BlocksPolicyInheritance = false,
+                IdentityStoreId = primaryDirectoryStore.Id,
+                SourceEntityType = "ActiveDirectoryDefaultContainer",
+                SourceEntityId = primaryDirectoryStore.Id
+            });
+        }
+
         var containerIdsByOuId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var ou in ous)
         {
@@ -215,7 +260,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 ContainerPath = ou.DistinguishedName,
                 Purpose = ou.Purpose,
                 Environment = primaryDirectoryStore.Environment,
-                BlocksPolicyInheritance = string.Equals(ou.Name, "Admin Accounts", StringComparison.OrdinalIgnoreCase)
+                BlocksPolicyInheritance = string.Equals(ou.Name, "Administration", StringComparison.OrdinalIgnoreCase)
                                           || string.Equals(ou.Name, "Privileged Access Workstations", StringComparison.OrdinalIgnoreCase),
                 IdentityStoreId = primaryDirectoryStore.Id,
                 SourceEntityType = nameof(DirectoryOrganizationalUnit),
@@ -242,8 +287,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var domainContainer = FindContainer(world, company.Id, "DirectoryDomain", activeDirectoryStore.Id);
         var workstationContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Workstations");
         var serverContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Servers");
+        var domainControllersContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Domain Controllers");
         var pawContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Privileged Access Workstations");
         var allEmployeesGroup = FindGroup(world.Groups, company.Id, AllEmployeesSecurityGroupName());
+        var domainAdmins = FindGroup(world.Groups, company.Id, "Domain Admins");
         var guestGroup = FindGroup(world.Groups, company.Id, B2BGuestsGroupName());
         var workstationAdmins = FindGroup(world.Groups, company.Id, Tier1WorkstationAdminsGroupName());
         var serverAdmins = FindGroup(world.Groups, company.Id, Tier1ServerAdminsGroupName());
@@ -284,6 +331,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "Container", domainContainer?.Id, "Linked", true, 1, true);
         AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "IdentityStore", activeDirectoryStore.Id, "Scope", false, 1);
         AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "Group", gpoEditors?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+        AddPolicyTarget(world, company.Id, defaultDomainPolicy.Id, "Group", domainAdmins?.Id, "DelegatedAdministration", false, 1, true, "Permission", "DomainAdminister");
 
         var workstationPolicy = EnsurePolicy(
             world,
@@ -311,6 +359,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Container", workstationContainer?.Id, "WmiFilter", false, 1, true, "WmiQuery", "SELECT * FROM Win32_OperatingSystem WHERE ProductType = 1");
         AddAccessControlEvidence(world, company.Id, allEmployeesGroup?.Id, "Group", "Container", workstationContainer?.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
         AddAccessControlEvidence(world, company.Id, guestGroup?.Id, "Group", "Container", workstationContainer?.Id, "ApplyGroupPolicy", "Deny", false, "ActiveDirectory", notes: "Guest and external identities explicitly excluded from workstation baseline");
+        AddAccessControlEvidence(world, company.Id, domainAdmins?.Id, "Group", "Container", domainContainer?.Id, "GenericAll", "Allow", false, "ActiveDirectory", notes: "Default domain administrative control retained in the default Users container");
+        AddAccessControlEvidence(world, company.Id, domainAdmins?.Id, "Group", "Container", domainControllersContainer?.Id, "ManageDomainControllers", "Allow", false, "ActiveDirectory", notes: "Domain controllers remain in the root Domain Controllers OU");
         AddAccessControlEvidence(world, company.Id, workstationAdmins?.Id, "Group", "Policy", workstationPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
         AddAccessControlEvidence(world, company.Id, workstationAdmins?.Id, "Group", "Container", workstationContainer?.Id, "LinkGpo", "Allow", false, "ActiveDirectory");
         AddAccessControlEvidence(world, company.Id, workstationAdmins?.Id, "Group", "Container", workstationContainer?.Id, "CreateComputerObject", "Allow", false, "ActiveDirectory", notes: "Delegated workstation join and OU maintenance");
@@ -705,6 +755,35 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             AddAccessControlEvidence(world, company.Id, guestGroup?.Id, "Group", "Policy", policy.Id, "ApplyPolicy", "Allow", false, "EntraID");
             AddAccessControlEvidence(world, company.Id, guestCollaborationGroup?.Id, "Group", "Policy", policy.Id, "CollaborationAccess", "Allow", false, "EntraID");
         }
+    }
+
+    private void CreateDirectoryIntegrationEvidence(SyntheticEnterpriseWorld world, Company company)
+    {
+        var activeDirectoryStore = world.IdentityStores.FirstOrDefault(store =>
+            store.CompanyId == company.Id
+            && string.Equals(store.StoreType, "ActiveDirectoryDomain", StringComparison.OrdinalIgnoreCase));
+        if (activeDirectoryStore is null)
+        {
+            return;
+        }
+
+        var syncAccount = world.Accounts.FirstOrDefault(account =>
+            account.CompanyId == company.Id
+            && string.Equals(account.PasswordProfile, "DirectorySynchronization", StringComparison.OrdinalIgnoreCase));
+        var domainContainer = FindContainer(world, company.Id, "DirectoryDomain", activeDirectoryStore.Id);
+        var usersContainer = FindContainer(world, company.Id, "DirectoryContainer", activeDirectoryStore.Id, "Users");
+        var groupsContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Groups");
+        var serviceAccountsContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Service Accounts");
+        var domainAdmins = FindGroup(world.Groups, company.Id, "Domain Admins");
+        var accountOperators = FindGroup(world.Groups, company.Id, "Account Operators");
+
+        AddAccessControlEvidence(world, company.Id, syncAccount?.Id, "Account", "IdentityStore", activeDirectoryStore.Id, "ReplicatingDirectoryChanges", "Allow", false, "ActiveDirectory", notes: "Entra AD Connect synchronization account directory replication permission");
+        AddAccessControlEvidence(world, company.Id, syncAccount?.Id, "Account", "IdentityStore", activeDirectoryStore.Id, "ReplicatingDirectoryChangesAll", "Allow", false, "ActiveDirectory", notes: "Entra AD Connect password hash synchronization permission");
+        AddAccessControlEvidence(world, company.Id, syncAccount?.Id, "Account", "Container", usersContainer?.Id, "WriteBackPassword", "Allow", false, "ActiveDirectory", notes: "Password write-back delegation from Entra ID");
+        AddAccessControlEvidence(world, company.Id, syncAccount?.Id, "Account", "Container", groupsContainer?.Id, "WriteBackGroup", "Allow", false, "ActiveDirectory", notes: "Group write-back delegation for cloud-originated groups");
+        AddAccessControlEvidence(world, company.Id, syncAccount?.Id, "Account", "Container", serviceAccountsContainer?.Id, "ReadManagedServiceAccount", "Allow", false, "ActiveDirectory", notes: "Directory synchronization inventory of service principals and managed service accounts");
+        AddAccessControlEvidence(world, company.Id, accountOperators?.Id, "Group", "Container", usersContainer?.Id, "CreateUser", "Allow", false, "ActiveDirectory", notes: "Legacy delegated account administration retained on default Users container");
+        AddAccessControlEvidence(world, company.Id, domainAdmins?.Id, "Group", "Container", domainContainer?.Id, "ResetPassword", "Allow", false, "ActiveDirectory", notes: "Default privileged reset right at domain scope");
     }
 
     private void CreateLocationScopedPolicies(
@@ -1820,21 +1899,21 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Department> departments,
         IReadOnlyList<Office> offices,
         string rootDomain,
-        bool includeAdministrativeTiers)
+        bool includeAdministrativeTiers,
+        bool includeEnvironmentDefaults)
     {
         var domainParts = rootDomain.Split('.');
         var dc = string.Join(",", domainParts.Select(part => $"DC={part}"));
 
-        var root = CreateOu(company, "Corp", null, $"OU=Corp,{dc}", "Root");
-        var users = CreateOu(company, "Users", root.Id, $"OU=Users,{root.DistinguishedName}", "User Accounts");
-        var service = CreateOu(company, "Service Accounts", root.Id, $"OU=Service Accounts,{root.DistinguishedName}", "Service Accounts");
-        var shared = CreateOu(company, "Shared Mailboxes", root.Id, $"OU=Shared Mailboxes,{root.DistinguishedName}", "Shared Mailboxes");
-        var groups = CreateOu(company, "Groups", root.Id, $"OU=Groups,{root.DistinguishedName}", "Groups");
-        var externalUsers = CreateOu(company, "External Users", root.Id, $"OU=External Users,{root.DistinguishedName}", "External Identities");
+        var users = CreateOu(company, "Employees", null, $"OU=Employees,{dc}", "User Accounts");
+        var service = CreateOu(company, "Service Accounts", null, $"OU=Service Accounts,{dc}", "Service Accounts");
+        var shared = CreateOu(company, "Shared Mailboxes", null, $"OU=Shared Mailboxes,{dc}", "Shared Mailboxes");
+        var groups = CreateOu(company, "Groups", null, $"OU=Groups,{dc}", "Groups");
+        var externalUsers = CreateOu(company, "External Identities", null, $"OU=External Identities,{dc}", "External Identities");
         var contractors = CreateOu(company, "Contractors", externalUsers.Id, $"OU=Contractors,{externalUsers.DistinguishedName}", "Contractor Accounts");
         var managedServices = CreateOu(company, "Managed Services", externalUsers.Id, $"OU=Managed Services,{externalUsers.DistinguishedName}", "Managed Service Provider Accounts");
         var guests = CreateOu(company, "Guests", externalUsers.Id, $"OU=Guests,{externalUsers.DistinguishedName}", "B2B Guest Accounts");
-        var computers = CreateOu(company, "Computers", root.Id, $"OU=Computers,{root.DistinguishedName}", "Managed Computers");
+        var computers = CreateOu(company, "Endpoints", null, $"OU=Endpoints,{dc}", "Managed Computers");
         var workstations = CreateOu(company, "Workstations", computers.Id, $"OU=Workstations,{computers.DistinguishedName}", "Managed Workstations");
         var servers = CreateOu(company, "Servers", computers.Id, $"OU=Servers,{computers.DistinguishedName}", "Managed Servers");
         var productionServers = CreateOu(company, "Production", servers.Id, $"OU=Production,{servers.DistinguishedName}", "Production Servers");
@@ -1854,7 +1933,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         var result = new List<DirectoryOrganizationalUnit>
         {
-            root,
             users,
             service,
             shared,
@@ -1882,9 +1960,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             serverRemoteAccess
         };
 
+        if (includeEnvironmentDefaults)
+        {
+            result.Add(CreateOu(company, "Domain Controllers", null, $"OU=Domain Controllers,{dc}", "Domain Controllers"));
+        }
+
         if (includeAdministrativeTiers)
         {
-            var adminAccounts = CreateOu(company, "Admin Accounts", root.Id, $"OU=Admin Accounts,{root.DistinguishedName}", "Administrative Accounts");
+            var adminAccounts = CreateOu(company, "Administration", null, $"OU=Administration,{dc}", "Administrative Accounts");
             var pawOu = CreateOu(company, "Privileged Access Workstations", workstations.Id, $"OU=Privileged Access Workstations,{workstations.DistinguishedName}", "Privileged admin workstations");
             result.Add(adminAccounts);
             result.Add(pawOu);
@@ -1935,7 +2018,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         HashSet<string> issuedPasswords,
         ISet<string> issuedSamAccountNames)
     {
-        var usersOu = ous.First(o => o.Name == "Users");
+        var usersOu = ous.First(o => o.Name == "Employees");
         var officeNamesById = offices.ToDictionary(office => office.Id, office => office.City, StringComparer.OrdinalIgnoreCase);
         var locationUserOus = ous
             .Where(o => o.ParentOuId == usersOu.Id && string.Equals(o.Purpose, "Location Users", StringComparison.OrdinalIgnoreCase))
@@ -1992,6 +2075,64 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 UserType = "Member",
                 IdentityProvider = "HybridDirectory",
                 ExternalAccessCategory = "Employee"
+            };
+        }).ToList();
+    }
+
+    private List<DirectoryAccount> CreateBuiltInAccounts(
+        Company company,
+        IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        string rootDomain,
+        HashSet<string> issuedPasswords,
+        ISet<string> issuedAccountUpns,
+        ISet<string> issuedSamAccountNames)
+    {
+        var serviceOu = ous.First(o => o.Name == "Service Accounts");
+        var now = _clock.UtcNow;
+        var lifecycle = CreateAccountLifecycle(now.AddDays(-RandomInclusive(14, 60)), 365, 3650, 30);
+        var domainDn = BuildNamingContext(rootDomain);
+        var blueprints = new (string DisplayName, string Sam, string LocalPart, string AccountType, string DistinguishedName, bool Enabled, bool Privileged, string PasswordProfile)[]
+        {
+            ("Administrator", "Administrator", "administrator", "BuiltIn", $"CN=Administrator,CN=Users,{domainDn}", true, true, "BuiltInAdministrator"),
+            ("Guest", "Guest", "guest", "BuiltIn", $"CN=Guest,CN=Users,{domainDn}", false, false, "BuiltInGuest"),
+            ("krbtgt", "krbtgt", "krbtgt", "BuiltIn", $"CN=krbtgt,CN=Users,{domainDn}", true, true, "KerberosService"),
+            ("Entra Connect Sync", "MSOL_sync", "MSOL_sync", "Service", $"CN=MSOL_sync,{serviceOu.DistinguishedName}", true, true, "DirectorySynchronization")
+        };
+
+        return blueprints.Select(blueprint =>
+        {
+            var passwordLastSet = blueprint.PasswordProfile == "DirectorySynchronization"
+                ? now.AddDays(-RandomInclusive(15, 120))
+                : now.AddDays(-RandomInclusive(30, 365));
+
+            return new DirectoryAccount
+            {
+                Id = _idFactory.Next("ACT"),
+                CompanyId = company.Id,
+                AccountType = blueprint.AccountType,
+                DisplayName = blueprint.DisplayName,
+                SamAccountName = EnsureUniqueSamAccountName(blueprint.Sam, issuedSamAccountNames),
+                UserPrincipalName = BuildUniqueDirectoryAccountUpn(blueprint.LocalPart, rootDomain, issuedAccountUpns),
+                Mail = null,
+                Domain = rootDomain,
+                DistinguishedName = blueprint.DistinguishedName,
+                OuId = blueprint.PasswordProfile == "DirectorySynchronization" ? serviceOu.Id : string.Empty,
+                Enabled = blueprint.Enabled,
+                Privileged = blueprint.Privileged,
+                MfaEnabled = blueprint.Privileged,
+                GeneratedPassword = CreateUniquePassword(issuedPasswords, blueprint.Privileged ? 24 : 18),
+                PasswordProfile = blueprint.PasswordProfile,
+                AdministrativeTier = blueprint.Privileged ? "Tier0" : null,
+                LastLogon = lifecycle.LastLogon,
+                WhenCreated = lifecycle.WhenCreated,
+                WhenModified = lifecycle.WhenModified,
+                PasswordLastSet = passwordLastSet,
+                PasswordExpires = blueprint.PasswordProfile == "DirectorySynchronization" ? null : passwordLastSet.AddDays(180),
+                PasswordNeverExpires = blueprint.PasswordProfile == "DirectorySynchronization",
+                MustChangePasswordAtNextLogon = false,
+                UserType = "Member",
+                IdentityProvider = "ActiveDirectoryDefault",
+                ExternalAccessCategory = blueprint.PasswordProfile
             };
         }).ToList();
     }
@@ -2334,8 +2475,20 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         bool includeAdministrativeTiers)
     {
+        var includeEnvironmentDefaults = accounts.Any(account => account.CompanyId == company.Id && account.AccountType == "BuiltIn");
         var groupsOu = ous.First(o => o.Name == "Groups");
+        var domainDn = groupsOu.DistinguishedName.Contains(",", StringComparison.Ordinal)
+            ? groupsOu.DistinguishedName[(groupsOu.DistinguishedName.IndexOf(',', StringComparison.Ordinal) + 1)..]
+            : groupsOu.DistinguishedName;
         var result = new List<DirectoryGroup>();
+
+        if (includeEnvironmentDefaults)
+        {
+            foreach (var builtInGroup in CreateBuiltInGroups(company, domainDn))
+            {
+                result.Add(builtInGroup);
+            }
+        }
 
         foreach (var department in departments)
         {
@@ -2409,6 +2562,48 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return result;
     }
 
+    private List<DirectoryGroup> CreateBuiltInGroups(Company company, string domainDn)
+    {
+        var usersContainer = $"CN=Users,{domainDn}";
+        var builtinContainer = $"CN=Builtin,{domainDn}";
+        var groups = new List<DirectoryGroup>();
+
+        foreach (var group in new (string Name, string Scope, string ContainerDn, string Purpose, string? Tier)[]
+                 {
+                     ("Domain Admins", "Global", usersContainer, "Default domain administrators group", "Tier0"),
+                     ("Enterprise Admins", "Universal", usersContainer, "Default forest-wide administrators group", "Tier0"),
+                     ("Schema Admins", "Universal", usersContainer, "Default schema administrators group", "Tier0"),
+                     ("Domain Users", "Global", usersContainer, "Default domain users group", null),
+                     ("Domain Controllers", "Global", usersContainer, "Default domain controller computer accounts group", "Tier0"),
+                     ("Enterprise Domain Controllers", "Universal", usersContainer, "Default forest domain controller group", "Tier0"),
+                     ("Group Policy Creator Owners", "Global", usersContainer, "Default Group Policy creator owners group", "Tier0"),
+                     ("Administrators", "DomainLocal", builtinContainer, "Built-in local administrators group", "Tier0"),
+                     ("Account Operators", "DomainLocal", builtinContainer, "Built-in account operators group", "Tier1"),
+                     ("Server Operators", "DomainLocal", builtinContainer, "Built-in server operators group", "Tier1"),
+                     ("Backup Operators", "DomainLocal", builtinContainer, "Built-in backup operators group", "Tier1"),
+                     ("Print Operators", "DomainLocal", builtinContainer, "Built-in print operators group", "Tier2"),
+                     ("Remote Desktop Users", "DomainLocal", builtinContainer, "Built-in remote desktop users group", "Tier1"),
+                     ("DNSAdmins", "DomainLocal", usersContainer, "DNS administration group commonly present with AD-integrated DNS", "Tier0")
+                 })
+        {
+            groups.Add(new DirectoryGroup
+            {
+                Id = _idFactory.Next("GRP"),
+                CompanyId = company.Id,
+                Name = group.Name,
+                GroupType = "Security",
+                Scope = group.Scope,
+                MailEnabled = false,
+                DistinguishedName = $"CN={group.Name},{group.ContainerDn}",
+                OuId = string.Empty,
+                Purpose = group.Purpose,
+                AdministrativeTier = group.Tier
+            });
+        }
+
+        return groups;
+    }
+
     private List<DirectoryGroupMembership> CreateMemberships(
         Company company,
         IReadOnlyList<Department> departments,
@@ -2421,8 +2616,19 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var results = new List<DirectoryGroupMembership>();
         var userAccounts = accounts.Where(a => a.CompanyId == company.Id && (a.AccountType == "User" || a.AccountType == "Contractor")).ToList();
         var privilegedAccounts = accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "Privileged").ToList();
+        var serviceAccounts = accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "Service").ToList();
+        var builtInAccounts = accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "BuiltIn").ToList();
         var sharedAccounts = accounts.Where(a => a.CompanyId == company.Id && a.AccountType == "Shared").ToList();
 
+        var domainUsers = FindGroup(groups, company.Id, "Domain Users");
+        var domainAdmins = FindGroup(groups, company.Id, "Domain Admins");
+        var enterpriseAdmins = FindGroup(groups, company.Id, "Enterprise Admins");
+        var schemaAdmins = FindGroup(groups, company.Id, "Schema Admins");
+        var administrators = FindGroup(groups, company.Id, "Administrators");
+        var accountOperators = FindGroup(groups, company.Id, "Account Operators");
+        var serverOperators = FindGroup(groups, company.Id, "Server Operators");
+        var backupOperatorsBuiltIn = FindGroup(groups, company.Id, "Backup Operators");
+        var dnsAdmins = FindGroup(groups, company.Id, "DNSAdmins");
         var allEmployeesGroup = FindGroup(groups, company.Id, AllEmployeesSecurityGroupName());
         var m365Group = FindGroup(groups, company.Id, "M365 All Employees");
         var allEmployeesDl = FindGroup(groups, company.Id, AllEmployeesDistributionGroupName());
@@ -2452,6 +2658,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         foreach (var account in userAccounts)
         {
+            AddMembershipIfPresent(results, domainUsers, account.Id, "Account");
             AddMembershipIfPresent(results, m365Group, account.Id, "Account");
             AddMembershipIfPresent(results, allEmployeesDl, account.Id, "Account");
             AddMembershipIfPresent(results, vpnUsers, account.Id, "Account");
@@ -2568,6 +2775,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             }
         }
 
+        var administrator = builtInAccounts.FirstOrDefault(account => string.Equals(account.SamAccountName, "Administrator", StringComparison.OrdinalIgnoreCase));
+        AddMembershipIfPresent(results, domainAdmins, administrator?.Id, "Account");
+        AddMembershipIfPresent(results, enterpriseAdmins, administrator?.Id, "Account");
+        AddMembershipIfPresent(results, schemaAdmins, administrator?.Id, "Account");
+        AddMembershipIfPresent(results, administrators, domainAdmins?.Id, "Group");
+        AddMembershipIfPresent(results, administrators, enterpriseAdmins?.Id, "Group");
+        AddMembershipIfPresent(results, dnsAdmins, domainAdmins?.Id, "Group");
+
         if (includeAdministrativeTiers)
         {
             var privilegedUmbrella = FindGroup(groups, company.Id, PrivilegedAccessGroupName());
@@ -2609,6 +2824,17 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                     results.Add(CreateMembership(group.Id, account.Id, "Account"));
                 }
 
+                if (account.AdministrativeTier == "Tier0")
+                {
+                    AddMembershipIfPresent(results, domainAdmins, account.Id, "Account");
+                    AddMembershipIfPresent(results, administrators, account.Id, "Account");
+                    AddMembershipIfPresent(results, dnsAdmins, account.Id, "Account");
+                }
+                else if (account.AdministrativeTier == "Tier1")
+                {
+                    AddMembershipIfPresent(results, serverOperators, account.Id, "Account");
+                }
+
                 if (account.AdministrativeTier == "Tier0" && tier0Paw is not null)
                 {
                     results.Add(CreateMembership(tier0Paw.Id, account.Id, "Account"));
@@ -2618,6 +2844,21 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                     results.Add(CreateMembership(tier1Paw.Id, account.Id, "Account"));
                 }
             }
+        }
+
+        foreach (var serviceAccount in serviceAccounts.Where(account =>
+                     account.PasswordProfile == "DirectorySynchronization"
+                     || account.DisplayName.Contains("Entra Connect", StringComparison.OrdinalIgnoreCase)))
+        {
+            AddMembershipIfPresent(results, domainAdmins, serviceAccount.Id, "Account");
+            AddMembershipIfPresent(results, enterpriseAdmins, serviceAccount.Id, "Account");
+            AddMembershipIfPresent(results, accountOperators, serviceAccount.Id, "Account");
+        }
+
+        foreach (var serviceAccount in serviceAccounts.Where(account => account.Privileged))
+        {
+            AddMembershipIfPresent(results, serverOperators, serviceAccount.Id, "Account");
+            AddMembershipIfPresent(results, backupOperatorsBuiltIn, serviceAccount.Id, "Account");
         }
 
         foreach (var account in userAccounts)

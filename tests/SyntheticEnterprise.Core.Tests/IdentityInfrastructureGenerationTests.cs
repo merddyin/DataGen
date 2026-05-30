@@ -113,10 +113,17 @@ public sealed class IdentityInfrastructureGenerationTests
             }
         });
         Assert.Contains(result.World.GroupMemberships, membership => membership.MemberObjectType == "Group");
-        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Computers");
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Endpoints");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Workstations");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Servers");
-        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Admin Accounts");
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Domain Controllers" && ou.ParentOuId is null);
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Employees" && ou.ParentOuId is null);
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Groups" && ou.ParentOuId is null);
+        Assert.Contains(result.World.Containers, container => container.ContainerType == "DirectoryContainer" && container.Name == "Builtin");
+        Assert.Contains(result.World.Containers, container => container.ContainerType == "DirectoryContainer" && container.Name == "Users");
+        Assert.Contains(result.World.Containers, container => container.ContainerType == "DirectoryContainer" && container.Name == "Computers");
+        Assert.Contains(result.World.Containers, container => container.ContainerType == "DirectoryContainer" && container.Name == "System");
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Administration");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Tier 0");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Tier 1");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Tier 2");
@@ -136,13 +143,26 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.Groups, group => group.Name == "GG Tier1 PAW Devices");
         Assert.Contains(result.World.Groups, group => group.Name == "GG Tier1 Managed Workstations");
         Assert.Contains(result.World.Groups, group => group.Name == "GG Tier1 Managed Servers");
+        Assert.Contains(result.World.Groups, group => group.Name == "Domain Admins" && group.DistinguishedName.Contains("CN=Users", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Groups, group => group.Name == "Administrators" && group.DistinguishedName.Contains("CN=Builtin", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Groups, group => group.Name == "Account Operators" && group.DistinguishedName.Contains("CN=Builtin", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Groups, group => group.Name == "Enterprise Admins");
         Assert.Contains(result.World.Groups, group => !string.IsNullOrWhiteSpace(group.AdministrativeTier));
+        Assert.Contains(result.World.Accounts, account => account.SamAccountName == "Administrator" && account.DistinguishedName.Contains("CN=Users", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Accounts, account => account.SamAccountName == "MSOL_sync" && account.PasswordProfile == "DirectorySynchronization");
         Assert.Contains(result.World.Accounts, account => account.AccountType == "Privileged" && !string.IsNullOrWhiteSpace(account.AdministrativeTier));
+        var employeePasswordNeverExpiresRatio = result.World.Accounts
+            .Where(account => account.AccountType == "User")
+            .Average(account => account.PasswordNeverExpires ? 1d : 0d);
+        Assert.True(employeePasswordNeverExpiresRatio < 0.05);
         Assert.Contains(result.World.GroupMemberships, membership =>
             membership.MemberObjectType == "Account"
             && result.World.Groups.Any(group =>
                 group.Id == membership.GroupId
                 && (group.Name == "GG Tier0 PAW Users" || group.Name == "GG Tier1 PAW Users")));
+        Assert.Contains(result.World.GroupMemberships, membership =>
+            result.World.Groups.Any(group => group.Id == membership.GroupId && group.Name == "Domain Admins")
+            && result.World.Accounts.Any(account => account.Id == membership.MemberObjectId && account.SamAccountName == "Administrator"));
         Assert.Contains(result.World.Accounts, account =>
             account.AccountType == "Device"
             && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
@@ -166,7 +186,7 @@ public sealed class IdentityInfrastructureGenerationTests
                 Assert.False(string.IsNullOrWhiteSpace(person.OfficeId));
                 var office = officesById[person.OfficeId!];
                 Assert.Contains(
-                    $"OU={office.City},OU=Users,OU=Corp,",
+                    $"OU={office.City},OU=Employees,",
                     account.DistinguishedName,
                     StringComparison.OrdinalIgnoreCase);
             });
@@ -252,7 +272,7 @@ public sealed class IdentityInfrastructureGenerationTests
             .Count();
         Assert.Equal(result.World.Devices.Count, deviceFalconInstallations);
         Assert.Equal(result.World.Servers.Count, serverFalconInstallations);
-        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "External Users");
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "External Identities");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Contractors");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Managed Services");
         Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Guests");
@@ -462,6 +482,19 @@ public sealed class IdentityInfrastructureGenerationTests
             evidence.TargetType == "Container"
             && evidence.RightName == "WriteGroupMembership"
             && evidence.SourceSystem == "ActiveDirectory");
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.PrincipalType == "Account"
+            && evidence.RightName == "ReplicatingDirectoryChangesAll"
+            && evidence.SourceSystem == "ActiveDirectory"
+            && result.World.Accounts.Any(account => account.Id == evidence.PrincipalObjectId && account.PasswordProfile == "DirectorySynchronization"));
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.PrincipalType == "Account"
+            && evidence.RightName == "WriteBackPassword"
+            && evidence.SourceSystem == "ActiveDirectory");
+        Assert.Contains(result.World.AccessControlEvidence, evidence =>
+            evidence.PrincipalType == "Account"
+            && evidence.RightName == "WriteBackGroup"
+            && evidence.SourceSystem == "ActiveDirectory");
         Assert.Contains(result.World.RepositoryAccessGrants, grant =>
             grant.RepositoryType == "FileShare"
             && string.Equals(grant.PrincipalType, "Group", StringComparison.OrdinalIgnoreCase)
@@ -580,6 +613,15 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.Accounts, account =>
             account.AccountType == "Device"
             && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
+            && account.DistinguishedName!.Contains("OU=Domain Controllers", StringComparison.OrdinalIgnoreCase));
+        Assert.All(
+            result.World.Servers.Where(server => server.ServerRole == "Domain Controller"),
+            server => Assert.Contains(result.World.GroupMemberships, membership =>
+                result.World.Groups.Any(group => group.Id == membership.GroupId && group.Name == "Domain Controllers")
+                && membership.MemberObjectId == server.OnPremDirectoryAccountId));
+        Assert.Contains(result.World.Accounts, account =>
+            account.AccountType == "Device"
+            && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
             && account.DistinguishedName!.Contains("OU=Production", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.World.Accounts, account =>
             account.AccountType == "Device"
@@ -589,6 +631,70 @@ public sealed class IdentityInfrastructureGenerationTests
             account.AccountType == "Device"
             && string.Equals(account.IdentityProvider, "HybridDirectory", StringComparison.OrdinalIgnoreCase)
             && account.DistinguishedName!.Contains("OU=Development", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void WorldGenerator_Can_Exclude_PreExisting_Ad_Defaults_For_Lab_Population()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Lab Safe Directory Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeEnvironmentDefaults = false,
+                        IncludeHybridDirectory = true,
+                        IncludeM365StyleGroups = true,
+                        IncludeAdministrativeTiers = true,
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Lab Safe Directory Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 120,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            ServerCount = 8,
+                            IncludePrivilegedAccounts = true,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.DoesNotContain(result.World.Containers, container =>
+            container.ContainerType == "DirectoryContainer"
+            && (container.Name == "Users" || container.Name == "Computers" || container.Name == "Builtin"));
+        Assert.DoesNotContain(result.World.OrganizationalUnits, ou => ou.Name == "Domain Controllers");
+        Assert.DoesNotContain(result.World.Accounts, account => account.AccountType == "BuiltIn");
+        Assert.DoesNotContain(result.World.Accounts, account => account.SamAccountName == "MSOL_sync");
+        Assert.DoesNotContain(result.World.Groups, group =>
+            group.Name is "Domain Admins" or "Enterprise Admins" or "Administrators" or "Account Operators");
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Employees");
+        Assert.Contains(result.World.OrganizationalUnits, ou => ou.Name == "Endpoints");
+        Assert.All(
+            result.World.Servers.Where(server => server.ServerRole == "Domain Controller"),
+            server => Assert.Contains(result.World.Accounts, account =>
+                account.Id == server.OnPremDirectoryAccountId
+                && account.DistinguishedName!.Contains("OU=Domain Controllers", StringComparison.OrdinalIgnoreCase)));
+        Assert.DoesNotContain(result.World.AccessControlEvidence, evidence =>
+            evidence.RightName == "ReplicatingDirectoryChangesAll"
+            || evidence.RightName == "WriteBackPassword"
+            || evidence.RightName == "WriteBackGroup");
     }
 
     [Fact]

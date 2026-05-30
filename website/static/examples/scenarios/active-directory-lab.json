@@ -16,6 +16,7 @@
   "identity": {
     "includeHybridDirectory": true,
     "includeM365StyleGroups": true,
+    "includeEnvironmentDefaults": false,
     "includeExternalWorkforce": true,
     "includeB2BGuests": false,
     "staleAccountRate": 0.06

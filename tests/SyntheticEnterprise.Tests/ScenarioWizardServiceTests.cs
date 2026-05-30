@@ -308,6 +308,7 @@ public sealed class ScenarioWizardServiceTests
                 ["Configure external plugins"] = false,
                 ["Include hybrid directory"] = true,
                 ["Include Microsoft 365 style groups"] = true,
+                ["Include pre-existing AD/tenant defaults"] = false,
                 ["Include external workforce"] = true,
                 ["Include Entra B2B guests"] = true,
                 ["Include servers"] = true,
@@ -357,6 +358,7 @@ public sealed class ScenarioWizardServiceTests
                 IncludeHybridDirectory = true,
                 IncludeM365StyleGroups = true,
                 IncludeAdministrativeTiers = true,
+                IncludeEnvironmentDefaults = true,
                 IncludeExternalWorkforce = true,
                 IncludeB2BGuests = false,
                 ContractorRatio = 0.06,
@@ -406,6 +408,7 @@ public sealed class ScenarioWizardServiceTests
                 ["Configure external plugins"] = false,
                 ["Include hybrid directory"] = true,
                 ["Include Microsoft 365 style groups"] = true,
+                ["Include pre-existing AD/tenant defaults"] = false,
                 ["Include external workforce"] = true,
                 ["Include Entra B2B guests"] = false,
                 ["Include servers"] = true,
@@ -455,6 +458,7 @@ public sealed class ScenarioWizardServiceTests
                 ["Configure external plugins"] = false,
                 ["Include hybrid directory"] = true,
                 ["Include Microsoft 365 style groups"] = true,
+                ["Include pre-existing AD/tenant defaults"] = false,
                 ["Include external workforce"] = true,
                 ["Include Entra B2B guests"] = true,
                 ["Include servers"] = true,
@@ -499,6 +503,7 @@ public sealed class ScenarioWizardServiceTests
                 ["Configure external plugins"] = false,
                 ["Include hybrid directory"] = true,
                 ["Include Microsoft 365 style groups"] = true,
+                ["Include pre-existing AD/tenant defaults"] = false,
                 ["Include external workforce"] = true,
                 ["Include Entra B2B guests"] = true,
                 ["Include servers"] = true,
@@ -585,6 +590,7 @@ public sealed class ScenarioWizardServiceTests
                 ["Include databases"] = true,
                 ["Include file shares"] = true,
                 ["Include collaboration sites"] = true,
+                ["Include pre-existing AD/tenant defaults"] = false,
                 ["Use this scenario?"] = true
             },
             DoubleResponses =
@@ -611,6 +617,7 @@ public sealed class ScenarioWizardServiceTests
         Assert.Equal("Existing description.", result.Scenario.Description);
         Assert.Equal(2, result.Scenario.CompanyCount);
         Assert.Equal(0.09, result.Scenario.Identity!.StaleAccountRate);
+        Assert.False(result.Scenario.Identity.IncludeEnvironmentDefaults);
     }
 
     [Fact]

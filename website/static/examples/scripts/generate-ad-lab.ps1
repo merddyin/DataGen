@@ -7,6 +7,9 @@ param(
 New-Item -ItemType Directory -Force -Path $OutputRoot | Out-Null
 
 $scenario = Resolve-SEScenario -Path $ScenarioPath
+if ($scenario.Identity.IncludeEnvironmentDefaults) {
+    Write-Warning "This scenario includes pre-existing AD defaults such as CN=Users, CN=Computers, and built-in groups. Set identity.includeEnvironmentDefaults to false before populating an existing AD lab."
+}
 $scenario | Test-SEScenario | Out-Host
 
 $world = New-SEEnterpriseWorld -Scenario $scenario -Seed $Seed

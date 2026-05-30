@@ -7,6 +7,8 @@ description: Generate a directory-centric world for Active Directory-oriented la
 
 Use this walkthrough when the directory layer is the main attraction: users, groups, OUs, policy structure, delegation, stale identities, and hybrid admin surfaces.
 
+The reference scenario sets `identity.includeEnvironmentDefaults` to `false`. That keeps pre-existing AD defaults such as `CN=Users`, `CN=Computers`, `CN=Builtin`, `Domain Admins`, and `Administrators` out of the generated create-list so downstream population scripts do not collide with an existing lab domain. Domain-controller records can still carry `OU=Domain Controllers,...` in their distinguished names because that OU is expected to already exist in AD.
+
 ## Requirements
 
 - DataGen module imported

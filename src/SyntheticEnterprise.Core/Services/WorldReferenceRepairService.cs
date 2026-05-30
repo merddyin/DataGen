@@ -260,7 +260,7 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
             "device office references",
             warnings);
         updatedCount += NullInvalidReferences(world.Devices,
-            device => device.OuId is not null && !ouIds.Contains(device.OuId),
+            device => !string.IsNullOrWhiteSpace(device.OuId) && !ouIds.Contains(device.OuId),
             device => device with { OuId = null, DistinguishedName = null },
             "device OU references",
             warnings);
@@ -286,7 +286,7 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
             "server cloud account references",
             warnings);
         updatedCount += NullInvalidReferences(world.Servers,
-            server => server.OuId is not null && !ouIds.Contains(server.OuId),
+            server => !string.IsNullOrWhiteSpace(server.OuId) && !ouIds.Contains(server.OuId),
             server => server with { OuId = null, DistinguishedName = null },
             "server OU references",
             warnings);
@@ -372,6 +372,12 @@ public sealed class WorldReferenceRepairService : IWorldReferenceRepairService
     private static bool RequiresAccountOuReference(DirectoryAccount account)
     {
         if (string.IsNullOrWhiteSpace(account.Domain))
+        {
+            return false;
+        }
+
+        if (string.Equals(account.AccountType, "Device", StringComparison.OrdinalIgnoreCase)
+            && account.DistinguishedName.Contains(",OU=Domain Controllers,", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }

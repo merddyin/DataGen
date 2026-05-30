@@ -132,6 +132,7 @@ A compact example:
   "identity": {
     "includeHybridDirectory": false,
     "includeM365StyleGroups": true,
+    "includeEnvironmentDefaults": true,
     "includeB2BGuests": true,
     "staleAccountRate": 0.02
   },
@@ -158,6 +159,8 @@ A compact example:
 ```
 
 Authored scenarios now preserve application, CMDB, and observed-data settings all the way through resolve, validation, and generation instead of treating them as internal-only knobs.
+
+`identity.includeEnvironmentDefaults` controls whether DataGen emits default AD/tenant objects as generated records. Keep it enabled for analysis datasets that should include built-in containers, default accounts, built-in groups, Domain Controllers OU evidence, and Entra Connect sync artifacts. Set it to `false` when using exports to populate an existing AD lab; generated objects can still reference default DNs for intentional deviations without trying to recreate objects that already exist in the domain.
 
 ## Resolve before generation
 
