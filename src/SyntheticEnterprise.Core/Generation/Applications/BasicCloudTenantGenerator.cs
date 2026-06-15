@@ -247,6 +247,227 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         AddPolicyTarget(world, company.Id, guestAccess.Id, "IdentityStore", identityStore?.Id, "Scope", false, 1);
         AddPolicyTarget(world, company.Id, guestAccess.Id, "Group", guestCollaborationGroup?.Id, "Include", false, 1);
         AddAccessControlEvidence(world, company.Id, guestCollaborationGroup?.Id, "Group", "Policy", guestAccess.Id, "ApplyPolicy", "Allow", false, "EntraID");
+
+        CreatePolicyParityDemoRows(
+            world,
+            company,
+            tenant,
+            identityStore,
+            allEmployeesGroup,
+            guestCollaborationGroup);
+    }
+
+    private void CreatePolicyParityDemoRows(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        CloudTenant tenant,
+        IdentityStore? identityStore,
+        DirectoryGroup? allEmployeesGroup,
+        DirectoryGroup? guestCollaborationGroup)
+    {
+        var activeDirectoryStore = world.IdentityStores.FirstOrDefault(store =>
+            store.CompanyId == company.Id
+            && string.Equals(store.StoreType, "ActiveDirectoryDomain", StringComparison.OrdinalIgnoreCase));
+        if (activeDirectoryStore is null)
+        {
+            return;
+        }
+
+        var workstationContainer = FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStore.Id, "Workstations")
+                                   ?? FindContainer(world, company.Id, "DirectoryDomain", activeDirectoryStore.Id);
+        var includeGroup = allEmployeesGroup
+                           ?? FindGroup(world, company.Id, "GG All Employees", "M365 All Employees", "GG Microsoft 365 Users");
+        var excludeGroup = FindGroup(world, company.Id, "GG B2B Guests", "M365 Guest Collaboration", "M365-GuestCollaboration")
+                           ?? guestCollaborationGroup;
+
+        var gpoMatched = EnsurePolicy(
+            world,
+            company.Id,
+            "Policy Parity GPO - Device Lock Matched",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "PolicyParity",
+            "Synthetic GPO rows that should map cleanly to Intune parity targets.",
+            activeDirectoryStore.Id,
+            null);
+        var gpoDrifted = EnsurePolicy(
+            world,
+            company.Id,
+            "Policy Parity GPO - Device Lock Drifted",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "PolicyParity",
+            "Synthetic GPO rows that intentionally drift from Intune parity targets.",
+            activeDirectoryStore.Id,
+            null);
+        var gpoCoverageGaps = EnsurePolicy(
+            world,
+            company.Id,
+            "Policy Parity GPO - Coverage Gaps",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "PolicyParity",
+            "Synthetic GPO rows that exercise missing, unsupported, lossy, manual, and unknown coverage.",
+            activeDirectoryStore.Id,
+            null);
+        var intuneDeviceLock = EnsurePolicy(
+            world,
+            company.Id,
+            "Policy Parity Intune - Device Lock",
+            "IntuneConfigurationProfile",
+            "Intune",
+            "PolicyParity",
+            "Synthetic Intune rows used to compare against generated GPO parity facts.",
+            identityStore?.Id,
+            tenant.Id);
+        var intuneCoverage = EnsurePolicy(
+            world,
+            company.Id,
+            "Policy Parity Intune - Coverage Signals",
+            "IntuneConfigurationProfile",
+            "Intune",
+            "PolicyParity",
+            "Synthetic Intune coverage-only rows for denied and partial collection scenarios.",
+            identityStore?.Id,
+            tenant.Id);
+
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoMatched.Id,
+            "NoLockScreenCamera",
+            "Personalization",
+            "Integer",
+            "1",
+            "GPO",
+            registryPath: @"HKLM\Software\Policies\Microsoft\Windows\Personalization\NoLockScreenCamera",
+            sourceReference: "gpo-intune-v1-001-lock-screen-camera");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoDrifted.Id,
+            "NoLockScreenCamera",
+            "Personalization",
+            "Integer",
+            "0",
+            "GPO",
+            registryPath: @"HKLM\Software\Policies\Microsoft\Windows\Personalization\NoLockScreenCamera",
+            sourceReference: "gpo-intune-v1-001-lock-screen-camera");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoCoverageGaps.Id,
+            "LockScreenImage",
+            "Personalization",
+            "String",
+            $@"\\files.{company.PrimaryDomain}\corp\branding\lockscreen.jpg",
+            "GPO",
+            registryPath: @"HKLM\Software\Policies\Microsoft\Windows\Personalization\LockScreenImage",
+            sourceReference: "gpo-intune-v1-002-force-default-lock-screen");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoCoverageGaps.Id,
+            "Projects drive map",
+            "DriveMaps",
+            "String",
+            @"P:=\\files\projects;action=Update",
+            "GPP",
+            policyPath: "GPP:DriveMaps:Projects",
+            sourceReference: "gpo-intune-v1-004-gpp-drive-maps",
+            behavior: "RedDot");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoCoverageGaps.Id,
+            "UserAccountControl_BehaviorOfTheElevationPromptForStandardUsers",
+            "SecurityOptions",
+            "String",
+            "PromptForCredentials",
+            "SecTemplate",
+            policyPath: "SecOpt:UserAccountControl_BehaviorOfTheElevationPromptForStandardUsers",
+            sourceReference: "gpo-intune-v1-005-uac-standard-user-elevation");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoCoverageGaps.Id,
+            "MinimumPasswordLength",
+            "PasswordPolicy",
+            "Integer",
+            "14",
+            "SecTemplate",
+            policyPath: "AccountPolicy:MinimumPasswordLength",
+            sourceReference: "gpo-intune-v1-006-account-minimum-password-length");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoCoverageGaps.Id,
+            "AuditCredentialValidation",
+            "AuditPolicy",
+            "String",
+            "Success,Failure",
+            "AuditCsv",
+            policyPath: "Audit:Credential Validation",
+            sourceReference: "gpo-intune-v1-008-audit-category");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            gpoCoverageGaps.Id,
+            "Example unknown policy",
+            "Unknown",
+            "String",
+            "Enabled",
+            "GPO",
+            policyPath: @"Registry:HKLM\Software\Policies\Contoso\Unknown!ExampleSetting",
+            sourceReference: "policy-parity/generated-unknown-coverage");
+
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            intuneDeviceLock.Id,
+            "PreventEnablingLockScreenCamera",
+            "DeviceLock",
+            "Integer",
+            "1",
+            "Intune",
+            policyPath: "./Device/Vendor/MSFT/Policy/Config/DeviceLock/PreventEnablingLockScreenCamera",
+            registryPath: "./Device/Vendor/MSFT/Policy/Config/DeviceLock/PreventEnablingLockScreenCamera",
+            sourceReference: "gpo-intune-v1-001-lock-screen-camera");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            intuneCoverage.Id,
+            "Denied Intune settings coverage",
+            "Coverage",
+            "String",
+            "Denied: Microsoft Graph policy settings collection was denied for this synthetic tenant.",
+            "Intune",
+            policyPath: "IntuneCoverage:Denied:datagen-policy-parity:settings");
+        AddPolicyParitySetting(
+            world,
+            company.Id,
+            intuneCoverage.Id,
+            "Partial Intune settings coverage",
+            "Coverage",
+            "String",
+            "Partial: Microsoft Graph returned profile metadata without every settings catalog row.",
+            "Intune",
+            policyPath: "IntuneCoverage:Partial:datagen-policy-parity:settings");
+
+        foreach (var policy in new[] { gpoMatched, gpoDrifted, gpoCoverageGaps })
+        {
+            AddPolicyTarget(world, company.Id, policy.Id, "IdentityStore", activeDirectoryStore.Id, "Scope", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Container", workstationContainer?.Id, "Linked", false, 1, true);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", includeGroup?.Id, "SecurityFilterInclude", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", excludeGroup?.Id, "SecurityFilterExclude", false, 2);
+        }
+
+        foreach (var policy in new[] { intuneDeviceLock, intuneCoverage })
+        {
+            AddPolicyTarget(world, company.Id, policy.Id, "IdentityStore", identityStore?.Id, "Scope", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", includeGroup?.Id, "Include", false, 1);
+            AddPolicyTarget(world, company.Id, policy.Id, "Group", excludeGroup?.Id, "Exclude", false, 2);
+        }
     }
 
     private void BackfillModernPolicyIdentityStoreScope(
@@ -604,6 +825,47 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         });
     }
 
+    private void AddPolicyParitySetting(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string policyId,
+        string settingName,
+        string settingCategory,
+        string valueType,
+        string configuredValue,
+        string source,
+        string? policyPath = null,
+        string? registryPath = null,
+        string? sourceReference = null,
+        string behavior = "BlueDot")
+    {
+        if (world.PolicySettings.Any(setting =>
+                setting.CompanyId == companyId
+                && string.Equals(setting.PolicyId, policyId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(setting.SettingName, settingName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(setting.PolicyPath, policyPath ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(setting.RegistryPath, registryPath, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        world.PolicySettings.Add(new PolicySettingRecord
+        {
+            Id = _idFactory.Next("PST"),
+            CompanyId = companyId,
+            PolicyId = policyId,
+            SettingName = settingName,
+            SettingCategory = settingCategory,
+            PolicyPath = policyPath ?? string.Empty,
+            RegistryPath = registryPath,
+            ValueType = valueType,
+            ConfiguredValue = configuredValue,
+            Source = source,
+            Behavior = behavior,
+            SourceReference = sourceReference
+        });
+    }
+
     private static (string PolicyPath, string? RegistryPath) ResolvePolicySettingMetadata(
         PolicyRecord? policy,
         string settingName,
@@ -754,6 +1016,18 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         => world.Groups.FirstOrDefault(group =>
             group.CompanyId == companyId
             && names.Any(name => string.Equals(group.Name, name, StringComparison.OrdinalIgnoreCase)));
+
+    private static EnvironmentContainer? FindContainer(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string containerType,
+        string? identityStoreId = null,
+        string? name = null)
+        => world.Containers.FirstOrDefault(container =>
+            container.CompanyId == companyId
+            && string.Equals(container.ContainerType, containerType, StringComparison.OrdinalIgnoreCase)
+            && (identityStoreId is null || string.Equals(container.IdentityStoreId, identityStoreId, StringComparison.OrdinalIgnoreCase))
+            && (name is null || string.Equals(container.Name, name, StringComparison.OrdinalIgnoreCase)));
 
     private static string BuildTenantName(string companyName, string provider, string tenantType)
         => $"{companyName} {provider} {tenantType}".Trim();

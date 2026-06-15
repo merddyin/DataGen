@@ -118,6 +118,130 @@ public sealed class ApplicationGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Emits_Policy_Parity_Normalized_Facts_For_Microsoft_Tenant()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Policy Parity DataGen",
+                    IndustryProfile = "Manufacturing",
+                    GeographyProfile = "Regional-US",
+                    EmployeeSize = new SizeBand { Minimum = 900, Maximum = 1300 },
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 6,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Policy Parity DataGen",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 1100,
+                            BusinessUnitCount = 3,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 3,
+                            IncludePrivilegedAccounts = true,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            catalogs);
+
+        var parityPolicyIds = result.World.Policies
+            .Where(policy => string.Equals(policy.Category, "PolicyParity", StringComparison.OrdinalIgnoreCase))
+            .Select(policy => policy.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Contains(result.World.Policies, policy => policy.Name == "Policy Parity GPO - Device Lock Matched");
+        Assert.Contains(result.World.Policies, policy => policy.Name == "Policy Parity GPO - Device Lock Drifted");
+        Assert.Contains(result.World.Policies, policy => policy.Name == "Policy Parity GPO - Coverage Gaps");
+        Assert.Contains(result.World.Policies, policy => policy.Name == "Policy Parity Intune - Device Lock");
+        Assert.Contains(result.World.Policies, policy => policy.Name == "Policy Parity Intune - Coverage Signals");
+
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "GPO"
+            && setting.RegistryPath == @"HKLM\Software\Policies\Microsoft\Windows\Personalization\NoLockScreenCamera"
+            && setting.ConfiguredValue == "1"
+            && setting.SourceReference == "gpo-intune-v1-001-lock-screen-camera");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "GPO"
+            && setting.RegistryPath == @"HKLM\Software\Policies\Microsoft\Windows\Personalization\NoLockScreenCamera"
+            && setting.ConfiguredValue == "0"
+            && setting.SourceReference == "gpo-intune-v1-001-lock-screen-camera");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "GPO"
+            && setting.RegistryPath == @"HKLM\Software\Policies\Microsoft\Windows\Personalization\LockScreenImage"
+            && setting.SourceReference == "gpo-intune-v1-002-force-default-lock-screen");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "GPP"
+            && setting.PolicyPath == "GPP:DriveMaps:Projects"
+            && setting.SourceReference == "gpo-intune-v1-004-gpp-drive-maps");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "SecTemplate"
+            && setting.PolicyPath == "SecOpt:UserAccountControl_BehaviorOfTheElevationPromptForStandardUsers"
+            && setting.SourceReference == "gpo-intune-v1-005-uac-standard-user-elevation");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "SecTemplate"
+            && setting.PolicyPath == "AccountPolicy:MinimumPasswordLength"
+            && setting.SourceReference == "gpo-intune-v1-006-account-minimum-password-length");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "AuditCsv"
+            && setting.PolicyPath == "Audit:Credential Validation"
+            && setting.SourceReference == "gpo-intune-v1-008-audit-category");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "GPO"
+            && setting.PolicyPath == @"Registry:HKLM\Software\Policies\Contoso\Unknown!ExampleSetting");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "Intune"
+            && setting.PolicyPath == "./Device/Vendor/MSFT/Policy/Config/DeviceLock/PreventEnablingLockScreenCamera"
+            && setting.SourceReference == "gpo-intune-v1-001-lock-screen-camera");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "Intune"
+            && setting.PolicyPath == "IntuneCoverage:Denied:datagen-policy-parity:settings");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            parityPolicyIds.Contains(setting.PolicyId)
+            && setting.Source == "Intune"
+            && setting.PolicyPath == "IntuneCoverage:Partial:datagen-policy-parity:settings");
+
+        Assert.Contains(result.World.PolicyTargetLinks, link =>
+            parityPolicyIds.Contains(link.PolicyId)
+            && link.TargetType == "Container"
+            && link.AssignmentMode == "Linked");
+        Assert.Contains(result.World.PolicyTargetLinks, link =>
+            parityPolicyIds.Contains(link.PolicyId)
+            && link.TargetType == "Group"
+            && link.AssignmentMode == "Include");
+        Assert.Contains(result.World.PolicyTargetLinks, link =>
+            parityPolicyIds.Contains(link.PolicyId)
+            && link.TargetType == "Group"
+            && link.AssignmentMode == "Exclude");
+    }
+
+    [Fact]
     public void WorldGenerator_Uses_Curated_Application_Template_Catalogs_For_Manufacturing()
     {
         var services = new ServiceCollection()
