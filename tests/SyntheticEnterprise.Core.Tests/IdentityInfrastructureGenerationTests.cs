@@ -920,6 +920,61 @@ public sealed class IdentityInfrastructureGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Emits_Network_Discovery_Enterprise_Facts()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 170,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Network Discovery Fixture Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Network Discovery Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 360,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 3,
+                            ServerCount = 18,
+                            NetworkAssetCountPerOffice = 6,
+                            DatabaseCount = 8,
+                            FileShareCount = 12,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.Contains(result.World.Servers, server =>
+            server.ServerRole == "SQL Server"
+            && server.ServicePorts.Contains("1433", StringComparison.Ordinal));
+        Assert.Contains(result.World.Servers, server =>
+            server.ServerRole == "File Server"
+            && server.ServicePorts.Contains("445", StringComparison.Ordinal));
+        Assert.Contains(result.World.Servers, server =>
+            server.InfrastructureAgentNoise.Contains("AzureMonitorAgent", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Databases, database =>
+            database.ServicePort == 1433
+            && database.ConnectionProtocol == "TDS"
+            && !string.IsNullOrWhiteSpace(database.HostServerId));
+        Assert.Contains(result.World.FileShares, share =>
+            share.IsHiddenShare
+            && share.StorageEndpointType is "NAS" or "WindowsFileServer"
+            && !string.IsNullOrWhiteSpace(share.HostServerId));
+    }
+
+    [Fact]
     public void WorldGenerator_Keeps_External_Account_User_Principal_Names_Unique_At_Scale()
     {
         var services = new ServiceCollection()

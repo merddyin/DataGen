@@ -300,7 +300,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 DistinguishedName = null,
                 DomainJoined = true,
                 OwnerTeamId = team?.Id ?? "",
-                Criticality = i % 5 == 0 ? "High" : "Medium"
+                Criticality = i % 5 == 0 ? "High" : "Medium",
+                ServicePorts = ResolveServerServicePorts(role),
+                InfrastructureAgentNoise = ResolveInfrastructureAgentNoise(role, i)
             });
         }
 
@@ -338,9 +340,42 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 DistinguishedName = null,
                 DomainJoined = true,
                 OwnerTeamId = team?.Id ?? "",
-                Criticality = "High"
+                Criticality = "High",
+                ServicePorts = ResolveServerServicePorts("Jump Host"),
+                InfrastructureAgentNoise = ResolveInfrastructureAgentNoise("Jump Host", targetServerCount)
             });
         }
+    }
+
+    private static string ResolveServerServicePorts(string role)
+        => role switch
+        {
+            "Domain Controller" => "53;88;135;389;445;636",
+            "SQL Server" => "1433;1434",
+            "File Server" => "139;445",
+            "Web Server" => "80;443",
+            "Application Server" => "443;8080",
+            "Print Server" => "515;631;9100",
+            "Management Server" => "443;5985;5986",
+            "Remote Access Server" => "443;500;4500",
+            "Jump Host" => "22;3389;5985",
+            _ => "443"
+        };
+
+    private static string ResolveInfrastructureAgentNoise(string role, int index)
+    {
+        var agents = new List<string> { "AzureMonitorAgent", "CrowdStrikeFalcon" };
+        if (index % 2 == 0)
+        {
+            agents.Add("DefenderForEndpoint");
+        }
+
+        if (role is "SQL Server" or "File Server" or "Management Server")
+        {
+            agents.Add("BackupAgent");
+        }
+
+        return string.Join(';', agents);
     }
 
     private List<string> BuildServerRolePlan(int serverCount, int officeCount)

@@ -60,6 +60,8 @@ public record ServerAsset
     public bool DomainJoined { get; init; } = true;
     public string OwnerTeamId { get; init; } = "";
     public string Criticality { get; init; } = "Medium";
+    public string ServicePorts { get; init; } = "";
+    public string InfrastructureAgentNoise { get; init; } = "";
 }
 
 public record NetworkAsset

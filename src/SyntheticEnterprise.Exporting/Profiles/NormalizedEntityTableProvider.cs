@@ -979,7 +979,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "ip_address",
                     "domain_joined",
                     "owner_team_id",
-                    "criticality"
+                    "criticality",
+                    "service_ports",
+                    "infrastructure_agent_noise"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.Servers,
                 RowProjector = server => new Dictionary<string, object?>
@@ -1005,7 +1007,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["ip_address"] = server.IpAddress,
                     ["domain_joined"] = server.DomainJoined,
                     ["owner_team_id"] = server.OwnerTeamId,
-                    ["criticality"] = server.Criticality
+                    ["criticality"] = server.Criticality,
+                    ["service_ports"] = server.ServicePorts,
+                    ["infrastructure_agent_noise"] = server.InfrastructureAgentNoise
                 },
                 SortKeySelector = server => server.Id
             },
@@ -1505,7 +1509,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "owner_department_id",
                     "associated_application_id",
                     "host_server_id",
-                    "sensitivity"
+                    "sensitivity",
+                    "service_port",
+                    "connection_protocol"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.Databases,
                 RowProjector = database => new Dictionary<string, object?>
@@ -1519,7 +1525,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["owner_department_id"] = database.OwnerDepartmentId,
                     ["associated_application_id"] = database.AssociatedApplicationId,
                     ["host_server_id"] = database.HostServerId,
-                    ["sensitivity"] = database.Sensitivity
+                    ["sensitivity"] = database.Sensitivity,
+                    ["service_port"] = database.ServicePort,
+                    ["connection_protocol"] = database.ConnectionProtocol
                 },
                 SortKeySelector = database => database.Id
             },
@@ -1541,7 +1549,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "folder_count",
                     "total_size_gb",
                     "access_model",
-                    "sensitivity"
+                    "sensitivity",
+                    "is_hidden_share",
+                    "storage_endpoint_type"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.FileShares,
                 RowProjector = share => new Dictionary<string, object?>
@@ -1558,7 +1568,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["folder_count"] = share.FolderCount,
                     ["total_size_gb"] = share.TotalSizeGb,
                     ["access_model"] = share.AccessModel,
-                    ["sensitivity"] = share.Sensitivity
+                    ["sensitivity"] = share.Sensitivity,
+                    ["is_hidden_share"] = share.IsHiddenShare,
+                    ["storage_endpoint_type"] = share.StorageEndpointType
                 },
                 SortKeySelector = share => share.Id
             },

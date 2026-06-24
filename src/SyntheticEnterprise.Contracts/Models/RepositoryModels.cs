@@ -12,6 +12,8 @@ public record DatabaseRepository
     public string? AssociatedApplicationId { get; init; }
     public string? HostServerId { get; init; }
     public string Sensitivity { get; init; } = "Internal";
+    public int? ServicePort { get; init; }
+    public string ConnectionProtocol { get; init; } = "";
 }
 
 public record FileShareRepository
@@ -29,6 +31,8 @@ public record FileShareRepository
     public string TotalSizeGb { get; init; } = "";
     public string AccessModel { get; init; } = "GroupBased";
     public string Sensitivity { get; init; } = "Internal";
+    public bool IsHiddenShare { get; init; }
+    public string StorageEndpointType { get; init; } = "";
 }
 
 public record CollaborationSite
