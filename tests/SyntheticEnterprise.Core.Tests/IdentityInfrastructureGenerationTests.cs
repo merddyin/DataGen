@@ -985,6 +985,54 @@ public sealed class IdentityInfrastructureGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Connection_Observations_Do_Not_Consume_Global_Source_Id_Counter()
+    {
+        var idFactory = new TrackingIdFactory();
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .AddSingleton<IIdFactory>(idFactory)
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 170,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Network Discovery Id Stability Test",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Network Discovery Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 360,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 3,
+                            ServerCount = 18,
+                            NetworkAssetCountPerOffice = 6,
+                            DatabaseCount = 8,
+                            FileShareCount = 12,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        Assert.NotEmpty(result.World.ConnectionObservations);
+        Assert.Equal(0, idFactory.Calls.Count(call => string.Equals(call, "CONN", StringComparison.OrdinalIgnoreCase)));
+        Assert.StartsWith("NET-", result.World.NetworkAssets.First().Id, StringComparison.Ordinal);
+        Assert.StartsWith("SITE-", result.World.CollaborationSites.First().Id, StringComparison.Ordinal);
+        Assert.StartsWith("FOLDER-", result.World.DocumentFolders.First().Id, StringComparison.Ordinal);
+        Assert.StartsWith("TAB-", result.World.CollaborationChannelTabs.First().Id, StringComparison.Ordinal);
+        Assert.StartsWith("RAG-", result.World.RepositoryAccessGrants.First().Id, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WorldGenerator_Keeps_External_Account_User_Principal_Names_Unique_At_Scale()
     {
         var services = new ServiceCollection()
@@ -1064,5 +1112,18 @@ public sealed class IdentityInfrastructureGenerationTests
         }
 
         return row;
+    }
+
+    private sealed class TrackingIdFactory : IIdFactory
+    {
+        private int _counter;
+
+        public List<string> Calls { get; } = new();
+
+        public string Next(string entityType)
+        {
+            Calls.Add(entityType);
+            return $"{entityType}-{Interlocked.Increment(ref _counter):D6}";
+        }
     }
 }

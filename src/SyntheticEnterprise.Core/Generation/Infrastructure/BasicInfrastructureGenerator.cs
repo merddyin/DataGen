@@ -365,7 +365,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
         world.ConnectionObservations.Add(new ConnectionObservation
         {
-            Id = _idFactory.Next("CONN"),
+            Id = BuildConnectionObservationId("agent", server.Id, server.Id, "443"),
             CompanyId = company.Id,
             SourceServerId = server.Id,
             TargetServerId = server.Id,
@@ -374,7 +374,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             Protocol = "HTTPS",
             ProcessName = processName,
             Direction = "Outbound",
-            ObservationCount = 12 + _randomSource.Next(0, 80),
+            ObservationCount = 12 + (index * 11 % 80),
             Confidence = index % 4 == 0 ? "Medium" : "High"
         });
     }
@@ -390,6 +390,27 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
             .Split(['|', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault()
             ?? string.Empty;
+    }
+
+    private static string BuildConnectionObservationId(
+        string observationKind,
+        string sourceId,
+        string targetId,
+        string discriminator)
+        => $"CONN-{SanitizeConnectionObservationIdPart(observationKind)}-{SanitizeConnectionObservationIdPart(sourceId)}-{SanitizeConnectionObservationIdPart(targetId)}-{SanitizeConnectionObservationIdPart(discriminator)}";
+
+    private static string SanitizeConnectionObservationIdPart(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "none";
+        }
+
+        var chars = value
+            .Where(character => char.IsLetterOrDigit(character))
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+        return chars.Length == 0 ? "none" : new string(chars);
     }
 
     private static string ResolveServerServicePorts(string role)

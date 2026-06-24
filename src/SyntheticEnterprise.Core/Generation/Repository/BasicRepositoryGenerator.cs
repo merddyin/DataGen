@@ -208,7 +208,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         world.ConnectionObservations.Add(new ConnectionObservation
         {
-            Id = _idFactory.Next("CONN"),
+            Id = BuildConnectionObservationId("db", sourceServer.Id, targetServer.Id, database.Id),
             CompanyId = company.Id,
             SourceServerId = sourceServer.Id,
             TargetServerId = targetServer.Id,
@@ -219,7 +219,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             Protocol = database.ConnectionProtocol,
             ProcessName = ResolveDatabaseClientProcess(sourceServer, index),
             Direction = "Outbound",
-            ObservationCount = 8 + _randomSource.Next(0, 40),
+            ObservationCount = 8 + (index * 7 % 40),
             Confidence = index % 5 == 0 ? "Medium" : "High"
         });
     }
@@ -243,7 +243,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
 
         world.ConnectionObservations.Add(new ConnectionObservation
         {
-            Id = _idFactory.Next("CONN"),
+            Id = BuildConnectionObservationId("share", sourceServer.Id, targetServer.Id, share.Id),
             CompanyId = company.Id,
             SourceServerId = sourceServer.Id,
             TargetServerId = targetServer.Id,
@@ -254,7 +254,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             Protocol = "SMB",
             ProcessName = "System",
             Direction = "Outbound",
-            ObservationCount = 3 + _randomSource.Next(0, 25),
+            ObservationCount = 3 + (index * 5 % 25),
             Confidence = share.IsHiddenShare ? "High" : "Medium"
         });
     }
@@ -414,6 +414,27 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         }
 
         return index % 2 == 0 ? "sqlcmd.exe" : "java.exe";
+    }
+
+    private static string BuildConnectionObservationId(
+        string observationKind,
+        string sourceId,
+        string targetId,
+        string discriminator)
+        => $"CONN-{SanitizeConnectionObservationIdPart(observationKind)}-{SanitizeConnectionObservationIdPart(sourceId)}-{SanitizeConnectionObservationIdPart(targetId)}-{SanitizeConnectionObservationIdPart(discriminator)}";
+
+    private static string SanitizeConnectionObservationIdPart(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "none";
+        }
+
+        var chars = value
+            .Where(character => char.IsLetterOrDigit(character))
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+        return chars.Length == 0 ? "none" : new string(chars);
     }
 
     private string? ResolvePrimaryInfrastructureDepartmentId(
