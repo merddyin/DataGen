@@ -972,6 +972,16 @@ public sealed class IdentityInfrastructureGenerationTests
             share.IsHiddenShare
             && share.StorageEndpointType is "NAS" or "WindowsFileServer"
             && !string.IsNullOrWhiteSpace(share.HostServerId));
+        Assert.Contains(result.World.ConnectionObservations, observation =>
+            observation.RemotePort == 1433
+            && observation.Protocol == "TDS"
+            && observation.ObservationKind == "DatabaseConnection"
+            && !string.IsNullOrWhiteSpace(observation.SourceServerId)
+            && !string.IsNullOrWhiteSpace(observation.TargetRepositoryId));
+        Assert.Contains(result.World.ConnectionObservations, observation =>
+            observation.ObservationKind == "InfrastructureAgentNoise"
+            && observation.ProcessName == "AzureMonitorAgent"
+            && !string.IsNullOrWhiteSpace(observation.Id));
     }
 
     [Fact]

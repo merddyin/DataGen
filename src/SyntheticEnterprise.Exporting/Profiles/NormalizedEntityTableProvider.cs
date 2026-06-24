@@ -353,6 +353,49 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                 },
                 SortKeySelector = subnet => subnet.Id
             },
+            new EntityTableDescriptor<ConnectionObservation>
+            {
+                LogicalName = "connection_observations",
+                RelativePathStem = "entities/connection_observations",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "source_server_id",
+                    "source_device_id",
+                    "target_server_id",
+                    "target_network_asset_id",
+                    "target_repository_id",
+                    "target_repository_type",
+                    "observation_kind",
+                    "remote_port",
+                    "protocol",
+                    "process_name",
+                    "direction",
+                    "observation_count",
+                    "confidence"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.ConnectionObservations,
+                RowProjector = observation => new Dictionary<string, object?>
+                {
+                    ["id"] = observation.Id,
+                    ["company_id"] = observation.CompanyId,
+                    ["source_server_id"] = observation.SourceServerId,
+                    ["source_device_id"] = observation.SourceDeviceId,
+                    ["target_server_id"] = observation.TargetServerId,
+                    ["target_network_asset_id"] = observation.TargetNetworkAssetId,
+                    ["target_repository_id"] = observation.TargetRepositoryId,
+                    ["target_repository_type"] = observation.TargetRepositoryType,
+                    ["observation_kind"] = observation.ObservationKind,
+                    ["remote_port"] = observation.RemotePort,
+                    ["protocol"] = observation.Protocol,
+                    ["process_name"] = observation.ProcessName,
+                    ["direction"] = observation.Direction,
+                    ["observation_count"] = observation.ObservationCount,
+                    ["confidence"] = observation.Confidence
+                },
+                SortKeySelector = observation => observation.Id
+            },
             new EntityTableDescriptor<DirectoryOrganizationalUnit>
             {
                 LogicalName = "organizational_units",

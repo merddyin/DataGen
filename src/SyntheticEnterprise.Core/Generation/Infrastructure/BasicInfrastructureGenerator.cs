@@ -283,7 +283,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 createOnPremAccount: true,
                 createCloudAccount: false);
 
-            world.Servers.Add(new ServerAsset
+            var server = new ServerAsset
             {
                 Id = _idFactory.Next("SRV"),
                 CompanyId = company.Id,
@@ -303,7 +303,9 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 Criticality = i % 5 == 0 ? "High" : "Medium",
                 ServicePorts = ResolveServerServicePorts(role),
                 InfrastructureAgentNoise = ResolveInfrastructureAgentNoise(role, i)
-            });
+            };
+            world.Servers.Add(server);
+            AddInfrastructureAgentObservation(world, company, server, i);
         }
 
         if (jumpHostCount == 1)
@@ -323,7 +325,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 createOnPremAccount: true,
                 createCloudAccount: false);
 
-            world.Servers.Add(new ServerAsset
+            var jumpHost = new ServerAsset
             {
                 Id = _idFactory.Next("SRV"),
                 CompanyId = company.Id,
@@ -343,8 +345,51 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 Criticality = "High",
                 ServicePorts = ResolveServerServicePorts("Jump Host"),
                 InfrastructureAgentNoise = ResolveInfrastructureAgentNoise("Jump Host", targetServerCount)
-            });
+            };
+            world.Servers.Add(jumpHost);
+            AddInfrastructureAgentObservation(world, company, jumpHost, targetServerCount);
         }
+    }
+
+    private void AddInfrastructureAgentObservation(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        ServerAsset server,
+        int index)
+    {
+        var processName = ResolveInfrastructureAgentProcessName(server.InfrastructureAgentNoise);
+        if (string.IsNullOrWhiteSpace(processName))
+        {
+            return;
+        }
+
+        world.ConnectionObservations.Add(new ConnectionObservation
+        {
+            Id = _idFactory.Next("CONN"),
+            CompanyId = company.Id,
+            SourceServerId = server.Id,
+            TargetServerId = server.Id,
+            ObservationKind = "InfrastructureAgentNoise",
+            RemotePort = 443,
+            Protocol = "HTTPS",
+            ProcessName = processName,
+            Direction = "Outbound",
+            ObservationCount = 12 + _randomSource.Next(0, 80),
+            Confidence = index % 4 == 0 ? "Medium" : "High"
+        });
+    }
+
+    private static string ResolveInfrastructureAgentProcessName(string infrastructureAgentNoise)
+    {
+        if (string.IsNullOrWhiteSpace(infrastructureAgentNoise))
+        {
+            return string.Empty;
+        }
+
+        return infrastructureAgentNoise
+            .Split(['|', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault()
+            ?? string.Empty;
     }
 
     private static string ResolveServerServicePorts(string role)

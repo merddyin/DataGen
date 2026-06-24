@@ -123,6 +123,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             world.Databases.Add(database);
 
             AddApplicationRepositoryLink(world, company, selection, database.Id, "Database", "PrimaryDataStore");
+            AddDatabaseConnectionObservation(world, company, servers, database, server, i);
         }
     }
 
@@ -184,7 +185,78 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 "Knowledge",
                 dept.Id);
             AddApplicationRepositoryLink(world, company, selection, share.Id, "FileShare", "DocumentStore");
+            AddFileShareConnectionObservation(world, company, servers, share, hostServer, i);
         }
+    }
+
+    private void AddDatabaseConnectionObservation(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<ServerAsset> servers,
+        DatabaseRepository database,
+        ServerAsset? targetServer,
+        int index)
+    {
+        if (targetServer is null || database.ServicePort is null || string.IsNullOrWhiteSpace(database.ConnectionProtocol))
+        {
+            return;
+        }
+
+        var sourceServer = SelectConnectionSourceServer(servers, targetServer, "Application Server")
+            ?? SelectConnectionSourceServer(servers, targetServer, null)
+            ?? targetServer;
+
+        world.ConnectionObservations.Add(new ConnectionObservation
+        {
+            Id = _idFactory.Next("CONN"),
+            CompanyId = company.Id,
+            SourceServerId = sourceServer.Id,
+            TargetServerId = targetServer.Id,
+            TargetRepositoryId = database.Id,
+            TargetRepositoryType = "Database",
+            ObservationKind = "DatabaseConnection",
+            RemotePort = database.ServicePort,
+            Protocol = database.ConnectionProtocol,
+            ProcessName = ResolveDatabaseClientProcess(sourceServer, index),
+            Direction = "Outbound",
+            ObservationCount = 8 + _randomSource.Next(0, 40),
+            Confidence = index % 5 == 0 ? "Medium" : "High"
+        });
+    }
+
+    private void AddFileShareConnectionObservation(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<ServerAsset> servers,
+        FileShareRepository share,
+        ServerAsset? targetServer,
+        int index)
+    {
+        if (targetServer is null || string.IsNullOrWhiteSpace(share.Id))
+        {
+            return;
+        }
+
+        var sourceServer = SelectConnectionSourceServer(servers, targetServer, "Application Server")
+            ?? SelectConnectionSourceServer(servers, targetServer, null)
+            ?? targetServer;
+
+        world.ConnectionObservations.Add(new ConnectionObservation
+        {
+            Id = _idFactory.Next("CONN"),
+            CompanyId = company.Id,
+            SourceServerId = sourceServer.Id,
+            TargetServerId = targetServer.Id,
+            TargetRepositoryId = share.Id,
+            TargetRepositoryType = "FileShare",
+            ObservationKind = share.IsHiddenShare ? "HiddenFileShareConnection" : "FileShareConnection",
+            RemotePort = 445,
+            Protocol = "SMB",
+            ProcessName = "System",
+            Direction = "Outbound",
+            ObservationCount = 3 + _randomSource.Next(0, 25),
+            Confidence = share.IsHiddenShare ? "High" : "Medium"
+        });
     }
 
     private void CreateUserFileShares(
@@ -310,6 +382,39 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             "Oracle" => "OracleNet",
             _ => ""
         };
+
+    private static ServerAsset? SelectConnectionSourceServer(
+        IReadOnlyList<ServerAsset> servers,
+        ServerAsset targetServer,
+        string? preferredRole)
+    {
+        var candidates = servers.Where(server =>
+                !string.IsNullOrWhiteSpace(server.Id)
+                && !string.Equals(server.Id, targetServer.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(preferredRole))
+        {
+            var preferred = candidates.FirstOrDefault(server =>
+                string.Equals(server.ServerRole, preferredRole, StringComparison.OrdinalIgnoreCase));
+            if (preferred is not null)
+            {
+                return preferred;
+            }
+        }
+
+        return candidates.FirstOrDefault();
+    }
+
+    private static string ResolveDatabaseClientProcess(ServerAsset sourceServer, int index)
+    {
+        if (string.Equals(sourceServer.ServerRole, "Application Server", StringComparison.OrdinalIgnoreCase))
+        {
+            return index % 2 == 0 ? "w3wp.exe" : "dotnet.exe";
+        }
+
+        return index % 2 == 0 ? "sqlcmd.exe" : "java.exe";
+    }
 
     private string? ResolvePrimaryInfrastructureDepartmentId(
         IReadOnlyList<Person> people,

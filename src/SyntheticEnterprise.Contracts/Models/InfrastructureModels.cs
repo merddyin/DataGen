@@ -64,6 +64,25 @@ public record ServerAsset
     public string InfrastructureAgentNoise { get; init; } = "";
 }
 
+public record ConnectionObservation
+{
+    public string Id { get; init; } = "";
+    public string CompanyId { get; init; } = "";
+    public string SourceServerId { get; init; } = "";
+    public string? SourceDeviceId { get; init; }
+    public string? TargetServerId { get; init; }
+    public string? TargetNetworkAssetId { get; init; }
+    public string? TargetRepositoryId { get; init; }
+    public string TargetRepositoryType { get; init; } = "";
+    public string ObservationKind { get; init; } = "";
+    public int? RemotePort { get; init; }
+    public string Protocol { get; init; } = "";
+    public string ProcessName { get; init; } = "";
+    public string Direction { get; init; } = "Outbound";
+    public int ObservationCount { get; init; }
+    public string Confidence { get; init; } = "Medium";
+}
+
 public record NetworkAsset
 {
     public string Id { get; init; } = "";

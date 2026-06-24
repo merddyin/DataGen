@@ -1569,6 +1569,68 @@ public sealed class WorldExportCoordinatorTests
     }
 
     [Fact]
+    public void Export_Writes_Connection_Observations_As_Core_Enterprise_Facts()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        ConnectionObservations =
+                        {
+                            new ConnectionObservation
+                            {
+                                Id = "CONN-001",
+                                CompanyId = "CO-001",
+                                SourceServerId = "SRV-APP-001",
+                                TargetServerId = "SRV-SQL-001",
+                                TargetRepositoryId = "DB-001",
+                                ObservationKind = "DatabaseConnection",
+                                RemotePort = 1433,
+                                Protocol = "TDS",
+                                ProcessName = "w3wp.exe",
+                                ObservationCount = 12,
+                                Confidence = "High"
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            var jsonPath = Directory.GetFiles(manifest.OutputPath, "connection_observations.json", SearchOption.AllDirectories).Single();
+            var json = File.ReadAllText(jsonPath);
+
+            Assert.Contains("\"id\": \"CONN-001\"", json);
+            Assert.Contains("\"observation_kind\": \"DatabaseConnection\"", json);
+            Assert.Contains("\"remote_port\": 1433", json);
+            Assert.Contains("\"observation_count\": 12", json);
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "connection_observations");
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
     public void Export_Writes_Plugin_Generated_Record_And_Relationship_Artifacts()
     {
         var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
