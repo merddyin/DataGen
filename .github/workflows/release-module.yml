@@ -154,6 +154,7 @@ jobs:
           $shouldPublish = '${{ github.event_name }}' -eq 'push' -or '${{ inputs.publish_to_psgallery }}' -eq 'true'
 
           New-Item -ItemType Directory -Path $nupkgOutput -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $env:LOCALAPPDATA 'PSResourceGet') -Force | Out-Null
           Set-PSResourceRepository -Name PSGallery -Trusted
 
           if ($shouldPublish) {
