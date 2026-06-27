@@ -1,0 +1,180 @@
+---
+title: Repeatable Lab Runs
+description: Use fixed scenarios, seeds, snapshots, and normalized exports to refresh DataGen-backed labs safely.
+---
+
+# Repeatable Lab Runs
+
+Use this walkthrough when you need the same synthetic enterprise more than once: demos, regression tests, lab refreshes, adapter validation, or before-and-after comparisons.
+
+The repeatable pattern is simple:
+
+1. keep the scenario JSON under source control
+2. use an explicit seed
+3. save a `.seworld` snapshot
+4. export normalized artifacts
+5. compare exports before applying changes to a downstream lab
+6. reset or apply deltas deliberately
+
+## Requirements
+
+- DataGen module imported
+- committed scenario JSON
+- a fixed seed value
+- a writable output root
+- a downstream lab reset plan if you are applying the output to AD, Entra, CMDB, or another system
+
+## 1. Choose the scenario and seed
+
+```powershell
+$scenarioPath = Resolve-Path .\general-enterprise-lab.json
+$seed = 4242
+$runId = "general-enterprise-$seed"
+$outputRoot = Join-Path $PWD "out\$runId"
+
+Test-SEScenario -Path $scenarioPath
+```
+
+The scenario controls what is generated. The seed controls the deterministic choices made during generation. Changing either one should be treated as a meaningful lab change.
+
+## 2. Generate, snapshot, and export
+
+```powershell
+New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
+
+$world = New-SEEnterpriseWorld -ScenarioPath $scenarioPath -Seed $seed
+$world | Get-SEWorldSummary
+
+$snapshotPath = Join-Path $outputRoot "$runId.seworld"
+$exportPath = Join-Path $outputRoot "normalized"
+
+$world | Save-SEEnterpriseWorld -Path $snapshotPath -Compress
+$world | Export-SEEnterpriseWorld `
+  -OutputPath $exportPath `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
+```
+
+Keep the snapshot when you need to inspect the same world later without regenerating it. Use the normalized export when another system needs files.
+
+## 3. Prove that the snapshot round-trips
+
+```powershell
+$imported = Import-SEEnterpriseWorld -Path $snapshotPath
+$imported | Get-SEWorldSummary
+```
+
+The round-trip check catches broken snapshots before you hand the artifact to another operator or pipeline.
+
+## 4. Compare two runs
+
+Generate a second run with the same scenario and seed, then compare the normalized artifacts.
+
+```powershell
+$runA = Resolve-Path .\out\general-enterprise-4242\normalized
+$runB = Resolve-Path .\out\general-enterprise-4242-rerun\normalized
+
+$filesA = Get-ChildItem $runA -Recurse -File |
+  ForEach-Object {
+    [pscustomobject]@{
+      RelativePath = $_.FullName.Substring($runA.Path.Length).TrimStart('\')
+      Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+    }
+  }
+
+$filesB = Get-ChildItem $runB -Recurse -File |
+  ForEach-Object {
+    [pscustomobject]@{
+      RelativePath = $_.FullName.Substring($runB.Path.Length).TrimStart('\')
+      Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+    }
+  }
+
+Compare-Object $filesA $filesB -Property RelativePath, Hash
+```
+
+An empty comparison means the exported files match. If the comparison shows differences, check whether the scenario changed, the seed changed, the DataGen version changed, or the export profile changed.
+
+## 5. Know what may intentionally differ
+
+Most normalized lab data should be stable for the same scenario, seed, DataGen version, and catalog content. Credential material is the common exception. If you export generated passwords or rotate credentials during population, treat those values as lab secrets rather than deterministic fixture data.
+
+For CI or demo validation, compare the files that matter to the workflow instead of relying on a single whole-folder verdict. For example:
+
+```powershell
+$importantArtifacts = @(
+  'entities\accounts.json',
+  'entities\groups.json',
+  'entities\organizational_units.json',
+  'links\group_memberships.json',
+  'entities\applications.json',
+  'entities\configuration_items.json'
+)
+
+foreach ($artifact in $importantArtifacts) {
+  $left = Join-Path $runA $artifact
+  $right = Join-Path $runB $artifact
+
+  [pscustomobject]@{
+    Artifact = $artifact
+    LeftHash = (Get-FileHash $left -Algorithm SHA256).Hash
+    RightHash = (Get-FileHash $right -Algorithm SHA256).Hash
+    Matches = (Get-FileHash $left -Algorithm SHA256).Hash -eq (Get-FileHash $right -Algorithm SHA256).Hash
+  }
+}
+```
+
+## 6. Refresh a populated lab
+
+Pick a refresh strategy before applying new output:
+
+- **Reset and replay:** delete the dedicated lab OU, remove prefixed tenant objects, restore a VM checkpoint, or rebuild the target database, then apply the new export.
+- **Compare and approve:** compare the old and new exports, review changed entities and memberships, then apply only the approved changes.
+- **Snapshot freeze:** keep the `.seworld` file as the demo fixture and export from that snapshot whenever you need fresh files.
+
+For AD and Entra labs, reset-and-replay is usually the cleanest pattern. It avoids accidentally accumulating stale accounts, duplicate groups, and old memberships that no longer reflect the generated world.
+
+## 7. Re-export from a frozen snapshot
+
+```powershell
+$world = Import-SEEnterpriseWorld -Path .\out\general-enterprise-4242\general-enterprise-4242.seworld
+
+$world | Export-SEEnterpriseWorld `
+  -OutputPath .\out\general-enterprise-4242\normalized-refresh `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
+```
+
+This is useful when the downstream adapter wants a clean export folder but the world itself should not change.
+
+## 8. Use selective regeneration deliberately
+
+DataGen includes layer-level regeneration commands for workflows where you want to refresh only part of the world. Use them when the test explicitly needs a controlled change, such as identity churn or new infrastructure, and then compare the export before applying it.
+
+```powershell
+# Example shape. Pick the layer that matches the lab question.
+$world | Add-SEIdentityLayer
+$world | Export-SEEnterpriseWorld -OutputPath .\out\identity-refresh\normalized -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+```
+
+Selective regeneration is powerful, but it changes the lab story. Record the reason for the refresh and keep the previous export long enough to explain the delta.
+
+## 9. Automate the repeatable run
+
+Wrap the pattern in a script and make scenario path, seed, and output root explicit parameters. A good automation run prints:
+
+- scenario path
+- seed
+- DataGen version
+- snapshot path
+- normalized export path
+- world summary
+- comparison result when a baseline is supplied
+
+That gives the next operator enough evidence to know whether they are looking at the intended lab state.

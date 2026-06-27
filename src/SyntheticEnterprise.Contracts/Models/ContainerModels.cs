@@ -11,6 +11,7 @@ public record EnvironmentContainer
     public string ContainerPath { get; init; } = "";
     public string Purpose { get; init; } = "";
     public string Environment { get; init; } = "Production";
+    public string EnvironmentRole { get; init; } = "Source";
     public bool BlocksPolicyInheritance { get; init; }
     public string? IdentityStoreId { get; init; }
     public string? CloudTenantId { get; init; }

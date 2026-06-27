@@ -150,6 +150,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
             CreateDirectoryPolicies(world, company, includeAdministrativeTiers);
             CreateCrossTenantPolicyObjects(world, company);
+            CreateTargetEnvironmentGpoSlice(world, company, rootDomain);
         }
     }
 
@@ -174,6 +175,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 DirectoryMode = identityProfile.IncludeM365StyleGroups ? "HybridDirectory" : "OnPremDirectory",
                 AuthenticationModel = "Kerberos",
                 Environment = "Production",
+                EnvironmentRole = "Source",
                 IsPrimary = true
             }
         ];
@@ -204,6 +206,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             ContainerPath = primaryDirectoryStore.NamingContext ?? primaryDirectoryStore.PrimaryDomain,
             Purpose = "Directory naming context",
             Environment = primaryDirectoryStore.Environment,
+            EnvironmentRole = primaryDirectoryStore.EnvironmentRole,
             BlocksPolicyInheritance = false,
             IdentityStoreId = primaryDirectoryStore.Id,
             SourceEntityType = nameof(IdentityStore),
@@ -260,6 +263,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 ContainerPath = ou.DistinguishedName,
                 Purpose = ou.Purpose,
                 Environment = primaryDirectoryStore.Environment,
+                EnvironmentRole = ou.EnvironmentRole,
                 BlocksPolicyInheritance = string.Equals(ou.Name, "Administration", StringComparison.OrdinalIgnoreCase)
                                           || string.Equals(ou.Name, "Privileged Access Workstations", StringComparison.OrdinalIgnoreCase),
                 IdentityStoreId = primaryDirectoryStore.Id,
@@ -784,6 +788,132 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddAccessControlEvidence(world, company.Id, syncAccount?.Id, "Account", "Container", serviceAccountsContainer?.Id, "ReadManagedServiceAccount", "Allow", false, "ActiveDirectory", notes: "Directory synchronization inventory of service principals and managed service accounts");
         AddAccessControlEvidence(world, company.Id, accountOperators?.Id, "Group", "Container", usersContainer?.Id, "CreateUser", "Allow", false, "ActiveDirectory", notes: "Legacy delegated account administration retained on default Users container");
         AddAccessControlEvidence(world, company.Id, domainAdmins?.Id, "Group", "Container", domainContainer?.Id, "ResetPassword", "Allow", false, "ActiveDirectory", notes: "Default privileged reset right at domain scope");
+    }
+
+    private void CreateTargetEnvironmentGpoSlice(SyntheticEnterpriseWorld world, Company company, string sourceRootDomain)
+    {
+        var targetRootDomain = $"target.{sourceRootDomain}";
+        var targetNamingContext = BuildNamingContext(targetRootDomain);
+        var targetIdentityStore = new IdentityStore
+        {
+            Id = _idFactory.Next("IDS"),
+            CompanyId = company.Id,
+            Name = targetRootDomain,
+            StoreType = "ActiveDirectoryDomain",
+            Provider = "Microsoft",
+            PrimaryDomain = targetRootDomain,
+            NamingContext = targetNamingContext,
+            DirectoryMode = "HybridDirectory",
+            AuthenticationModel = "Kerberos",
+            Environment = "Production",
+            EnvironmentRole = "Target",
+            IsPrimary = false
+        };
+        world.IdentityStores.Add(targetIdentityStore);
+
+        var root = CreateOu(company, "Target", null, $"OU=Target,{targetNamingContext}", "Target environment root", "Target");
+        var workstations = CreateOu(company, "Target Workstations", root.Id, $"OU=Target Workstations,{root.DistinguishedName}", "Target managed workstations", "Target");
+        var servers = CreateOu(company, "Target Servers", root.Id, $"OU=Target Servers,{root.DistinguishedName}", "Target managed servers", "Target");
+        var privileged = CreateOu(company, "Target Privileged Access", root.Id, $"OU=Target Privileged Access,{root.DistinguishedName}", "Target privileged access staging", "Target");
+        var targetOus = new[] { root, workstations, servers, privileged };
+        world.OrganizationalUnits.AddRange(targetOus);
+
+        var domainContainer = new EnvironmentContainer
+        {
+            Id = _idFactory.Next("CNT"),
+            CompanyId = company.Id,
+            Name = targetIdentityStore.PrimaryDomain,
+            ContainerType = "DirectoryDomain",
+            Platform = "ActiveDirectory",
+            ContainerPath = targetIdentityStore.NamingContext ?? targetIdentityStore.PrimaryDomain,
+            Purpose = "Target directory naming context",
+            Environment = targetIdentityStore.Environment,
+            EnvironmentRole = targetIdentityStore.EnvironmentRole,
+            BlocksPolicyInheritance = false,
+            IdentityStoreId = targetIdentityStore.Id,
+            SourceEntityType = nameof(IdentityStore),
+            SourceEntityId = targetIdentityStore.Id
+        };
+        world.Containers.Add(domainContainer);
+
+        var parentContainerIdsByOuId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var ou in targetOus)
+        {
+            var container = new EnvironmentContainer
+            {
+                Id = _idFactory.Next("CNT"),
+                CompanyId = company.Id,
+                Name = ou.Name,
+                ContainerType = "OrganizationalUnit",
+                Platform = "ActiveDirectory",
+                ParentContainerId = !string.IsNullOrWhiteSpace(ou.ParentOuId) && parentContainerIdsByOuId.TryGetValue(ou.ParentOuId, out var parentContainerId)
+                    ? parentContainerId
+                    : domainContainer.Id,
+                ContainerPath = ou.DistinguishedName,
+                Purpose = ou.Purpose,
+                Environment = targetIdentityStore.Environment,
+                EnvironmentRole = ou.EnvironmentRole,
+                BlocksPolicyInheritance = string.Equals(ou.Name, "Target Privileged Access", StringComparison.OrdinalIgnoreCase),
+                IdentityStoreId = targetIdentityStore.Id,
+                SourceEntityType = nameof(DirectoryOrganizationalUnit),
+                SourceEntityId = ou.Id
+            };
+            world.Containers.Add(container);
+            parentContainerIdsByOuId[ou.Id] = container.Id;
+        }
+
+        var workstationContainer = FindContainer(world, company.Id, "OrganizationalUnit", targetIdentityStore.Id, workstations.Name, "Target");
+        var serverContainer = FindContainer(world, company.Id, "OrganizationalUnit", targetIdentityStore.Id, servers.Name, "Target");
+        var privilegedContainer = FindContainer(world, company.Id, "OrganizationalUnit", targetIdentityStore.Id, privileged.Name, "Target");
+
+        var workstationPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Target Workstation Security Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "TargetEnvironment",
+            "Modeled target workstation baseline for OU and GPO comparison.",
+            targetIdentityStore.Id,
+            null,
+            environmentRole: "Target");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "MinimumPasswordLength", "PasswordPolicy", "Integer", "14", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "ScreenLockTimeoutMinutes", "UserExperience", "Integer", "10", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "WindowsFirewallDomainProfileState", "NetworkSecurity", "Boolean", "true", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, workstationPolicy.Id, "BlockUnsignedPowerShellScripts", "AdministrativeTooling", "Boolean", "true", environmentRole: "Target");
+        AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Container", workstationContainer?.Id, "Linked", true, 1, true, environmentRole: "Target");
+
+        var serverPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Target Server Security Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "TargetEnvironment",
+            "Modeled target server baseline for OU and GPO comparison.",
+            targetIdentityStore.Id,
+            null,
+            environmentRole: "Target");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "WindowsFirewallDomainProfileState", "NetworkSecurity", "Boolean", "true", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "AuditLogonEvents", "AuditPolicy", "String", "Success,Failure", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "RemoteDesktopIdleTimeoutMinutes", "RemoteAccess", "Integer", "30", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, serverPolicy.Id, "LegacySmb1ServerEnabled", "LegacyProtocols", "Boolean", "false", environmentRole: "Target");
+        AddPolicyTarget(world, company.Id, serverPolicy.Id, "Container", serverContainer?.Id, "Linked", true, 1, true, environmentRole: "Target");
+
+        var privilegedPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Target Privileged Access Guardrails",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "TargetEnvironment",
+            "Modeled target privileged access controls for migration planning.",
+            targetIdentityStore.Id,
+            null,
+            environmentRole: "Target");
+        AddPolicySetting(world, company.Id, privilegedPolicy.Id, "AllowLogOnThroughRemoteDesktopServices", "UserRights", "String", "Tier0AdminsOnly", environmentRole: "Target");
+        AddPolicySetting(world, company.Id, privilegedPolicy.Id, "UserAccountControlRunAllAdministratorsInAdminApprovalMode", "SecurityOptions", "Boolean", "true", environmentRole: "Target");
+        AddPolicyTarget(world, company.Id, privilegedPolicy.Id, "Container", privilegedContainer?.Id, "Linked", true, 1, true, environmentRole: "Target");
     }
 
     private void CreateLocationScopedPolicies(
@@ -3939,7 +4069,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string name,
         string? parentOuId,
         string distinguishedName,
-        string purpose)
+        string purpose,
+        string environmentRole = "Source")
     {
         return new DirectoryOrganizationalUnit
         {
@@ -3948,7 +4079,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             Name = name,
             ParentOuId = parentOuId,
             DistinguishedName = distinguishedName,
-            Purpose = purpose
+            Purpose = purpose,
+            EnvironmentRole = environmentRole
         };
     }
 
@@ -3964,13 +4096,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string? cloudTenantId,
         string? sourceEntityType = null,
         string? sourceEntityId = null,
+        string environmentRole = "Source",
         string status = "Enabled")
     {
         var existing = world.Policies.FirstOrDefault(policy =>
             policy.CompanyId == companyId
             && string.Equals(policy.Name, name, StringComparison.OrdinalIgnoreCase)
             && string.Equals(policy.PolicyType, policyType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.Platform, platform, StringComparison.OrdinalIgnoreCase));
+            && string.Equals(policy.Platform, platform, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(policy.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
             return existing;
@@ -3986,6 +4120,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             Platform = platform,
             Category = category,
             Environment = "Production",
+            EnvironmentRole = environmentRole,
             Status = status,
             Description = description,
             IdentityStoreId = identityStoreId,
@@ -4009,12 +4144,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         bool isConflicting = false,
         string? sourceReference = null,
         string? policyPath = null,
-        string? registryPath = null)
+        string? registryPath = null,
+        string environmentRole = "Source")
     {
         if (world.PolicySettings.Any(setting =>
                 setting.CompanyId == companyId
                 && string.Equals(setting.PolicyId, policyId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(setting.SettingName, settingName, StringComparison.OrdinalIgnoreCase)))
+                && string.Equals(setting.SettingName, settingName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(setting.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -4043,6 +4180,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             ConfiguredValue = configuredValue,
             Source = source,
             Behavior = behavior,
+            EnvironmentRole = environmentRole,
             IsLegacy = isLegacy,
             IsConflicting = isConflicting,
             SourceReference = sourceReference
@@ -4060,7 +4198,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         int linkOrder,
         bool linkEnabled = true,
         string? filterType = null,
-        string? filterValue = null)
+        string? filterValue = null,
+        string environmentRole = "Source")
     {
         if (string.IsNullOrWhiteSpace(targetId))
         {
@@ -4074,7 +4213,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 && string.Equals(link.TargetId, targetId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(link.AssignmentMode, assignmentMode, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(link.FilterType, filterType, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(link.FilterValue, filterValue, StringComparison.OrdinalIgnoreCase)))
+                && string.Equals(link.FilterValue, filterValue, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(link.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -4087,6 +4227,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             TargetType = targetType,
             TargetId = targetId,
             AssignmentMode = assignmentMode,
+            EnvironmentRole = environmentRole,
             LinkEnabled = linkEnabled,
             IsEnforced = isEnforced,
             LinkOrder = linkOrder,
@@ -4681,12 +4822,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string companyId,
         string containerType,
         string? identityStoreId = null,
-        string? name = null)
+        string? name = null,
+        string? environmentRole = null)
         => world.Containers.FirstOrDefault(container =>
             container.CompanyId == companyId
             && string.Equals(container.ContainerType, containerType, StringComparison.OrdinalIgnoreCase)
             && (identityStoreId is null || string.Equals(container.IdentityStoreId, identityStoreId, StringComparison.OrdinalIgnoreCase))
-            && (name is null || string.Equals(container.Name, name, StringComparison.OrdinalIgnoreCase)));
+            && (name is null || string.Equals(container.Name, name, StringComparison.OrdinalIgnoreCase))
+            && (environmentRole is null || string.Equals(container.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase)));
 
     private static DirectoryGroup? FindDepartmentGroup(
         IReadOnlyList<DirectoryGroup> groups,

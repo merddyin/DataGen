@@ -10,6 +10,7 @@ public record PolicyRecord
     public string Platform { get; init; } = "";
     public string Category { get; init; } = "";
     public string Environment { get; init; } = "Production";
+    public string EnvironmentRole { get; init; } = "Source";
     public string Status { get; init; } = "Enabled";
     public string Description { get; init; } = "";
     public string? IdentityStoreId { get; init; }
@@ -31,6 +32,7 @@ public record PolicySettingRecord
     public string ConfiguredValue { get; init; } = "";
     public string Source { get; init; } = "GPO";
     public string Behavior { get; init; } = "Unknown";
+    public string EnvironmentRole { get; init; } = "Source";
     public bool IsLegacy { get; init; }
     public bool IsConflicting { get; init; }
     public string? SourceReference { get; init; }
@@ -44,6 +46,7 @@ public record PolicyTargetLink
     public string TargetType { get; init; } = "";
     public string TargetId { get; init; } = "";
     public string AssignmentMode { get; init; } = "";
+    public string EnvironmentRole { get; init; } = "Source";
     public bool LinkEnabled { get; init; } = true;
     public bool IsEnforced { get; init; }
     public int LinkOrder { get; init; }

@@ -8,6 +8,7 @@ public record DirectoryOrganizationalUnit
     public string DistinguishedName { get; init; } = "";
     public string? ParentOuId { get; init; }
     public string Purpose { get; init; } = "";
+    public string EnvironmentRole { get; init; } = "Source";
 }
 
 public record IdentityStore
@@ -22,6 +23,7 @@ public record IdentityStore
     public string DirectoryMode { get; init; } = "";
     public string AuthenticationModel { get; init; } = "";
     public string Environment { get; init; } = "Production";
+    public string EnvironmentRole { get; init; } = "Source";
     public bool IsPrimary { get; init; } = true;
     public string? CloudTenantId { get; init; }
 }

@@ -1,57 +1,248 @@
 ---
 title: Generate and Populate an Entra Lab
-description: Generate an Entra-first world for tenant, guest, cloud-policy, and collaboration testing.
+description: Generate an Entra-first DataGen world, populate cloud identity objects with Microsoft Graph PowerShell, and validate the tenant.
 ---
 
 # Generate and Populate an Entra Lab
 
-Use this walkthrough when you want a cloud-first identity environment centered on Entra, Microsoft 365-style collaboration, and tenant governance.
+Use this walkthrough when you want a cloud-first identity environment centered on Entra, Microsoft 365-style collaboration, B2B guests, and tenant governance.
+
+DataGen does not replace Microsoft Graph or Entra administration. It gives you the realistic source model and normalized artifacts; Graph PowerShell turns the selected parts of that model into tenant objects.
+
+:::warning Use a disposable tenant
+Run this against a dedicated developer or lab tenant. Do not run bulk user, group, or guest creation against a production tenant until you have reviewed the exact object set and added your own naming, licensing, and cleanup controls.
+:::
 
 ## Requirements
 
 - DataGen module imported
 - catalog content available
-- export path for normalized artifacts
+- Microsoft Graph PowerShell SDK installed
+- tenant permissions to create users, groups, and group memberships
+- a naming prefix or other lab marker that makes cleanup unambiguous
 
 ## Reference assets
 
 - [Scenario JSON](/examples/scenarios/entra-lab.json)
 - [Reference script](/examples/scripts/generate-entra-lab.ps1)
 
-## Steps
-
-### 1. Validate the scenario
+## 1. Generate and export the DataGen world
 
 ```powershell
 Test-SEScenario -Path .\entra-lab.json
-```
 
-### 2. Generate the world
-
-```powershell
 $world = New-SEEnterpriseWorld -ScenarioPath .\entra-lab.json -Seed 2307
+$world | Get-SEWorldSummary
+
+$world | Save-SEEnterpriseWorld -Path .\out\entra-lab\entra-lab.seworld -Compress
+$world | Export-SEEnterpriseWorld `
+  -OutputPath .\out\entra-lab\normalized `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
 ```
 
-### 3. Export for tenant validation
+The tenant population examples use these artifacts:
+
+- `entities/accounts.json`
+- `entities/groups.json`
+- `links/group_memberships.json`
+- `entities/cloud_tenants.json`
+- `entities/policies.json`
+- `links/policy_target_links.json`
+
+## 2. Inspect what will become tenant objects
 
 ```powershell
-$world | Export-SEEnterpriseWorld -OutputPath .\out\entra-lab -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+$exportRoot = Resolve-Path .\out\entra-lab\normalized
+
+$accounts = Get-Content "$exportRoot\entities\accounts.json" | ConvertFrom-Json
+$groups = Get-Content "$exportRoot\entities\groups.json" | ConvertFrom-Json
+$memberships = Get-Content "$exportRoot\links\group_memberships.json" | ConvertFrom-Json
+$tenants = Get-Content "$exportRoot\entities\cloud_tenants.json" | ConvertFrom-Json
+
+$accounts | Group-Object user_type, identity_provider | Select-Object Name, Count
+$groups | Select-Object name, group_type, mail_enabled, purpose | Format-Table -AutoSize
+$tenants | Format-Table -AutoSize
 ```
 
-## What this scenario emphasizes
+Decide which generated objects you actually want to materialize. For many labs, creating a representative slice of users, groups, and memberships is more useful than importing every generated account.
 
-- Entra-first identity
-- B2B guests
-- collaboration-heavy repositories
-- global geography
-- remote-work overlays
+## 3. Connect to Microsoft Graph
 
-## Example validation targets
+```powershell
+Install-Module Microsoft.Graph -Scope CurrentUser
+Import-Module Microsoft.Graph.Users
+Import-Module Microsoft.Graph.Groups
+Import-Module Microsoft.Graph.Identity.SignIns
 
-This walkthrough is especially useful when you want to validate:
+Connect-MgGraph -Scopes 'User.ReadWrite.All','Group.ReadWrite.All','Directory.ReadWrite.All'
+Get-MgContext
+```
 
-- identity store and container mapping
-- guest and external-user handling
-- tenant associations
-- cloud policy and access evidence
-- collaboration and repository topology
+Use delegated access for interactive lab work. For repeatable CI-style tenant refreshes, use an application identity with the least privileges required for the objects you create.
+
+## 4. Create cloud-only users
+
+The example below creates enabled member users and tags them with a lab prefix through the display name. Keep a small limit until your tenant cleanup story is proven.
+
+```powershell
+$labPrefix = 'DG-LAB'
+$passwordProfile = @{
+  password = 'ChangeMe-For-Lab-Only-001!'
+  forceChangePasswordNextSignIn = $true
+}
+
+$createdUsersBySourceId = @{}
+
+$accounts |
+  Where-Object { $_.account_type -eq 'User' -and $_.user_type -ne 'Guest' } |
+  Select-Object -First 50 |
+  ForEach-Object {
+    $displayName = "$labPrefix $($_.display_name)"
+    $upn = $_.user_principal_name
+
+    $existing = Get-MgUser -Filter "userPrincipalName eq '$upn'" -ErrorAction SilentlyContinue
+    if ($existing) {
+      $createdUsersBySourceId[$_.id] = $existing.Id
+      return
+    }
+
+    $user = New-MgUser `
+      -AccountEnabled ([bool]$_.enabled) `
+      -DisplayName $displayName `
+      -MailNickname $_.sam_account_name `
+      -UserPrincipalName $upn `
+      -PasswordProfile $passwordProfile
+
+    $createdUsersBySourceId[$_.id] = $user.Id
+  }
+```
+
+If your generated UPN suffix is not verified in the lab tenant, remap it before calling `New-MgUser`.
+
+## 5. Invite B2B guests when the scenario includes them
+
+Guest users are usually created through invitation rather than ordinary member-user creation. Review external domains first, then invite only the slice you intend to test.
+
+```powershell
+$guestCandidates = $accounts |
+  Where-Object { $_.user_type -eq 'Guest' -and $_.mail } |
+  Select-Object -First 10
+
+$guestCandidates | Select-Object display_name, mail, invited_organization_id, access_expires_at
+
+# Example invitation shape:
+# foreach ($guest in $guestCandidates) {
+#   New-MgInvitation `
+#     -InvitedUserDisplayName "$labPrefix $($guest.display_name)" `
+#     -InvitedUserEmailAddress $guest.mail `
+#     -InviteRedirectUrl 'https://myapps.microsoft.com' `
+#     -SendInvitationMessage:$false
+# }
+```
+
+Keeping invitations commented by default is intentional. Guest creation can reach real external mailboxes if you enable invitation messages.
+
+## 6. Create groups
+
+```powershell
+$createdGroupsBySourceId = @{}
+
+$groups |
+  Where-Object { $_.group_type -in @('Security','M365','Microsoft365') } |
+  Select-Object -First 40 |
+  ForEach-Object {
+    $mailNickname = ($_.name -replace '[^A-Za-z0-9]', '').ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($mailNickname)) {
+      $mailNickname = "group$($_.id)"
+    }
+
+    $displayName = "$labPrefix $($_.name)"
+    $existing = Get-MgGroup -Filter "displayName eq '$displayName'" -ErrorAction SilentlyContinue
+    if ($existing) {
+      $createdGroupsBySourceId[$_.id] = $existing.Id
+      return
+    }
+
+    $isUnified = $_.group_type -in @('M365','Microsoft365')
+    $groupTypes = if ($isUnified) { @('Unified') } else { @() }
+
+    $group = New-MgGroup `
+      -DisplayName $displayName `
+      -MailEnabled ([bool]$_.mail_enabled) `
+      -MailNickname $mailNickname `
+      -SecurityEnabled (-not [bool]$_.mail_enabled -or -not $isUnified) `
+      -GroupTypes $groupTypes `
+      -Description $_.purpose
+
+    $createdGroupsBySourceId[$_.id] = $group.Id
+  }
+```
+
+Microsoft 365 groups, dynamic groups, mail-enabled security groups, and Teams-backed collaboration all have additional service rules. Treat this as the identity shell, then layer Exchange, Teams, SharePoint, or Intune behavior intentionally.
+
+## 7. Apply group memberships
+
+```powershell
+foreach ($membership in $memberships) {
+  $groupObjectId = $createdGroupsBySourceId[$membership.group_id]
+  if (-not $groupObjectId) {
+    continue
+  }
+
+  $memberObjectId = $createdUsersBySourceId[$membership.member_object_id]
+  if (-not $memberObjectId) {
+    continue
+  }
+
+  New-MgGroupMemberByRef `
+    -GroupId $groupObjectId `
+    -BodyParameter @{
+      '@odata.id' = "https://graph.microsoft.com/v1.0/directoryObjects/$memberObjectId"
+    }
+}
+```
+
+For larger labs, add retry handling for throttling and keep a checkpoint file that maps DataGen IDs to Graph object IDs.
+
+## 8. Use policies as a configuration checklist
+
+DataGen can emit Entra, conditional-access, access-review, and tenant-governance style policy records. Some policy surfaces are not safe to blindly materialize from a generic walkthrough, so start by reviewing them.
+
+```powershell
+$policies = Get-Content "$exportRoot\entities\policies.json" | ConvertFrom-Json
+$policyTargets = Get-Content "$exportRoot\links\policy_target_links.json" | ConvertFrom-Json
+
+$policies |
+  Where-Object { $_.platform -match 'Entra|Azure|Microsoft' } |
+  Select-Object name, policy_type, category, status, description |
+  Format-Table -AutoSize
+
+$policyTargets | Group-Object target_type, assignment_mode | Select-Object Name, Count
+```
+
+Use this output to configure Conditional Access, identity governance, or Intune policies by hand or in a tenant-specific adapter once you have confirmed the effect. The walkthrough should make the next action obvious, but it should not silently create high-impact access controls.
+
+## 9. Validate the tenant
+
+```powershell
+Get-MgUser -Filter "startswith(displayName,'$labPrefix')" -All |
+  Select-Object -First 10 DisplayName, UserPrincipalName, AccountEnabled
+
+Get-MgGroup -Filter "startswith(displayName,'$labPrefix')" -All |
+  Select-Object -First 10 DisplayName, MailEnabled, SecurityEnabled, GroupTypes
+
+$sampleGroup = Get-MgGroup -Filter "startswith(displayName,'$labPrefix')" -Top 1
+if ($sampleGroup) {
+  Get-MgGroupMember -GroupId $sampleGroup.Id -All
+}
+```
+
+## 10. Clean up or rerun
+
+Keep a lab prefix, export the DataGen-to-Graph ID map, and delete only objects with that prefix when refreshing the tenant. For long-running demos, prefer restoring from a known tenant snapshot or rerunning the same scenario and seed into a fresh tenant.
+
+For deterministic generation and comparison patterns, continue to [Repeatable Lab Runs](/walkthroughs/repeatable-lab-runs).

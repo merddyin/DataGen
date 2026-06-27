@@ -102,6 +102,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 dept.Id);
             var pattern = patterns.Count == 0 ? null : patterns[i % patterns.Count];
             var environment = i % 6 == 0 ? "Staging" : "Production";
+            var engine = engines[i % engines.Length];
             var database = new DatabaseRepository
             {
                 Id = _idFactory.Next("DB"),
@@ -109,17 +110,20 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 Name = pattern is null
                     ? BuildDatabaseName(selection?.Application, dept.Name, environment, databaseNameUsage)
                     : ApplySlugPattern(pattern.Pattern, dept.Name, i + 1),
-                Engine = engines[i % engines.Length],
+                Engine = engine,
                 Environment = environment,
                 SizeGb = ((i + 1) * 25 + _randomSource.Next(5, 90)).ToString(),
                 OwnerDepartmentId = dept.Id,
                 AssociatedApplicationId = selection?.Application.Id,
                 HostServerId = server?.Id,
-                Sensitivity = sensitivities[i % sensitivities.Length]
+                Sensitivity = sensitivities[i % sensitivities.Length],
+                ServicePort = ResolveDatabaseServicePort(engine),
+                ConnectionProtocol = ResolveDatabaseConnectionProtocol(engine)
             };
             world.Databases.Add(database);
 
             AddApplicationRepositoryLink(world, company, selection, database.Id, "Database", "PrimaryDataStore");
+            AddDatabaseConnectionObservation(world, company, servers, database, server, i);
         }
     }
 
@@ -161,7 +165,9 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 FolderCount = (20 + _randomSource.Next(0, 700)).ToString(),
                 TotalSizeGb = (10 + _randomSource.Next(0, 2500)).ToString(),
                 AccessModel = !string.IsNullOrWhiteSpace(pattern?.AccessModel) ? pattern.AccessModel : i % 4 == 0 ? "Mixed" : "GroupBased",
-                Sensitivity = i % 5 == 0 ? "Confidential" : "Internal"
+                Sensitivity = i % 5 == 0 ? "Confidential" : "Internal",
+                IsHiddenShare = shareName.EndsWith("$", StringComparison.Ordinal) || i % 7 == 0,
+                StorageEndpointType = i % 6 == 0 ? "NAS" : "WindowsFileServer"
             };
             world.FileShares.Add(share);
 
@@ -179,7 +185,78 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 "Knowledge",
                 dept.Id);
             AddApplicationRepositoryLink(world, company, selection, share.Id, "FileShare", "DocumentStore");
+            AddFileShareConnectionObservation(world, company, servers, share, hostServer, i);
         }
+    }
+
+    private void AddDatabaseConnectionObservation(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<ServerAsset> servers,
+        DatabaseRepository database,
+        ServerAsset? targetServer,
+        int index)
+    {
+        if (targetServer is null || database.ServicePort is null || string.IsNullOrWhiteSpace(database.ConnectionProtocol))
+        {
+            return;
+        }
+
+        var sourceServer = SelectConnectionSourceServer(servers, targetServer, "Application Server")
+            ?? SelectConnectionSourceServer(servers, targetServer, null)
+            ?? targetServer;
+
+        world.ConnectionObservations.Add(new ConnectionObservation
+        {
+            Id = BuildConnectionObservationId("db", sourceServer.Id, targetServer.Id, database.Id),
+            CompanyId = company.Id,
+            SourceServerId = sourceServer.Id,
+            TargetServerId = targetServer.Id,
+            TargetRepositoryId = database.Id,
+            TargetRepositoryType = "Database",
+            ObservationKind = "DatabaseConnection",
+            RemotePort = database.ServicePort,
+            Protocol = database.ConnectionProtocol,
+            ProcessName = ResolveDatabaseClientProcess(sourceServer, index),
+            Direction = "Outbound",
+            ObservationCount = 8 + (index * 7 % 40),
+            Confidence = index % 5 == 0 ? "Medium" : "High"
+        });
+    }
+
+    private void AddFileShareConnectionObservation(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<ServerAsset> servers,
+        FileShareRepository share,
+        ServerAsset? targetServer,
+        int index)
+    {
+        if (targetServer is null || string.IsNullOrWhiteSpace(share.Id))
+        {
+            return;
+        }
+
+        var sourceServer = SelectConnectionSourceServer(servers, targetServer, "Application Server")
+            ?? SelectConnectionSourceServer(servers, targetServer, null)
+            ?? targetServer;
+
+        world.ConnectionObservations.Add(new ConnectionObservation
+        {
+            Id = BuildConnectionObservationId("share", sourceServer.Id, targetServer.Id, share.Id),
+            CompanyId = company.Id,
+            SourceServerId = sourceServer.Id,
+            TargetServerId = targetServer.Id,
+            TargetRepositoryId = share.Id,
+            TargetRepositoryType = "FileShare",
+            ObservationKind = share.IsHiddenShare ? "HiddenFileShareConnection" : "FileShareConnection",
+            RemotePort = 445,
+            Protocol = "SMB",
+            ProcessName = "System",
+            Direction = "Outbound",
+            ObservationCount = 3 + (index * 5 % 25),
+            Confidence = share.IsHiddenShare ? "High" : "Medium"
+        });
     }
 
     private void CreateUserFileShares(
@@ -234,7 +311,9 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 FolderCount = (Math.Max(50, targetPeople.Count / Math.Max(1, hostServers.Count)) + _randomSource.Next(0, 120)).ToString(),
                 TotalSizeGb = (250 + _randomSource.Next(0, 6000)).ToString(),
                 AccessModel = "GroupBased",
-                Sensitivity = "Internal"
+                Sensitivity = "Internal",
+                IsHiddenShare = true,
+                StorageEndpointType = "WindowsFileServer"
             });
 
             world.FileShares.Add(new FileShareRepository
@@ -251,7 +330,9 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 FolderCount = (Math.Max(50, targetPeople.Count / Math.Max(1, hostServers.Count)) + _randomSource.Next(0, 120)).ToString(),
                 TotalSizeGb = (150 + _randomSource.Next(0, 3500)).ToString(),
                 AccessModel = "GroupBased",
-                Sensitivity = "Confidential"
+                Sensitivity = "Confidential",
+                IsHiddenShare = true,
+                StorageEndpointType = "WindowsFileServer"
             });
         }
 
@@ -275,9 +356,85 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 FolderCount = (5 + _randomSource.Next(0, 90)).ToString(),
                 TotalSizeGb = (1 + _randomSource.Next(0, 160)).ToString(),
                 AccessModel = "DirectOwner",
-                Sensitivity = i % 3 == 0 ? "Confidential" : "Internal"
+                Sensitivity = i % 3 == 0 ? "Confidential" : "Internal",
+                IsHiddenShare = true,
+                StorageEndpointType = "WindowsFileServer"
             });
         }
+    }
+
+    private static int? ResolveDatabaseServicePort(string engine)
+        => engine switch
+        {
+            "SQL Server" => 1433,
+            "PostgreSQL" => 5432,
+            "MySQL" => 3306,
+            "Oracle" => 1521,
+            _ => null
+        };
+
+    private static string ResolveDatabaseConnectionProtocol(string engine)
+        => engine switch
+        {
+            "SQL Server" => "TDS",
+            "PostgreSQL" => "PostgreSQL",
+            "MySQL" => "MySQL",
+            "Oracle" => "OracleNet",
+            _ => ""
+        };
+
+    private static ServerAsset? SelectConnectionSourceServer(
+        IReadOnlyList<ServerAsset> servers,
+        ServerAsset targetServer,
+        string? preferredRole)
+    {
+        var candidates = servers.Where(server =>
+                !string.IsNullOrWhiteSpace(server.Id)
+                && !string.Equals(server.Id, targetServer.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(preferredRole))
+        {
+            var preferred = candidates.FirstOrDefault(server =>
+                string.Equals(server.ServerRole, preferredRole, StringComparison.OrdinalIgnoreCase));
+            if (preferred is not null)
+            {
+                return preferred;
+            }
+        }
+
+        return candidates.FirstOrDefault();
+    }
+
+    private static string ResolveDatabaseClientProcess(ServerAsset sourceServer, int index)
+    {
+        if (string.Equals(sourceServer.ServerRole, "Application Server", StringComparison.OrdinalIgnoreCase))
+        {
+            return index % 2 == 0 ? "w3wp.exe" : "dotnet.exe";
+        }
+
+        return index % 2 == 0 ? "sqlcmd.exe" : "java.exe";
+    }
+
+    private static string BuildConnectionObservationId(
+        string observationKind,
+        string sourceId,
+        string targetId,
+        string discriminator)
+        => $"CONN-{SanitizeConnectionObservationIdPart(observationKind)}-{SanitizeConnectionObservationIdPart(sourceId)}-{SanitizeConnectionObservationIdPart(targetId)}-{SanitizeConnectionObservationIdPart(discriminator)}";
+
+    private static string SanitizeConnectionObservationIdPart(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "none";
+        }
+
+        var chars = value
+            .Where(character => char.IsLetterOrDigit(character))
+            .Select(char.ToUpperInvariant)
+            .ToArray();
+        return chars.Length == 0 ? "none" : new string(chars);
     }
 
     private string? ResolvePrimaryInfrastructureDepartmentId(

@@ -50,6 +50,7 @@ public class SyntheticEnterpriseWorld
     public List<ActiveDirectorySiteLink> ActiveDirectorySiteLinks { get; } = new();
     public List<ActiveDirectorySiteLinkMembership> ActiveDirectorySiteLinkMemberships { get; } = new();
     public List<NetworkSubnet> NetworkSubnets { get; } = new();
+    public List<ConnectionObservation> ConnectionObservations { get; } = new();
     public List<SoftwarePackage> SoftwarePackages { get; } = new();
     public List<DeviceSoftwareInstallation> DeviceSoftwareInstallations { get; } = new();
     public List<ServerSoftwareInstallation> ServerSoftwareInstallations { get; } = new();

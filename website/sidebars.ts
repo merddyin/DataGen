@@ -20,6 +20,7 @@ const sidebars: SidebarsConfig = {
         'walkthroughs/active-directory-lab',
         'walkthroughs/entra-lab',
         'walkthroughs/hybrid-identity-lab',
+        'walkthroughs/repeatable-lab-runs',
         'walkthroughs/cmdb-rich-environment',
         'walkthroughs/security-discovery-lab',
         'walkthroughs/collaboration-and-repositories',

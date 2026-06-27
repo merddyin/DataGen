@@ -36,6 +36,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "container_path",
                     "purpose",
                     "environment",
+                    "environment_role",
                     "blocks_policy_inheritance",
                     "identity_store_id",
                     "cloud_tenant_id",
@@ -54,6 +55,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["container_path"] = container.ContainerPath,
                     ["purpose"] = container.Purpose,
                     ["environment"] = container.Environment,
+                    ["environment_role"] = container.EnvironmentRole,
                     ["blocks_policy_inheritance"] = container.BlocksPolicyInheritance,
                     ["identity_store_id"] = container.IdentityStoreId,
                     ["cloud_tenant_id"] = container.CloudTenantId,
@@ -353,6 +355,49 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                 },
                 SortKeySelector = subnet => subnet.Id
             },
+            new EntityTableDescriptor<ConnectionObservation>
+            {
+                LogicalName = "connection_observations",
+                RelativePathStem = "entities/connection_observations",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "source_server_id",
+                    "source_device_id",
+                    "target_server_id",
+                    "target_network_asset_id",
+                    "target_repository_id",
+                    "target_repository_type",
+                    "observation_kind",
+                    "remote_port",
+                    "protocol",
+                    "process_name",
+                    "direction",
+                    "observation_count",
+                    "confidence"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.ConnectionObservations,
+                RowProjector = observation => new Dictionary<string, object?>
+                {
+                    ["id"] = observation.Id,
+                    ["company_id"] = observation.CompanyId,
+                    ["source_server_id"] = observation.SourceServerId,
+                    ["source_device_id"] = observation.SourceDeviceId,
+                    ["target_server_id"] = observation.TargetServerId,
+                    ["target_network_asset_id"] = observation.TargetNetworkAssetId,
+                    ["target_repository_id"] = observation.TargetRepositoryId,
+                    ["target_repository_type"] = observation.TargetRepositoryType,
+                    ["observation_kind"] = observation.ObservationKind,
+                    ["remote_port"] = observation.RemotePort,
+                    ["protocol"] = observation.Protocol,
+                    ["process_name"] = observation.ProcessName,
+                    ["direction"] = observation.Direction,
+                    ["observation_count"] = observation.ObservationCount,
+                    ["confidence"] = observation.Confidence
+                },
+                SortKeySelector = observation => observation.Id
+            },
             new EntityTableDescriptor<DirectoryOrganizationalUnit>
             {
                 LogicalName = "organizational_units",
@@ -364,7 +409,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "name",
                     "distinguished_name",
                     "parent_ou_id",
-                    "purpose"
+                    "purpose",
+                    "environment_role"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.OrganizationalUnits,
                 RowProjector = ou => new Dictionary<string, object?>
@@ -374,7 +420,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["name"] = ou.Name,
                     ["distinguished_name"] = ou.DistinguishedName,
                     ["parent_ou_id"] = ou.ParentOuId,
-                    ["purpose"] = ou.Purpose
+                    ["purpose"] = ou.Purpose,
+                    ["environment_role"] = ou.EnvironmentRole
                 },
                 SortKeySelector = ou => ou.Id
             },
@@ -394,6 +441,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "directory_mode",
                     "authentication_model",
                     "environment",
+                    "environment_role",
                     "is_primary",
                     "cloud_tenant_id"
                 ],
@@ -410,6 +458,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["directory_mode"] = store.DirectoryMode,
                     ["authentication_model"] = store.AuthenticationModel,
                     ["environment"] = store.Environment,
+                    ["environment_role"] = store.EnvironmentRole,
                     ["is_primary"] = store.IsPrimary,
                     ["cloud_tenant_id"] = store.CloudTenantId
                 },
@@ -429,6 +478,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "platform",
                     "category",
                     "environment",
+                    "environment_role",
                     "status",
                     "description",
                     "identity_store_id",
@@ -447,6 +497,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["platform"] = policy.Platform,
                     ["category"] = policy.Category,
                     ["environment"] = policy.Environment,
+                    ["environment_role"] = policy.EnvironmentRole,
                     ["status"] = policy.Status,
                     ["description"] = policy.Description,
                     ["identity_store_id"] = policy.IdentityStoreId,
@@ -473,6 +524,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "configured_value",
                     "source",
                     "behavior",
+                    "environment_role",
                     "is_legacy",
                     "is_conflicting",
                     "source_reference"
@@ -491,6 +543,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["configured_value"] = setting.ConfiguredValue,
                     ["source"] = setting.Source,
                     ["behavior"] = setting.Behavior,
+                    ["environment_role"] = setting.EnvironmentRole,
                     ["is_legacy"] = setting.IsLegacy,
                     ["is_conflicting"] = setting.IsConflicting,
                     ["source_reference"] = setting.SourceReference
@@ -979,7 +1032,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "ip_address",
                     "domain_joined",
                     "owner_team_id",
-                    "criticality"
+                    "criticality",
+                    "service_ports",
+                    "infrastructure_agent_noise"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.Servers,
                 RowProjector = server => new Dictionary<string, object?>
@@ -1005,7 +1060,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["ip_address"] = server.IpAddress,
                     ["domain_joined"] = server.DomainJoined,
                     ["owner_team_id"] = server.OwnerTeamId,
-                    ["criticality"] = server.Criticality
+                    ["criticality"] = server.Criticality,
+                    ["service_ports"] = server.ServicePorts,
+                    ["infrastructure_agent_noise"] = server.InfrastructureAgentNoise
                 },
                 SortKeySelector = server => server.Id
             },
@@ -1505,7 +1562,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "owner_department_id",
                     "associated_application_id",
                     "host_server_id",
-                    "sensitivity"
+                    "sensitivity",
+                    "service_port",
+                    "connection_protocol"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.Databases,
                 RowProjector = database => new Dictionary<string, object?>
@@ -1519,7 +1578,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["owner_department_id"] = database.OwnerDepartmentId,
                     ["associated_application_id"] = database.AssociatedApplicationId,
                     ["host_server_id"] = database.HostServerId,
-                    ["sensitivity"] = database.Sensitivity
+                    ["sensitivity"] = database.Sensitivity,
+                    ["service_port"] = database.ServicePort,
+                    ["connection_protocol"] = database.ConnectionProtocol
                 },
                 SortKeySelector = database => database.Id
             },
@@ -1541,7 +1602,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "folder_count",
                     "total_size_gb",
                     "access_model",
-                    "sensitivity"
+                    "sensitivity",
+                    "is_hidden_share",
+                    "storage_endpoint_type"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.FileShares,
                 RowProjector = share => new Dictionary<string, object?>
@@ -1558,7 +1621,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["folder_count"] = share.FolderCount,
                     ["total_size_gb"] = share.TotalSizeGb,
                     ["access_model"] = share.AccessModel,
-                    ["sensitivity"] = share.Sensitivity
+                    ["sensitivity"] = share.Sensitivity,
+                    ["is_hidden_share"] = share.IsHiddenShare,
+                    ["storage_endpoint_type"] = share.StorageEndpointType
                 },
                 SortKeySelector = share => share.Id
             },

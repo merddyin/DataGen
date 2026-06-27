@@ -1,63 +1,217 @@
 ---
 title: Generate and Populate an AD Lab
-description: Generate a directory-centric world for Active Directory-oriented lab work.
+description: Generate a directory-centric DataGen world, populate an Active Directory lab, and validate the result.
 ---
 
 # Generate and Populate an AD Lab
 
 Use this walkthrough when the directory layer is the main attraction: users, groups, OUs, policy structure, delegation, stale identities, and hybrid admin surfaces.
 
-The reference scenario sets `identity.includeEnvironmentDefaults` to `false`. That keeps pre-existing AD defaults such as `CN=Users`, `CN=Computers`, `CN=Builtin`, `Domain Admins`, and `Administrators` out of the generated create-list so downstream population scripts do not collide with an existing lab domain. Domain-controller records can still carry `OU=Domain Controllers,...` in their distinguished names because that OU is expected to already exist in AD.
+This is a start-to-finish lab path. DataGen creates the believable source data, the normalized export becomes the bridge contract, and the native `ActiveDirectory` PowerShell module performs the actual lab population.
+
+:::warning Lab-only workflow
+Run this against an isolated lab domain or disposable test forest. Do not point the population snippets at a production domain. Start with `-WhatIf`, review the generated objects, and only then remove `-WhatIf`.
+:::
 
 ## Requirements
 
 - DataGen module imported
 - catalog content available
-- downstream AD population tooling or scripts, if you are turning the dataset into an actual lab
+- an isolated Active Directory domain controller or domain-joined management host
+- RSAT Active Directory PowerShell module available
+- an account allowed to create OUs, users, groups, and memberships in the lab domain
+
+The reference scenario sets `identity.includeEnvironmentDefaults` to `false`. That keeps pre-existing AD defaults such as `CN=Users`, `CN=Computers`, `CN=Builtin`, `Domain Admins`, and `Administrators` out of the generated create-list so the population step does not collide with normal domain objects. Domain-controller records can still carry `OU=Domain Controllers,...` in their distinguished names because that OU is expected to already exist in AD.
 
 ## Reference assets
 
 - [Scenario JSON](/examples/scenarios/active-directory-lab.json)
 - [Reference script](/examples/scripts/generate-ad-lab.ps1)
 
-## Steps
-
-### 1. Resolve and validate the scenario
+## 1. Generate and export the DataGen world
 
 ```powershell
 $scenario = Resolve-SEScenario -Path .\active-directory-lab.json
-Test-SEScenario -Scenario $scenario
-```
+$scenario | Test-SEScenario
 
-### 2. Generate the world
-
-```powershell
 $world = New-SEEnterpriseWorld -Scenario $scenario -Seed 1401
 $world | Get-SEWorldSummary
+
+$world | Save-SEEnterpriseWorld -Path .\out\ad-lab\ad-lab.seworld -Compress
+$world | Export-SEEnterpriseWorld `
+  -OutputPath .\out\ad-lab\normalized `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
 ```
 
-### 3. Export normalized data for downstream lab population
+The population examples below use these normalized artifacts:
+
+- `entities/organizational_units.json`
+- `entities/accounts.json`
+- `entities/groups.json`
+- `links/group_memberships.json`
+
+## 2. Review the create-list before touching AD
 
 ```powershell
-$world | Export-SEEnterpriseWorld -OutputPath .\out\ad-lab -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+$exportRoot = Resolve-Path .\out\ad-lab\normalized
+
+$ous = Get-Content "$exportRoot\entities\organizational_units.json" | ConvertFrom-Json
+$accounts = Get-Content "$exportRoot\entities\accounts.json" | ConvertFrom-Json
+$groups = Get-Content "$exportRoot\entities\groups.json" | ConvertFrom-Json
+$memberships = Get-Content "$exportRoot\links\group_memberships.json" | ConvertFrom-Json
+
+$ous | Select-Object name, distinguished_name, purpose | Format-Table -AutoSize
+$accounts | Select-Object display_name, sam_account_name, user_principal_name, enabled, privileged | Format-Table -AutoSize
+$groups | Select-Object name, group_type, scope, purpose | Format-Table -AutoSize
 ```
 
-## Why this walkthrough is useful
+If the distinguished names do not match your lab naming context, stop here and adjust the scenario or mapping logic. A walkthrough should save work, not hide dangerous assumptions.
 
-This scenario biases toward:
+## 3. Connect to the lab domain
 
-- hybrid directory presence
-- file-share-heavy internal operations
-- realistic stale-account rates
-- legacy-infrastructure overlay behavior
+```powershell
+Import-Module ActiveDirectory
 
-That makes it a good match for AD population and AD-oriented validation work.
+$domain = Get-ADDomain
+$domain.DistinguishedName
+```
 
-## Example checks
+The snippets use the generated distinguished names directly. If your lab domain has a different naming context than the generated scenario, remap the DN suffix before creating objects.
 
-After export, inspect:
+## 4. Create OUs
 
-- identity artifacts
-- policy and policy target artifacts
-- access-control evidence artifacts
-- devices and servers for host-side admin surfaces
+Create parent OUs before children by sorting on DN depth. Keep `-WhatIf` during the first pass.
+
+```powershell
+$ouRows = $ous |
+  Where-Object { $_.distinguished_name -and $_.distinguished_name -like 'OU=*' } |
+  Sort-Object { ($_.distinguished_name -split ',').Count }
+
+foreach ($ou in $ouRows) {
+  if (Get-ADOrganizationalUnit -LDAPFilter "(distinguishedName=$($ou.distinguished_name))" -ErrorAction SilentlyContinue) {
+    continue
+  }
+
+  $parentPath = ($ou.distinguished_name -split ',', 2)[1]
+  New-ADOrganizationalUnit `
+    -Name $ou.name `
+    -Path $parentPath `
+    -Description $ou.purpose `
+    -ProtectedFromAccidentalDeletion $false `
+    -WhatIf
+}
+```
+
+Remove `-WhatIf` after reviewing the output.
+
+## 5. Create groups
+
+```powershell
+foreach ($group in $groups) {
+  if (Get-ADGroup -Filter "SamAccountName -eq '$($group.name)'" -ErrorAction SilentlyContinue) {
+    continue
+  }
+
+  $path = if ($group.distinguished_name -like 'CN=*,*') {
+    ($group.distinguished_name -split ',', 2)[1]
+  } else {
+    $domain.UsersContainer
+  }
+
+  New-ADGroup `
+    -Name $group.name `
+    -SamAccountName $group.name `
+    -GroupCategory $group.group_type `
+    -GroupScope $group.scope `
+    -Path $path `
+    -Description $group.purpose `
+    -WhatIf
+}
+```
+
+DataGen may emit mail-enabled or Microsoft 365-style groups to describe the environment. Plain AD can create the security or distribution group shell; Exchange or Microsoft 365 provisioning is a separate layer.
+
+## 6. Create users
+
+```powershell
+$defaultPassword = ConvertTo-SecureString 'ChangeMe-For-Lab-Only-001!' -AsPlainText -Force
+
+foreach ($account in $accounts | Where-Object { $_.account_type -eq 'User' }) {
+  if (Get-ADUser -Filter "SamAccountName -eq '$($account.sam_account_name)'" -ErrorAction SilentlyContinue) {
+    continue
+  }
+
+  $path = if ($account.distinguished_name -like 'CN=*,*') {
+    ($account.distinguished_name -split ',', 2)[1]
+  } else {
+    $domain.UsersContainer
+  }
+
+  New-ADUser `
+    -Name $account.display_name `
+    -DisplayName $account.display_name `
+    -SamAccountName $account.sam_account_name `
+    -UserPrincipalName $account.user_principal_name `
+    -EmailAddress $account.mail `
+    -EmployeeID $account.employee_id `
+    -Path $path `
+    -Enabled ([bool]$account.enabled) `
+    -AccountPassword $defaultPassword `
+    -ChangePasswordAtLogon $true `
+    -WhatIf
+}
+```
+
+Use a lab-only password policy and rotate or reset passwords after import if the lab will be shared. If your export includes generated passwords, decide deliberately whether those credentials should ever leave the generation workstation.
+
+## 7. Apply group membership
+
+```powershell
+$accountById = @{}
+$accounts | ForEach-Object { $accountById[$_.id] = $_ }
+
+$groupById = @{}
+$groups | ForEach-Object { $groupById[$_.id] = $_ }
+
+foreach ($membership in $memberships) {
+  $group = $groupById[$membership.group_id]
+  if (-not $group) {
+    continue
+  }
+
+  $member = $accountById[$membership.member_object_id]
+  if (-not $member) {
+    continue
+  }
+
+  Add-ADGroupMember `
+    -Identity $group.name `
+    -Members $member.sam_account_name `
+    -WhatIf
+}
+```
+
+For nested group membership, also resolve `member_object_type` values that point to groups and pass the member group name to `Add-ADGroupMember`.
+
+## 8. Validate the populated lab
+
+```powershell
+Get-ADOrganizationalUnit -Filter * | Select-Object -First 10 Name, DistinguishedName
+Get-ADUser -Filter * -Properties mail, employeeId | Select-Object -First 10 Name, SamAccountName, UserPrincipalName, Enabled
+Get-ADGroup -Filter * | Select-Object -First 10 Name, GroupScope, GroupCategory
+
+$sampleGroup = $groups | Select-Object -First 1
+Get-ADGroupMember -Identity $sampleGroup.name
+```
+
+Validation should prove that the generated world turned into real directory objects, not just that JSON files exist.
+
+## 9. Reset or rerun safely
+
+For repeatable labs, create a dedicated root OU such as `OU=DataGen Lab`. Delete that subtree between runs or restore the domain controller from a checkpoint. Avoid repeatedly importing into the same OU without cleanup; otherwise membership, stale-account, and delegation scenarios become hard to reason about.
+
+For deterministic regeneration patterns, continue to [Repeatable Lab Runs](/walkthroughs/repeatable-lab-runs).

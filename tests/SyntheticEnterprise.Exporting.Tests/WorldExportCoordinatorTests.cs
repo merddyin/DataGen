@@ -1569,6 +1569,68 @@ public sealed class WorldExportCoordinatorTests
     }
 
     [Fact]
+    public void Export_Writes_Connection_Observations_As_Core_Enterprise_Facts()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        ConnectionObservations =
+                        {
+                            new ConnectionObservation
+                            {
+                                Id = "CONN-001",
+                                CompanyId = "CO-001",
+                                SourceServerId = "SRV-APP-001",
+                                TargetServerId = "SRV-SQL-001",
+                                TargetRepositoryId = "DB-001",
+                                ObservationKind = "DatabaseConnection",
+                                RemotePort = 1433,
+                                Protocol = "TDS",
+                                ProcessName = "w3wp.exe",
+                                ObservationCount = 12,
+                                Confidence = "High"
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            var jsonPath = Directory.GetFiles(manifest.OutputPath, "connection_observations.json", SearchOption.AllDirectories).Single();
+            var json = File.ReadAllText(jsonPath);
+
+            Assert.Contains("\"id\": \"CONN-001\"", json);
+            Assert.Contains("\"observation_kind\": \"DatabaseConnection\"", json);
+            Assert.Contains("\"remote_port\": 1433", json);
+            Assert.Contains("\"observation_count\": 12", json);
+            Assert.Contains(manifest.Artifacts, artifact => artifact.LogicalName == "connection_observations");
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
     public void Export_Writes_Plugin_Generated_Record_And_Relationship_Artifacts()
     {
         var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
@@ -1734,6 +1796,148 @@ public sealed class WorldExportCoordinatorTests
             Assert.Contains("EVT-000001", eventsJson);
             Assert.Contains("Initial", snapshotsJson);
             Assert.Contains("event_count_through_snapshot", snapshotsJson);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_Writes_Environment_Role_For_Target_Policy_Slice()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var coordinator = new WorldExportCoordinator(
+                new NormalizedEntityTableProvider(),
+                new NormalizedLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(
+                new GenerationResult
+                {
+                    World = new SyntheticEnterpriseWorld
+                    {
+                        IdentityStores =
+                        {
+                            new IdentityStore
+                            {
+                                Id = "IDS-TARGET",
+                                CompanyId = "CO-001",
+                                Name = "target.contoso.test",
+                                StoreType = "ActiveDirectoryDomain",
+                                Provider = "Microsoft",
+                                PrimaryDomain = "target.contoso.test",
+                                NamingContext = "DC=target,DC=contoso,DC=test",
+                                DirectoryMode = "HybridDirectory",
+                                AuthenticationModel = "Kerberos",
+                                Environment = "Production",
+                                EnvironmentRole = "Target",
+                                IsPrimary = false
+                            }
+                        },
+                        OrganizationalUnits =
+                        {
+                            new DirectoryOrganizationalUnit
+                            {
+                                Id = "OU-TARGET",
+                                CompanyId = "CO-001",
+                                Name = "Target Workstations",
+                                DistinguishedName = "OU=Target Workstations,DC=target,DC=contoso,DC=test",
+                                Purpose = "Target managed workstations",
+                                EnvironmentRole = "Target"
+                            }
+                        },
+                        Containers =
+                        {
+                            new EnvironmentContainer
+                            {
+                                Id = "CNT-TARGET",
+                                CompanyId = "CO-001",
+                                Name = "Target Workstations",
+                                ContainerType = "OrganizationalUnit",
+                                Platform = "ActiveDirectory",
+                                ContainerPath = "OU=Target Workstations,DC=target,DC=contoso,DC=test",
+                                Purpose = "Target managed workstations",
+                                Environment = "Production",
+                                EnvironmentRole = "Target",
+                                IdentityStoreId = "IDS-TARGET",
+                                SourceEntityType = "DirectoryOrganizationalUnit",
+                                SourceEntityId = "OU-TARGET"
+                            }
+                        },
+                        Policies =
+                        {
+                            new PolicyRecord
+                            {
+                                Id = "POL-TARGET",
+                                CompanyId = "CO-001",
+                                PolicyGuid = "aaaaaaaa-bbbb-5ccc-8ddd-eeeeeeeeeeee",
+                                Name = "Target Workstation Security Baseline",
+                                PolicyType = "GroupPolicyObject",
+                                Platform = "ActiveDirectory",
+                                Category = "TargetEnvironment",
+                                Environment = "Production",
+                                EnvironmentRole = "Target",
+                                Status = "Enabled",
+                                Description = "Modeled target workstation baseline.",
+                                IdentityStoreId = "IDS-TARGET"
+                            }
+                        },
+                        PolicySettings =
+                        {
+                            new PolicySettingRecord
+                            {
+                                Id = "PST-TARGET",
+                                CompanyId = "CO-001",
+                                PolicyId = "POL-TARGET",
+                                SettingName = "MinimumPasswordLength",
+                                SettingCategory = "PasswordPolicy",
+                                PolicyPath = @"Computer Configuration\Windows Settings\Account Policies\Password Policy",
+                                ValueType = "Integer",
+                                ConfiguredValue = "14",
+                                Source = "GPO",
+                                Behavior = "PasswordPolicy",
+                                EnvironmentRole = "Target"
+                            }
+                        },
+                        PolicyTargetLinks =
+                        {
+                            new PolicyTargetLink
+                            {
+                                Id = "PTL-TARGET",
+                                CompanyId = "CO-001",
+                                PolicyId = "POL-TARGET",
+                                TargetType = "Container",
+                                TargetId = "CNT-TARGET",
+                                AssignmentMode = "Linked",
+                                EnvironmentRole = "Target",
+                                LinkEnabled = true,
+                                IsEnforced = true,
+                                LinkOrder = 1
+                            }
+                        }
+                    },
+                    Statistics = new GenerationStatistics()
+                },
+                new ExportRequest
+                {
+                    Format = ExportSerializationFormat.Json,
+                    OutputPath = temp
+                });
+
+            Assert.Contains("\"environment_role\": \"Target\"", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "identity_stores.json")));
+            Assert.Contains("\"environment_role\": \"Target\"", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "organizational_units.json")));
+            Assert.Contains("\"environment_role\": \"Target\"", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "containers.json")));
+            Assert.Contains("\"environment_role\": \"Target\"", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "policies.json")));
+            Assert.Contains("\"environment_role\": \"Target\"", File.ReadAllText(Path.Combine(manifest.OutputPath, "entities", "policy_settings.json")));
+            Assert.Contains("\"environment_role\": \"Target\"", File.ReadAllText(Path.Combine(manifest.OutputPath, "links", "policy_target_links.json")));
         }
         finally
         {
