@@ -7,6 +7,21 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.8.3
+
+This patch release focuses on target-state policy modeling and more useful walkthroughs for turning generated data into actual lab environments.
+
+### Highlights
+
+- **Source and target environment roles**
+  Identity stores, OUs, containers, policies, policy settings, and policy target links now carry environment-role metadata so normalized exports can distinguish current-source evidence from modeled target-state controls.
+- **Target Active Directory and GPO slice**
+  Generated worlds now include a modeled target AD/GPO slice with workstation, server, and privileged-access baselines. This gives downstream policy-parity, migration-planning, and validation workflows a concrete target surface to compare against.
+- **Stronger policy export parity**
+  Normalized exports now include environment-role fields for the affected identity and policy artifacts, and registry-backed policy settings receive a stable policy-path fallback when no explicit path is present.
+- **True walkthrough depth**
+  The AD, Entra, and hybrid walkthroughs now continue beyond DataGen export into native PowerShell or Microsoft Graph population patterns, validation checks, cleanup guidance, and repeatable lab refresh workflows.
+
 ## v0.8.2
 
 This patch release focuses on stronger Active Directory realism, especially around where OU placement belongs and how delegated administration shows up in the generated directory.

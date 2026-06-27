@@ -36,6 +36,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "container_path",
                     "purpose",
                     "environment",
+                    "environment_role",
                     "blocks_policy_inheritance",
                     "identity_store_id",
                     "cloud_tenant_id",
@@ -54,6 +55,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["container_path"] = container.ContainerPath,
                     ["purpose"] = container.Purpose,
                     ["environment"] = container.Environment,
+                    ["environment_role"] = container.EnvironmentRole,
                     ["blocks_policy_inheritance"] = container.BlocksPolicyInheritance,
                     ["identity_store_id"] = container.IdentityStoreId,
                     ["cloud_tenant_id"] = container.CloudTenantId,
@@ -407,7 +409,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "name",
                     "distinguished_name",
                     "parent_ou_id",
-                    "purpose"
+                    "purpose",
+                    "environment_role"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.OrganizationalUnits,
                 RowProjector = ou => new Dictionary<string, object?>
@@ -417,7 +420,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["name"] = ou.Name,
                     ["distinguished_name"] = ou.DistinguishedName,
                     ["parent_ou_id"] = ou.ParentOuId,
-                    ["purpose"] = ou.Purpose
+                    ["purpose"] = ou.Purpose,
+                    ["environment_role"] = ou.EnvironmentRole
                 },
                 SortKeySelector = ou => ou.Id
             },
@@ -437,6 +441,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "directory_mode",
                     "authentication_model",
                     "environment",
+                    "environment_role",
                     "is_primary",
                     "cloud_tenant_id"
                 ],
@@ -453,6 +458,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["directory_mode"] = store.DirectoryMode,
                     ["authentication_model"] = store.AuthenticationModel,
                     ["environment"] = store.Environment,
+                    ["environment_role"] = store.EnvironmentRole,
                     ["is_primary"] = store.IsPrimary,
                     ["cloud_tenant_id"] = store.CloudTenantId
                 },
@@ -472,6 +478,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "platform",
                     "category",
                     "environment",
+                    "environment_role",
                     "status",
                     "description",
                     "identity_store_id",
@@ -490,6 +497,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["platform"] = policy.Platform,
                     ["category"] = policy.Category,
                     ["environment"] = policy.Environment,
+                    ["environment_role"] = policy.EnvironmentRole,
                     ["status"] = policy.Status,
                     ["description"] = policy.Description,
                     ["identity_store_id"] = policy.IdentityStoreId,
@@ -516,6 +524,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "configured_value",
                     "source",
                     "behavior",
+                    "environment_role",
                     "is_legacy",
                     "is_conflicting",
                     "source_reference"
@@ -534,6 +543,7 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["configured_value"] = setting.ConfiguredValue,
                     ["source"] = setting.Source,
                     ["behavior"] = setting.Behavior,
+                    ["environment_role"] = setting.EnvironmentRole,
                     ["is_legacy"] = setting.IsLegacy,
                     ["is_conflicting"] = setting.IsConflicting,
                     ["source_reference"] = setting.SourceReference

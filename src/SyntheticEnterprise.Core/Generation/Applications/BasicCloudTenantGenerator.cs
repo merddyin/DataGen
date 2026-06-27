@@ -839,11 +839,12 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
         string? sourceReference = null,
         string behavior = "BlueDot")
     {
+        var resolvedPolicyPath = ResolvePolicyParityPath(policyPath, registryPath);
         if (world.PolicySettings.Any(setting =>
                 setting.CompanyId == companyId
                 && string.Equals(setting.PolicyId, policyId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(setting.SettingName, settingName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(setting.PolicyPath, policyPath ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(setting.PolicyPath, resolvedPolicyPath, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(setting.RegistryPath, registryPath, StringComparison.OrdinalIgnoreCase)))
         {
             return;
@@ -856,7 +857,7 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
             PolicyId = policyId,
             SettingName = settingName,
             SettingCategory = settingCategory,
-            PolicyPath = policyPath ?? string.Empty,
+            PolicyPath = resolvedPolicyPath,
             RegistryPath = registryPath,
             ValueType = valueType,
             ConfiguredValue = configuredValue,
@@ -865,6 +866,13 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
             SourceReference = sourceReference
         });
     }
+
+    private static string ResolvePolicyParityPath(string? policyPath, string? registryPath)
+        => !string.IsNullOrWhiteSpace(policyPath)
+            ? policyPath
+            : !string.IsNullOrWhiteSpace(registryPath)
+                ? $"Registry:{registryPath}"
+                : string.Empty;
 
     private static (string PolicyPath, string? RegistryPath) ResolvePolicySettingMetadata(
         PolicyRecord? policy,

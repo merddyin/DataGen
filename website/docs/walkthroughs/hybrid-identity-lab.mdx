@@ -1,35 +1,156 @@
 ---
 title: Generate a Hybrid AD + Entra Environment
-description: Generate a world that mixes on-prem directory realism with cloud identity and collaboration.
+description: Generate a hybrid identity world, populate the AD side, stage the Entra side, and validate the joined story.
 ---
 
 # Generate a Hybrid AD + Entra Environment
 
-This walkthrough is useful when you need both sides of the hybrid story in one world.
+Use this walkthrough when you need both sides of the hybrid story in one world: on-prem directory structure, cloud identity surfaces, Microsoft 365-style groups, guests, external workforce, and policy evidence.
+
+Hybrid population has an important split:
+
+- Active Directory OUs, users, groups, and memberships can be populated directly with the `ActiveDirectory` PowerShell module.
+- Entra users and groups can be populated directly with Microsoft Graph PowerShell when they are cloud-only lab objects.
+- Synchronized identity is normally produced by your sync tooling, not by creating two unrelated objects with matching names.
+
+## Requirements
+
+- DataGen module imported
+- catalog content available
+- isolated AD lab domain
+- disposable Entra lab tenant
+- RSAT Active Directory PowerShell module
+- Microsoft Graph PowerShell SDK
+- a lab naming prefix or dedicated OU that makes cleanup safe
 
 ## Reference assets
 
 - [Scenario JSON](/examples/scenarios/hybrid-identity-lab.json)
 - [Reference script](/examples/scripts/generate-hybrid-identity-lab.ps1)
 
-## Steps
+## 1. Generate the hybrid world
 
 ```powershell
 $world = New-SEEnterpriseWorld -ScenarioPath .\hybrid-identity-lab.json -Seed 5079
-$world | Save-SEEnterpriseWorld -Path .\out\hybrid-identity.seworld -Compress
-$world | Export-SEEnterpriseWorld -OutputPath .\out\hybrid-identity -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
+$world | Get-SEWorldSummary
+
+$world | Save-SEEnterpriseWorld -Path .\out\hybrid-identity\hybrid-identity.seworld -Compress
+$world | Export-SEEnterpriseWorld `
+  -OutputPath .\out\hybrid-identity\normalized `
+  -Format Json `
+  -Profile Normalized `
+  -IncludeManifest `
+  -IncludeSummary `
+  -Overwrite
 ```
 
-## What this scenario is tuned for
+## 2. Classify the generated identity surfaces
 
-- hybrid directory behavior
-- Microsoft 365-style groups
-- guest and external workforce presence
-- collaboration-rich tenant behavior
-- enough infrastructure to support endpoint and hosting-oriented checks
+```powershell
+$exportRoot = Resolve-Path .\out\hybrid-identity\normalized
 
-## Typical uses
+$stores = Get-Content "$exportRoot\entities\identity_stores.json" | ConvertFrom-Json
+$accounts = Get-Content "$exportRoot\entities\accounts.json" | ConvertFrom-Json
+$groups = Get-Content "$exportRoot\entities\groups.json" | ConvertFrom-Json
+$tenants = Get-Content "$exportRoot\entities\cloud_tenants.json" | ConvertFrom-Json
 
-- hybrid identity labs
-- cross-surface discovery validation
-- demos that need both on-prem and cloud narratives
+$stores | Select-Object name, store_type, provider, primary_domain, directory_mode, environment_role | Format-Table -AutoSize
+$accounts | Group-Object identity_provider, user_type, domain | Select-Object Name, Count
+$groups | Group-Object group_type, mail_enabled | Select-Object Name, Count
+$tenants | Format-Table -AutoSize
+```
+
+This review step is the part that keeps a hybrid walkthrough honest. You should know which objects belong in AD, which belong in Entra, and which represent the same identity crossing the boundary.
+
+## 3. Populate the AD side first
+
+For generated OUs, AD users, AD groups, and memberships, follow the native-cmdlet flow in [Generate and Populate an AD Lab](/walkthroughs/active-directory-lab):
+
+1. create OUs
+2. create groups
+3. create users
+4. apply group membership
+5. validate with `Get-ADUser`, `Get-ADGroup`, and `Get-ADGroupMember`
+
+Use a dedicated root OU such as `OU=DataGen Lab` and keep the first run in `-WhatIf` mode.
+
+## 4. Decide how the cloud side will be represented
+
+Pick one path before you create tenant objects:
+
+- **Cloud-only lab path:** create selected Entra users, groups, and memberships directly with Microsoft Graph PowerShell. This is useful for testing SaaS, tenant governance, and discovery tooling without standing up sync.
+- **Hybrid-sync lab path:** populate AD and let your sync layer project selected objects into Entra. This is useful when the discovery or validation tool needs to see synchronized identity behavior.
+- **Simulation-only path:** do not create tenant objects. Use DataGen's `cloud_tenants`, `policies`, `policy_target_links`, and account metadata as source records for downstream import or validation.
+
+The right answer depends on what the lab is proving. Creating duplicate AD and Entra objects with matching display names is usually less useful than choosing one of these paths deliberately.
+
+## 5. Populate selected cloud-only objects
+
+If you choose the cloud-only path, follow the Graph PowerShell flow in [Generate and Populate an Entra Lab](/walkthroughs/entra-lab). Start with a small slice and a lab prefix:
+
+```powershell
+$cloudCandidates = $accounts |
+  Where-Object {
+    $_.identity_provider -match 'Entra|Azure|Cloud' -or
+    $_.user_type -eq 'Guest' -or
+    $_.resource_tenant_domain
+  } |
+  Select-Object -First 50
+
+$cloudCandidates |
+  Select-Object display_name, user_principal_name, user_type, identity_provider, resource_tenant_domain |
+  Format-Table -AutoSize
+```
+
+For B2B guests, review external mail domains and invitation settings before sending or suppressing invitations.
+
+## 6. Use policy output as the hybrid checklist
+
+```powershell
+$policies = Get-Content "$exportRoot\entities\policies.json" | ConvertFrom-Json
+$policyTargets = Get-Content "$exportRoot\links\policy_target_links.json" | ConvertFrom-Json
+
+$policies |
+  Select-Object name, platform, policy_type, category, environment_role, status |
+  Format-Table -AutoSize
+
+$policyTargets |
+  Group-Object target_type, assignment_mode, environment_role |
+  Select-Object Name, Count
+```
+
+Use AD GPO tooling, Entra Conditional Access, Intune, or identity governance tooling to implement the subset that matters to the lab. DataGen gives you realistic policy intent and target evidence; the environment-specific control plane still owns enforcement.
+
+## 7. Validate the joined story
+
+Validate both control planes, then compare the generated source data to what was actually created.
+
+```powershell
+# AD side
+Get-ADUser -Filter * -Properties userPrincipalName, employeeId |
+  Select-Object -First 10 Name, SamAccountName, UserPrincipalName, Enabled
+
+Get-ADGroup -Filter * |
+  Select-Object -First 10 Name, GroupScope, GroupCategory
+
+# Entra side
+Get-MgUser -All |
+  Where-Object { $_.DisplayName -like 'DG-LAB*' } |
+  Select-Object -First 10 DisplayName, UserPrincipalName, AccountEnabled
+
+Get-MgGroup -All |
+  Where-Object { $_.DisplayName -like 'DG-LAB*' } |
+  Select-Object -First 10 DisplayName, MailEnabled, SecurityEnabled
+```
+
+The lab is ready when the visible environment supports the scenario you care about: directory hierarchy, synchronized or cloud-only identities, group membership, guest access, and policy evidence.
+
+## 8. Refresh the lab
+
+For repeated runs, do not keep layering imports over an old hybrid state. Use one of these refresh patterns:
+
+- restore AD from a checkpoint and delete prefixed Entra lab objects
+- delete the dedicated DataGen OU and prefixed Entra lab objects
+- generate the same scenario and seed, compare the export, then apply only the intended delta
+
+For the deterministic export and comparison workflow, continue to [Repeatable Lab Runs](/walkthroughs/repeatable-lab-runs).

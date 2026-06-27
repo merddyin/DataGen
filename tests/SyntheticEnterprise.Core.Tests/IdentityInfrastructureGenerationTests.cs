@@ -985,6 +985,98 @@ public sealed class IdentityInfrastructureGenerationTests
     }
 
     [Fact]
+    public void WorldGenerator_Emits_Target_Environment_Gpo_Slice()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 174,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Target Environment GPO Slice",
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Target Environment Co",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 240,
+                            BusinessUnitCount = 2,
+                            DepartmentCountPerBusinessUnit = 2,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            ServerCount = 10,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        var targetIdentityStore = Assert.Single(
+            result.World.IdentityStores,
+            store => string.Equals(store.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase));
+
+        var targetOus = result.World.OrganizationalUnits
+            .Where(ou => string.Equals(ou.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.Contains(targetOus, ou => ou.Name == "Target Workstations");
+        Assert.Contains(targetOus, ou => ou.Name == "Target Servers");
+
+        var targetContainers = result.World.Containers
+            .Where(container => string.Equals(container.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.Contains(targetContainers, container =>
+            container.IdentityStoreId == targetIdentityStore.Id
+            && container.Name == "Target Workstations"
+            && container.ContainerType == "OrganizationalUnit");
+        Assert.Contains(targetContainers, container =>
+            container.IdentityStoreId == targetIdentityStore.Id
+            && container.Name == "Target Servers"
+            && container.ContainerType == "OrganizationalUnit");
+
+        var targetPolicies = result.World.Policies
+            .Where(policy => string.Equals(policy.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.Contains(targetPolicies, policy =>
+            policy.PolicyType == "GroupPolicyObject"
+            && policy.Platform == "ActiveDirectory"
+            && policy.Name == "Target Workstation Security Baseline");
+        Assert.Contains(targetPolicies, policy =>
+            policy.PolicyType == "GroupPolicyObject"
+            && policy.Platform == "ActiveDirectory"
+            && policy.Name == "Target Server Security Baseline");
+
+        var targetPolicyIds = targetPolicies.Select(policy => policy.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.Contains(result.World.PolicySettings, setting =>
+            targetPolicyIds.Contains(setting.PolicyId)
+            && string.Equals(setting.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase)
+            && setting.SettingName == "MinimumPasswordLength"
+            && setting.ConfiguredValue == "14");
+        Assert.Contains(result.World.PolicySettings, setting =>
+            targetPolicyIds.Contains(setting.PolicyId)
+            && string.Equals(setting.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase)
+            && setting.SettingName == "BlockUnsignedPowerShellScripts"
+            && setting.ConfiguredValue == "true");
+
+        Assert.Contains(result.World.PolicyTargetLinks, link =>
+            targetPolicyIds.Contains(link.PolicyId)
+            && string.Equals(link.EnvironmentRole, "Target", StringComparison.OrdinalIgnoreCase)
+            && link.TargetType == "Container"
+            && link.AssignmentMode == "Linked"
+            && link.LinkEnabled
+            && targetContainers.Any(container => container.Id == link.TargetId));
+
+        Assert.Contains(result.World.IdentityStores, store => string.Equals(store.EnvironmentRole, "Source", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.World.Policies, policy => string.Equals(policy.EnvironmentRole, "Source", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void WorldGenerator_Connection_Observations_Do_Not_Consume_Global_Source_Id_Counter()
     {
         var idFactory = new TrackingIdFactory();

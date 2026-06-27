@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.8.3
+
+- added source/target environment-role metadata across identity stores, OUs, containers, policy records, policy settings, and policy target links so exports can distinguish current-state evidence from modeled target-state controls
+- added a target Active Directory / GPO slice with workstation, server, and privileged-access target baselines for downstream policy-parity and migration validation scenarios
+- improved normalized export coverage for environment roles and policy target links, and tightened policy-setting path parity when registry-backed settings do not carry an explicit policy path
+- expanded the website walkthroughs from generation-only recipes into practical AD, Entra, hybrid, and repeatable-run lab workflows with native PowerShell/Graph cmdlet patterns, validation steps, and cleanup guidance
+
 ### v0.8.2
 
 - corrected AD realism so physical workstations and servers no longer carry direct OU placement; OU residency now remains on the directory object while the physical endpoint stays tied to location and its machine-account relationship
@@ -188,8 +195,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.8.2 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.2\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.8.3 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.3\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
