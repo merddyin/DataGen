@@ -154,8 +154,15 @@ jobs:
           $shouldPublish = '${{ github.event_name }}' -eq 'push' -or '${{ inputs.publish_to_psgallery }}' -eq 'true'
 
           New-Item -ItemType Directory -Path $nupkgOutput -Force | Out-Null
-          New-Item -ItemType Directory -Path (Join-Path $env:LOCALAPPDATA 'PSResourceGet') -Force | Out-Null
-          Set-PSResourceRepository -Name PSGallery -Trusted
+          $repositoryStore = Join-Path $env:LOCALAPPDATA 'PSResourceGet'
+          $repositoryFile = Join-Path $repositoryStore 'PSResourceRepository.xml'
+          New-Item -ItemType Directory -Path $repositoryStore -Force | Out-Null
+          if (-not (Test-Path $repositoryFile)) {
+            Register-PSResourceRepository -PSGallery -Trusted -ErrorAction Stop
+          }
+          else {
+            Set-PSResourceRepository -Name PSGallery -Trusted -ErrorAction Stop
+          }
 
           if ($shouldPublish) {
             if ([string]::IsNullOrWhiteSpace($env:PSGAL)) {
