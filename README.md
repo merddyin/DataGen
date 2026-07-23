@@ -4,6 +4,11 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.9.2
+
+- refreshed the documentation toolchain lockfile to patched transitive versions after repository security scanning identified critical, high, moderate, and low npm advisories in the Docusaurus build and development dependency graph
+- preserved the existing Docusaurus and site behavior while removing all findings reported by the current npm audit
+
 ### v0.9.1
 
 - updated the SQLite provider stack to remove the vulnerable native SQLite package from DataGen's resolved dependency graph while preserving the supported Windows, Linux, and macOS provider bundle
@@ -213,8 +218,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.9.1 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.1\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.9.2 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.2\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

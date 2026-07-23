@@ -7,6 +7,17 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.9.2
+
+This security patch refreshes the locked documentation toolchain dependencies used to build and preview the DataGen website.
+
+### Highlights
+
+- **Clean website dependency audit**
+  The site lockfile now resolves patched transitive versions for the npm advisories identified by repository security scanning, including the critical `shell-quote` advisory and the related high, moderate, and low findings.
+- **Stable documentation workflow**
+  The direct Docusaurus dependency set and the generated static-site behavior remain unchanged. The update is limited to compatible transitive dependency releases selected by npm within the existing supported ranges.
+
 ## v0.9.1
 
 This security patch refreshes DataGen's SQLite provider stack without changing its generation, export, or PowerShell workflows.
