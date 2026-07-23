@@ -1,4 +1,5 @@
 using SyntheticEnterprise.Module.Contracts;
+using SyntheticEnterprise.PowerShell.Cmdlets;
 
 namespace SyntheticEnterprise.Tests;
 
@@ -15,5 +16,14 @@ public sealed class ModuleSurfaceTests
 
         Assert.Contains(commands, c => c.Name == "New-SEEnterpriseWorld");
         Assert.Contains(commands, c => c.Name == "Export-SEEnterpriseWorld");
+    }
+
+    [Fact]
+    public void DeterministicReleaseInputs_ArePublicCmdletParameters()
+    {
+        Assert.NotNull(typeof(NewSEEnterpriseWorldCommand).GetProperty("GeneratedAt"));
+        Assert.NotNull(typeof(SaveSEEnterpriseWorldCommand).GetProperty("SavedAt"));
+        Assert.NotNull(typeof(SaveSEEnterpriseWorldCommand).GetProperty("SnapshotId"));
+        Assert.NotNull(typeof(ExportSEEnterpriseWorldCommand).GetProperty("ExportedAtUtc"));
     }
 }

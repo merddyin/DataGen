@@ -192,6 +192,61 @@ public record ServerSoftwareInstallation
     public string SoftwareId { get; init; } = "";
 }
 
+/// <summary>
+/// Product-neutral evidence that an endpoint was observed through a management
+/// or registration surface. Consumers decide what the observation means.
+/// </summary>
+public record EndpointManagementObservation
+{
+    public string Id { get; init; } = "";
+    public string CompanyId { get; init; } = "";
+    public string EndpointType { get; init; } = "";
+    public string EndpointId { get; init; } = "";
+    public string? DeviceAccountId { get; init; }
+    public string ObservationKind { get; init; } = "EndpointObservation";
+    public string SourceKind { get; init; } = "EndpointCollector";
+    public string ManagementProvider { get; init; } = "Unknown";
+    public string? AgentSoftwareId { get; init; }
+    public string? AgentInstanceId { get; init; }
+    public string? RegistrationId { get; init; }
+    public string RegistrationState { get; init; } = "Unknown";
+    public string JoinState { get; init; } = "Unknown";
+    public string ConfigurationCapability { get; init; } = "Unknown";
+    public string DeploymentCapability { get; init; } = "Unknown";
+    public string UpdateCapability { get; init; } = "Unknown";
+    public string OperatingSystemFamily { get; init; } = "Unknown";
+    public string Cohort { get; init; } = "";
+    public string HostingEnvironmentKind { get; init; } = "NonHosted";
+    public string? HostingProvider { get; init; }
+    public string OutOfBandGuestDeploymentCapability { get; init; } = "Unknown";
+    public DateTimeOffset ObservedAtUtc { get; init; }
+    public DateTimeOffset? LastCheckInAtUtc { get; init; }
+    public int ExpectedCheckInIntervalSeconds { get; init; } = 86400;
+    public decimal Confidence { get; init; }
+}
+
+/// <summary>
+/// A source-system relationship observation. LifecycleState can be Active or
+/// Removed; removed rows preserve history without inventing a current edge.
+/// </summary>
+public record RelationshipHistoryObservation
+{
+    public string Id { get; init; } = "";
+    public string CompanyId { get; init; } = "";
+    public string RelationshipType { get; init; } = "";
+    public string FromArtifact { get; init; } = "";
+    public string FromEntityType { get; init; } = "";
+    public string FromEntityId { get; init; } = "";
+    public string ToArtifact { get; init; } = "";
+    public string ToEntityType { get; init; } = "";
+    public string ToEntityId { get; init; } = "";
+    public string LifecycleState { get; init; } = "Active";
+    public string SourceSystem { get; init; } = "";
+    public DateTimeOffset ObservedAtUtc { get; init; }
+    public DateTimeOffset? RemovedAtUtc { get; init; }
+    public string? Detail { get; init; }
+}
+
 public record EndpointAdministrativeAssignment
 {
     public string Id { get; init; } = "";

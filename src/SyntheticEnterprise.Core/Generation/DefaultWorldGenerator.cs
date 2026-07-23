@@ -18,6 +18,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
     private readonly IWorldQualityAuditService _worldQualityAuditService;
     private readonly ITemporalSimulationService _temporalSimulationService;
     private readonly IRandomSource _randomSource;
+    private readonly IGenerationClock _clock;
 
     public DefaultWorldGenerator(
         IEnumerable<IWorldGenerationPlugin> plugins,
@@ -29,7 +30,8 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         IWorldInvariantValidator worldInvariantValidator,
         IWorldQualityAuditService worldQualityAuditService,
         ITemporalSimulationService temporalSimulationService,
-        IRandomSource randomSource)
+        IRandomSource randomSource,
+        IGenerationClock clock)
     {
         _plugins = plugins.ToDictionary(plugin => plugin.Manifest.Capability, StringComparer.OrdinalIgnoreCase);
         _planner = planner;
@@ -41,10 +43,12 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         _worldQualityAuditService = worldQualityAuditService;
         _temporalSimulationService = temporalSimulationService;
         _randomSource = randomSource;
+        _clock = clock;
     }
 
     public GenerationResult Generate(GenerationContext context, CatalogSet catalogs)
     {
+        using var clockScope = _clock.Use(context.GeneratedAt);
         _randomSource.Reseed(context.Seed);
         var world = new SyntheticEnterpriseWorld();
         var plan = _planner.BuildPlan(context.Scenario, _plugins.Values);

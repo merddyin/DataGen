@@ -100,6 +100,9 @@ public record InfrastructureProfile
     public bool IncludeWorkstations { get; init; } = true;
     public bool IncludeNetworkAssets { get; init; } = true;
     public bool IncludeTelephony { get; init; } = true;
+    public bool IncludeRepresentativeManagementObservations { get; init; }
+    public int RepresentativeManagementObservationCount { get; init; } = 15;
+    public int HostedComputeObservationPercentage { get; init; } = 20;
 }
 
 public record RepositoryProfile

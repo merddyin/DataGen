@@ -30,7 +30,7 @@ public sealed class BasicInfrastructureAnomalyInjector : IAnomalyInjector
                 InjectUnownedServers(world, profile);
                 break;
             case "InactiveDevices":
-                InjectInactiveDevices(world, profile);
+                InjectInactiveDevices(world, profile, context.GeneratedAt);
                 break;
         }
     }
@@ -77,7 +77,10 @@ public sealed class BasicInfrastructureAnomalyInjector : IAnomalyInjector
         }
     }
 
-    private void InjectInactiveDevices(SyntheticEnterpriseWorld world, AnomalyProfile profile)
+    private void InjectInactiveDevices(
+        SyntheticEnterpriseWorld world,
+        AnomalyProfile profile,
+        DateTimeOffset generatedAt)
     {
         var targets = world.Devices.Take(Math.Max(1, (int)(world.Devices.Count * Math.Min(1.0, profile.Intensity) * 0.06))).ToList();
         foreach (var device in targets)
@@ -85,7 +88,7 @@ public sealed class BasicInfrastructureAnomalyInjector : IAnomalyInjector
             var idx = world.Devices.FindIndex(d => d.Id == device.Id);
             if (idx >= 0)
             {
-                world.Devices[idx] = device with { LastSeen = DateTimeOffset.UtcNow.AddDays(-120) };
+                world.Devices[idx] = device with { LastSeen = generatedAt.AddDays(-120) };
                 world.InfrastructureAnomalies.Add(new InfrastructureAnomaly
                 {
                     Id = _idFactory.Next("ANOM"),

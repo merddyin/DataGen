@@ -115,6 +115,9 @@ public sealed class LayerProcessor : ILayerProcessor
             var preserveExistingSoftwareInstallations =
                 staging.World.DeviceSoftwareInstallations.Count > 0 ||
                 staging.World.ServerSoftwareInstallations.Count > 0;
+            var preserveExistingManagementObservations =
+                staging.World.ManagementObservations.Count > 0 ||
+                staging.World.RelationshipHistoryObservations.Count > 0;
             var preserveExistingEndpointControlState =
                 staging.World.EndpointAdministrativeAssignments.Count > 0 ||
                 staging.World.EndpointPolicyBaselines.Count > 0 ||
@@ -139,6 +142,11 @@ public sealed class LayerProcessor : ILayerProcessor
             {
                 staging.World.DeviceSoftwareInstallations.Clear();
                 staging.World.ServerSoftwareInstallations.Clear();
+            }
+            if (preserveExistingManagementObservations)
+            {
+                staging.World.ManagementObservations.Clear();
+                staging.World.RelationshipHistoryObservations.Clear();
             }
 
             if (preserveExistingEndpointControlState)
@@ -387,6 +395,8 @@ public sealed class LayerProcessor : ILayerProcessor
         target.World.SoftwarePackages.AddRange(generated.World.SoftwarePackages);
         target.World.DeviceSoftwareInstallations.AddRange(generated.World.DeviceSoftwareInstallations);
         target.World.ServerSoftwareInstallations.AddRange(generated.World.ServerSoftwareInstallations);
+        target.World.ManagementObservations.AddRange(generated.World.ManagementObservations);
+        target.World.RelationshipHistoryObservations.AddRange(generated.World.RelationshipHistoryObservations);
         target.World.EndpointAdministrativeAssignments.AddRange(generated.World.EndpointAdministrativeAssignments);
         target.World.EndpointPolicyBaselines.AddRange(generated.World.EndpointPolicyBaselines);
         target.World.EndpointLocalGroupMembers.AddRange(generated.World.EndpointLocalGroupMembers);
@@ -419,6 +429,8 @@ public sealed class LayerProcessor : ILayerProcessor
         input.World.SoftwarePackages.Clear();
         input.World.DeviceSoftwareInstallations.Clear();
         input.World.ServerSoftwareInstallations.Clear();
+        input.World.ManagementObservations.Clear();
+        input.World.RelationshipHistoryObservations.Clear();
         input.World.EndpointAdministrativeAssignments.Clear();
         input.World.EndpointPolicyBaselines.Clear();
         input.World.EndpointLocalGroupMembers.Clear();

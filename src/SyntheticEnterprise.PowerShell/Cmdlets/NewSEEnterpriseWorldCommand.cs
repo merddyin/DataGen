@@ -31,6 +31,9 @@ public sealed class NewSEEnterpriseWorldCommand : PSCmdlet
     public int? Seed { get; set; }
 
     [Parameter(Mandatory = false)]
+    public DateTimeOffset? GeneratedAt { get; set; }
+
+    [Parameter(Mandatory = false)]
     public string[]? PluginRootPath { get; set; }
 
     [Parameter(Mandatory = false)]
@@ -145,6 +148,7 @@ public sealed class NewSEEnterpriseWorldCommand : PSCmdlet
         {
             Scenario = scenario,
             Seed = Seed,
+            GeneratedAt = GeneratedAt ?? DateTimeOffset.UtcNow,
             Metadata = new Dictionary<string, string?>
             {
                 ["CatalogRootPath"] = CatalogRootPath

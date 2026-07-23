@@ -7,6 +7,21 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.9.0
+
+This minor release adds a portable enterprise-data contract for management observations and makes repeatable release datasets easier to generate from the public PowerShell module.
+
+### Highlights
+
+- **Provider-neutral management observations**
+  Scenarios can opt into representative endpoint-management facts covering registration, capability, check-in, and hosted-compute state. The model remains generic: it does not encode a downstream product, tenant, engagement, or deployment scenario.
+- **Normalized observation exports**
+  The normalized profile now emits `endpoint_management_observations` and `relationship_history_observations`, giving consumer adapters a stable, documented source surface instead of requiring private generator knowledge.
+- **Deterministic module inputs**
+  `New-SEEnterpriseWorld`, `Save-SEEnterpriseWorld`, and `Export-SEEnterpriseWorld` now accept explicit generation, snapshot, and export times. Automation can reproduce a dataset and its associated receipt without relying on the clock of the machine running the command.
+- **Additive by design**
+  Management observations are opt-in scenario data. Existing generation remains valid, and consumers remain responsible for translating the generic facts into their own contracts.
+
 ## v0.8.4
 
 This patch release focuses on target-state policy modeling and more useful walkthroughs for turning generated data into actual lab environments.

@@ -23,6 +23,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private readonly IIdFactory _idFactory;
     private readonly IRandomSource _randomSource;
     private readonly IClock _clock;
+    private readonly AsyncLocal<Random?> _passwordRandom = new();
 
     public BasicIdentityGenerator(IIdFactory idFactory, IRandomSource randomSource, IClock clock)
     {
@@ -33,6 +34,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
     public void GenerateIdentity(SyntheticEnterpriseWorld world, GenerationContext context, CatalogSet catalogs)
     {
+        using var passwordRandomScope = UsePasswordRandom(context.Seed);
+
         foreach (var company in world.Companies)
         {
             var companyDefinition = context.Scenario.Companies.FirstOrDefault(c =>
@@ -2219,7 +2222,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     {
         var serviceOu = ous.First(o => o.Name == "Service Accounts");
         var now = _clock.UtcNow;
-        var lifecycle = CreateAccountLifecycle(now.AddDays(-RandomInclusive(14, 60)), 365, 3650, 30);
         var domainDn = BuildNamingContext(rootDomain);
         var blueprints = new (string DisplayName, string Sam, string LocalPart, string AccountType, string DistinguishedName, bool Enabled, bool Privileged, string PasswordProfile)[]
         {
@@ -2234,6 +2236,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var passwordLastSet = blueprint.PasswordProfile == "DirectorySynchronization"
                 ? now.AddDays(-RandomInclusive(15, 120))
                 : now.AddDays(-RandomInclusive(30, 365));
+            var lifecycle = CreateAccountLifecycle(passwordLastSet, 365, 3650, 30);
 
             return new DirectoryAccount
             {
@@ -5333,7 +5336,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             }
         }
 
-        return $"{Guid.NewGuid():N}@{domain}";
+        return $"{localPart}10000@{domain}";
     }
 
     private static string BuildUniqueExternalPersonUpn(
@@ -5366,7 +5369,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             }
         }
 
-        return $"{Guid.NewGuid():N}@{domain}";
+        return $"{baseLocalPart}10000@{domain}";
     }
 
     private static Office? SelectExternalOffice(
@@ -5436,7 +5439,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return normalized < threshold;
     }
 
-    private static string CreateUniquePassword(HashSet<string> issuedPasswords, int length = 16)
+    private string CreateUniquePassword(HashSet<string> issuedPasswords, int length = 16)
     {
         var targetLength = Math.Max(12, length);
         while (true)
@@ -5449,27 +5452,52 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
     }
 
-    private static string CreateSecurePassword(int length)
+    private string CreateSecurePassword(int length)
     {
         var buffer = new List<char>(length)
         {
-            LowercaseChars[RandomNumberGenerator.GetInt32(LowercaseChars.Length)],
-            UppercaseChars[RandomNumberGenerator.GetInt32(UppercaseChars.Length)],
-            DigitChars[RandomNumberGenerator.GetInt32(DigitChars.Length)],
-            SymbolChars[RandomNumberGenerator.GetInt32(SymbolChars.Length)]
+            LowercaseChars[NextPasswordIndex(LowercaseChars.Length)],
+            UppercaseChars[NextPasswordIndex(UppercaseChars.Length)],
+            DigitChars[NextPasswordIndex(DigitChars.Length)],
+            SymbolChars[NextPasswordIndex(SymbolChars.Length)]
         };
 
         while (buffer.Count < length)
         {
-            buffer.Add(AllPasswordChars[RandomNumberGenerator.GetInt32(AllPasswordChars.Length)]);
+            buffer.Add(AllPasswordChars[NextPasswordIndex(AllPasswordChars.Length)]);
         }
 
         for (var i = buffer.Count - 1; i > 0; i--)
         {
-            var swapIndex = RandomNumberGenerator.GetInt32(i + 1);
+            var swapIndex = NextPasswordIndex(i + 1);
             (buffer[i], buffer[swapIndex]) = (buffer[swapIndex], buffer[i]);
         }
 
         return new string(buffer.ToArray());
+    }
+
+    private IDisposable UsePasswordRandom(int? seed)
+    {
+        var prior = _passwordRandom.Value;
+        _passwordRandom.Value = seed is int value
+            ? new Random(unchecked((value * 397) ^ 0x5F3759DF))
+            : null;
+        return new PasswordRandomScope(_passwordRandom, prior);
+    }
+
+    private int NextPasswordIndex(int upperBound)
+    {
+        var passwordRandom = _passwordRandom.Value;
+        return passwordRandom is null
+            ? RandomNumberGenerator.GetInt32(upperBound)
+            : passwordRandom.Next(upperBound);
+    }
+
+    private sealed class PasswordRandomScope(AsyncLocal<Random?> current, Random? prior) : IDisposable
+    {
+        private readonly AsyncLocal<Random?> _current = current;
+        private readonly Random? _prior = prior;
+
+        public void Dispose() => _current.Value = _prior;
     }
 }

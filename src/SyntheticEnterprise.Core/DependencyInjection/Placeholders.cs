@@ -69,7 +69,23 @@ internal sealed class PlaceholderRandomSource : IRandomSource
     public double NextDouble() => _random.NextDouble();
 }
 
-internal sealed class SystemClock : IClock
+internal sealed class GenerationClock : IGenerationClock
 {
-    public DateTimeOffset UtcNow => DateTimeOffset.UtcNow;
+    private readonly AsyncLocal<DateTimeOffset?> _current = new();
+
+    public DateTimeOffset UtcNow => _current.Value ?? DateTimeOffset.UtcNow;
+
+    public IDisposable Use(DateTimeOffset instant)
+    {
+        var prior = _current.Value;
+        _current.Value = instant;
+        return new Scope(() => _current.Value = prior);
+    }
+
+    private sealed class Scope(Action dispose) : IDisposable
+    {
+        private Action? _dispose = dispose;
+
+        public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
+    }
 }

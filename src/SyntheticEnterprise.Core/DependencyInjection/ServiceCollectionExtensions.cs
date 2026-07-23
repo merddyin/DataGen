@@ -94,7 +94,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IExporter, FileBundleExporter>();
         services.AddSingleton<IIdFactory, PlaceholderIdFactory>();
         services.AddSingleton<IRandomSource, PlaceholderRandomSource>();
-        services.AddSingleton<IClock, SystemClock>();
+        services.AddSingleton<GenerationClock>();
+        services.AddSingleton<IGenerationClock>(provider => provider.GetRequiredService<GenerationClock>());
+        services.AddSingleton<IClock>(provider => provider.GetRequiredService<GenerationClock>());
 
         return services;
     }

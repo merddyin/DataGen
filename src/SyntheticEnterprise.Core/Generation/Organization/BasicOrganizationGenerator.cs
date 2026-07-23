@@ -1414,7 +1414,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             }
         }
 
-        var fallback = $"{baseName} {Guid.NewGuid():N}";
+        var fallback = $"{baseName} 1000";
         usedNames.Add(fallback);
         return fallback;
     }
@@ -1747,7 +1747,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             }
         }
 
-        return $"{Guid.NewGuid():N}@{domain}";
+        return $"{baseLocalPart}10000@{domain}";
     }
 
     private string PickTitle(
