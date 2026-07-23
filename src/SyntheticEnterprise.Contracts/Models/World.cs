@@ -54,6 +54,8 @@ public class SyntheticEnterpriseWorld
     public List<SoftwarePackage> SoftwarePackages { get; } = new();
     public List<DeviceSoftwareInstallation> DeviceSoftwareInstallations { get; } = new();
     public List<ServerSoftwareInstallation> ServerSoftwareInstallations { get; } = new();
+    public List<EndpointManagementObservation> ManagementObservations { get; } = new();
+    public List<RelationshipHistoryObservation> RelationshipHistoryObservations { get; } = new();
     public List<EndpointAdministrativeAssignment> EndpointAdministrativeAssignments { get; } = new();
     public List<EndpointPolicyBaseline> EndpointPolicyBaselines { get; } = new();
     public List<EndpointLocalGroupMember> EndpointLocalGroupMembers { get; } = new();

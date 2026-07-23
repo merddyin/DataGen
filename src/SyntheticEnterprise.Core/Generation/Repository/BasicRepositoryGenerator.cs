@@ -59,7 +59,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 collaborationChannelPatterns,
                 documentLibraryPatterns,
                 sitePagePatterns,
-                documentFolderPatterns);
+                documentFolderPatterns,
+                context.GeneratedAt);
             CreateAccessGrants(world, company, departments, groups, accounts);
         }
     }
@@ -547,7 +548,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         IReadOnlyList<CollaborationChannelPatternRule> collaborationChannelPatterns,
         IReadOnlyList<DocumentLibraryPatternRule> documentLibraryPatterns,
         IReadOnlyList<SitePagePatternRule> sitePagePatterns,
-        IReadOnlyList<DocumentFolderPatternRule> documentFolderPatterns)
+        IReadOnlyList<DocumentFolderPatternRule> documentFolderPatterns,
+        DateTimeOffset generatedAt)
     {
         var patterns = ReadRepositoryPatterns(catalogs, "CollaborationSite");
         var siteNameUsage = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -593,7 +595,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
             site = AlignSiteContentMetrics(site, libraries);
             world.CollaborationSites.Add(site);
 
-            CreatePagesForSite(world, company, site, owner, libraries, sitePagePatterns);
+            CreatePagesForSite(world, company, site, owner, libraries, sitePagePatterns, generatedAt);
             if (string.Equals(site.Platform, "Teams", StringComparison.OrdinalIgnoreCase))
             {
                 var channels = CreateChannelsForSite(world, company, site, collaborationChannelPatterns);
@@ -873,7 +875,8 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
         CollaborationSite site,
         Person owner,
         IReadOnlyList<DocumentLibrary> libraries,
-        IReadOnlyList<SitePagePatternRule> pagePatterns)
+        IReadOnlyList<SitePagePatternRule> pagePatterns,
+        DateTimeOffset generatedAt)
     {
         var curatedPages = pagePatterns
             .Where(pattern =>
@@ -909,7 +912,7 @@ public sealed class BasicRepositoryGenerator : IRepositoryGenerator
                 AuthorPersonId = owner.Id,
                 AssociatedLibraryId = associatedLibrary?.Id,
                 ViewCount = (40 + _randomSource.Next(0, 4000)).ToString(),
-                LastModified = DateTimeOffset.UtcNow.AddDays(-_randomSource.Next(0, 45)).AddHours(-_randomSource.Next(0, 24)),
+                LastModified = generatedAt.AddDays(-_randomSource.Next(0, 45)).AddHours(-_randomSource.Next(0, 24)),
                 PromotedState = string.IsNullOrWhiteSpace(template.Item3) ? template.Item2 == "News" ? "News" : "None" : template.Item3
             });
         }

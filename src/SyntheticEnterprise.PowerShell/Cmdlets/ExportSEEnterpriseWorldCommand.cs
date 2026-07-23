@@ -36,6 +36,9 @@ public sealed class ExportSEEnterpriseWorldCommand : PSCmdlet
     public CredentialExportMode CredentialExportMode { get; set; } = CredentialExportMode.Masked;
 
     [Parameter]
+    public DateTimeOffset? ExportedAtUtc { get; set; }
+
+    [Parameter]
     public SwitchParameter PassThru { get; set; }
 
     private IWorldExportCoordinator? _coordinator;
@@ -69,7 +72,8 @@ public sealed class ExportSEEnterpriseWorldCommand : PSCmdlet
             IncludeManifest = IncludeManifest.IsPresent,
             IncludeSummary = IncludeSummary.IsPresent,
             Overwrite = Overwrite.IsPresent,
-            CredentialExportMode = CredentialExportMode
+            CredentialExportMode = CredentialExportMode,
+            ExportedAtUtc = ExportedAtUtc ?? DateTimeOffset.UtcNow
         };
 
         var manifest = _coordinator!.Export(exportInput, request);

@@ -1122,6 +1122,110 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                 },
                 SortKeySelector = package => package.Id
             },
+            new EntityTableDescriptor<EndpointManagementObservation>
+            {
+                LogicalName = "endpoint_management_observations",
+                RelativePathStem = "entities/endpoint_management_observations",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "endpoint_type",
+                    "endpoint_id",
+                    "device_account_id",
+                    "observation_kind",
+                    "source_kind",
+                    "management_provider",
+                    "agent_software_id",
+                    "agent_instance_id",
+                    "registration_id",
+                    "registration_state",
+                    "join_state",
+                    "configuration_capability",
+                    "deployment_capability",
+                    "update_capability",
+                    "operating_system_family",
+                    "cohort",
+                    "hosting_environment_kind",
+                    "hosting_provider",
+                    "out_of_band_guest_deployment_capability",
+                    "observed_at_utc",
+                    "last_check_in_at_utc",
+                    "expected_check_in_interval_seconds",
+                    "confidence"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.ManagementObservations,
+                RowProjector = observation => new Dictionary<string, object?>
+                {
+                    ["id"] = observation.Id,
+                    ["company_id"] = observation.CompanyId,
+                    ["endpoint_type"] = observation.EndpointType,
+                    ["endpoint_id"] = observation.EndpointId,
+                    ["device_account_id"] = observation.DeviceAccountId,
+                    ["observation_kind"] = observation.ObservationKind,
+                    ["source_kind"] = observation.SourceKind,
+                    ["management_provider"] = observation.ManagementProvider,
+                    ["agent_software_id"] = observation.AgentSoftwareId,
+                    ["agent_instance_id"] = observation.AgentInstanceId,
+                    ["registration_id"] = observation.RegistrationId,
+                    ["registration_state"] = observation.RegistrationState,
+                    ["join_state"] = observation.JoinState,
+                    ["configuration_capability"] = observation.ConfigurationCapability,
+                    ["deployment_capability"] = observation.DeploymentCapability,
+                    ["update_capability"] = observation.UpdateCapability,
+                    ["operating_system_family"] = observation.OperatingSystemFamily,
+                    ["cohort"] = observation.Cohort,
+                    ["hosting_environment_kind"] = observation.HostingEnvironmentKind,
+                    ["hosting_provider"] = observation.HostingProvider,
+                    ["out_of_band_guest_deployment_capability"] = observation.OutOfBandGuestDeploymentCapability,
+                    ["observed_at_utc"] = observation.ObservedAtUtc,
+                    ["last_check_in_at_utc"] = observation.LastCheckInAtUtc,
+                    ["expected_check_in_interval_seconds"] = observation.ExpectedCheckInIntervalSeconds,
+                    ["confidence"] = observation.Confidence
+                },
+                SortKeySelector = observation => observation.Id
+            },
+            new EntityTableDescriptor<RelationshipHistoryObservation>
+            {
+                LogicalName = "relationship_history_observations",
+                RelativePathStem = "entities/relationship_history_observations",
+                Columns =
+                [
+                    "id",
+                    "company_id",
+                    "relationship_type",
+                    "from_artifact",
+                    "from_entity_type",
+                    "from_entity_id",
+                    "to_artifact",
+                    "to_entity_type",
+                    "to_entity_id",
+                    "lifecycle_state",
+                    "source_system",
+                    "observed_at_utc",
+                    "removed_at_utc",
+                    "detail"
+                ],
+                RecordAccessor = result => GetGenerationResult(result).World.RelationshipHistoryObservations,
+                RowProjector = observation => new Dictionary<string, object?>
+                {
+                    ["id"] = observation.Id,
+                    ["company_id"] = observation.CompanyId,
+                    ["relationship_type"] = observation.RelationshipType,
+                    ["from_artifact"] = observation.FromArtifact,
+                    ["from_entity_type"] = observation.FromEntityType,
+                    ["from_entity_id"] = observation.FromEntityId,
+                    ["to_artifact"] = observation.ToArtifact,
+                    ["to_entity_type"] = observation.ToEntityType,
+                    ["to_entity_id"] = observation.ToEntityId,
+                    ["lifecycle_state"] = observation.LifecycleState,
+                    ["source_system"] = observation.SourceSystem,
+                    ["observed_at_utc"] = observation.ObservedAtUtc,
+                    ["removed_at_utc"] = observation.RemovedAtUtc,
+                    ["detail"] = observation.Detail
+                },
+                SortKeySelector = observation => observation.Id
+            },
             new EntityTableDescriptor<EndpointAdministrativeAssignment>
             {
                 LogicalName = "endpoint_administrative_assignments",

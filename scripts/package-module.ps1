@@ -51,7 +51,14 @@ if (-not (Test-Path $buildOutput)) {
     throw "Expected build output was not found at '$buildOutput'."
 }
 
-$moduleStageRoot = Join-Path $repoRoot $OutputRoot
+$moduleStageRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot))
+{
+    $OutputRoot
+}
+else
+{
+    Join-Path $repoRoot $OutputRoot
+}
 $moduleStagePath = Join-Path $moduleStageRoot $ModuleName
 $versionedStagePath = Join-Path $moduleStagePath $Version
 $publishStagePath = Join-Path (Join-Path $moduleStageRoot 'publish') $ModuleName

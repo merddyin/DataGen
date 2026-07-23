@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.9.0
+
+- added an opt-in, provider-neutral endpoint-management observation contract that models registration, control capability, check-in, and hosted-compute facts without embedding any downstream product or scenario vocabulary
+- added normalized `endpoint_management_observations` and `relationship_history_observations` tables so consumers can export those generic facts through the public normalized profile
+- made repeatable world, snapshot, and export timestamps explicit public PowerShell parameters, allowing callers to reproduce release-grade datasets deterministically
+- preserved the existing default generation path: management observations are additive, configurable scenario data rather than a required deployment-specific overlay
+
 ### v0.8.4
 
 - added source/target environment-role metadata across identity stores, OUs, containers, policy records, policy settings, and policy target links so exports can distinguish current-state evidence from modeled target-state controls
@@ -202,8 +209,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.8.4 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.8.4\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.9.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

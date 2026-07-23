@@ -29,6 +29,12 @@ public sealed class SaveSEEnterpriseWorldCommand : PSCmdlet
     public SwitchParameter Compress { get; set; }
 
     [Parameter]
+    public DateTimeOffset? SavedAt { get; set; }
+
+    [Parameter]
+    public Guid? SnapshotId { get; set; }
+
+    [Parameter]
     public SwitchParameter PassThru { get; set; }
 
     protected override void ProcessRecord()
@@ -50,6 +56,14 @@ public sealed class SaveSEEnterpriseWorldCommand : PSCmdlet
             sourceScenarioPath: SourceScenarioPath,
             sourceScenarioName: SourceScenarioName,
             warnings: Array.Empty<string>());
+        if (SavedAt.HasValue)
+        {
+            envelope.SavedUtc = SavedAt.Value.UtcDateTime;
+        }
+        if (SnapshotId.HasValue)
+        {
+            envelope.Metadata.SnapshotId = SnapshotId.Value;
+        }
 
         persistence.SaveSnapshot(envelope, ResolveOutputPath(), Compress.IsPresent);
 
