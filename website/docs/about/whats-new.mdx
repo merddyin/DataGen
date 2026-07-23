@@ -7,6 +7,17 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.9.1
+
+This security patch refreshes DataGen's SQLite provider stack without changing its generation, export, or PowerShell workflows.
+
+### Highlights
+
+- **Patched portable SQLite provider**
+  DataGen now resolves the maintained SQLitePCLRaw 3.x bundle and its cross-platform native SQLite runtime. The update removes the previously vulnerable native package while retaining the same supported Windows, Linux, and macOS operating environments.
+- **No workflow changes**
+  Catalog generation, normalized exports, and the published PowerShell module keep their existing commands and contracts. This release is intended to be a dependency-security update that is safe to take before generating new datasets.
+
 ## v0.9.0
 
 This minor release adds a portable enterprise-data contract for management observations and makes repeatable release datasets easier to generate from the public PowerShell module.
