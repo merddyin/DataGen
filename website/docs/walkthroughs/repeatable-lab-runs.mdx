@@ -85,8 +85,8 @@ The example uses Windows paths because the tools are PowerShell 7 scripts. On Li
 ```powershell
 # Windows example. The working root may exist, but candidate-a and candidate-b
 # must not already exist or must be empty.
-$repoRoot = 'G:\source\DataGen'
-$workingRoot = 'C:\Lab\DataGen-v0.9.3-evidence'
+$repoRoot = (Get-Location).Path
+$workingRoot = Join-Path ([IO.Path]::GetTempPath()) 'DataGen-v0.9.3-evidence'
 New-Item -ItemType Directory -Force -Path $workingRoot | Out-Null
 
 $pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
