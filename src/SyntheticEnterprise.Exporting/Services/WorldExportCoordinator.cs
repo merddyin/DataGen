@@ -99,7 +99,8 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
 
         if (request.IncludeManifest)
         {
-            var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, new JsonSerializerOptions { WriteIndented = true });
+            var portableManifest = CreatePortableManifest(manifest);
+            var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(portableManifest, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllBytes(Path.Combine(outputRoot, "manifest.json"), manifestBytes);
         }
 
@@ -109,10 +110,22 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
     private static IEnumerable<IReadOnlyDictionary<string, object?>> MaterializeRows(dynamic generationResult, dynamic descriptor)
     {
         var records = descriptor.RecordAccessor(generationResult);
-        var sorted = System.Linq.Enumerable.OrderBy(records, descriptor.SortKeySelector);
+        var sorted = System.Linq.Enumerable.OrderBy(records, descriptor.SortKeySelector, StringComparer.Ordinal);
         foreach (var record in sorted)
         {
             yield return descriptor.RowProjector(record);
         }
     }
+
+    private static ExportManifestV2 CreatePortableManifest(ExportManifestV2 manifest)
+        => new()
+        {
+            ExportId = manifest.ExportId,
+            SchemaVersion = manifest.SchemaVersion,
+            Format = manifest.Format,
+            Profile = manifest.Profile,
+            ExportedAtUtc = manifest.ExportedAtUtc,
+            OutputPath = ".",
+            Artifacts = manifest.Artifacts
+        };
 }

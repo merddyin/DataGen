@@ -25,6 +25,18 @@
   </ItemGroup>
 
   <ItemGroup>
+    <IntegrationTestAssetSource Include="..\..\catalogs\**\*">
+      <AssetRelativePath>catalogs\%(RecursiveDir)%(Filename)%(Extension)</AssetRelativePath>
+    </IntegrationTestAssetSource>
+    <IntegrationTestAssetSource Include="..\..\examples\regional-manufacturer.json">
+      <AssetRelativePath>examples\regional-manufacturer.json</AssetRelativePath>
+    </IntegrationTestAssetSource>
+    <IntegrationTestAssetSource Include="..\..\packs\first-party\**\*">
+      <AssetRelativePath>packs\first-party\%(RecursiveDir)%(Filename)%(Extension)</AssetRelativePath>
+    </IntegrationTestAssetSource>
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Include="..\GoldenFileComparerTests.cs" Link="GoldenFileComparerTests.cs" />
     <Compile Include="..\IntegrationWorkflowScaffoldTests.cs" Link="IntegrationWorkflowScaffoldTests.cs" />
     <Compile Include="..\ModuleSurfaceTests.cs" Link="ModuleSurfaceTests.cs" />
@@ -32,4 +44,56 @@
     <Compile Include="..\ScenarioAuthoringCmdletIntegrationTests.cs" Link="ScenarioAuthoringCmdletIntegrationTests.cs" />
     <Compile Include="..\SyntheticEnterprise.Tests\*.cs" Link="Recovered\%(Filename)%(Extension)" />
   </ItemGroup>
+
+  <UsingTask TaskName="GetIntegrationTestAssetSizes" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <Items ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.Globalization" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="Microsoft.Build.Framework" />
+      <Using Namespace="Microsoft.Build.Utilities" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var items = new List<ITaskItem>();
+        foreach (var file in Files)
+        {
+            var item = new TaskItem(file);
+            var length = new FileInfo(file.GetMetadata("FullPath")).Length;
+            item.SetMetadata("AssetSize", length.ToString(CultureInfo.InvariantCulture));
+            item.SetMetadata("ManifestRelativePath", file.GetMetadata("AssetRelativePath").Replace('\\', '/'));
+            items.Add(item);
+        }
+
+        items.Sort((left, right) => StringComparer.Ordinal.Compare(
+            left.GetMetadata("ManifestRelativePath"),
+            right.GetMetadata("ManifestRelativePath")));
+        Items = items.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="MirrorIntegrationTestAssets" AfterTargets="Build">
+    <Error Condition="'@(IntegrationTestAssetSource->Count())' != '76'" Text="Expected exactly 76 Integration test assets, but found @(IntegrationTestAssetSource->Count())." />
+
+    <GetFileHash Files="@(IntegrationTestAssetSource)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_IntegrationTestAssetWithHash" />
+    </GetFileHash>
+
+    <GetIntegrationTestAssetSizes Files="@(_IntegrationTestAssetWithHash)">
+      <Output TaskParameter="Items" ItemName="_IntegrationTestAssetWithSize" />
+    </GetIntegrationTestAssetSizes>
+
+    <ItemGroup>
+      <_IntegrationTestAssetManifestLine Include="@(_IntegrationTestAssetWithSize->'%(ManifestRelativePath)|%(AssetSize)|%(FileHash)')" />
+    </ItemGroup>
+
+    <RemoveDir Directories="$(OutDir)catalogs;$(OutDir)examples;$(OutDir)packs\first-party" />
+    <Delete Files="$(OutDir)integration-test-assets.manifest" />
+    <MakeDir Directories="$(OutDir)catalogs;$(OutDir)examples;$(OutDir)packs\first-party" />
+    <Copy SourceFiles="@(_IntegrationTestAssetWithSize)" DestinationFiles="@(_IntegrationTestAssetWithSize->'$(OutDir)%(AssetRelativePath)')" SkipUnchangedFiles="false" />
+    <WriteLinesToFile File="$(OutDir)integration-test-assets.manifest" Lines="@(_IntegrationTestAssetManifestLine)" Overwrite="true" Encoding="UTF-8" />
+  </Target>
 </Project>

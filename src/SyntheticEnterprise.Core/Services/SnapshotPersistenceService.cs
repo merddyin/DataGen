@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Security.Cryptography;
 using SyntheticEnterprise.Core.Contracts;
 using SyntheticEnterprise.Core.Serialization;
 
@@ -26,6 +28,9 @@ public sealed class SnapshotPersistenceService : ISnapshotPersistenceService
         string? schemaVersion = null,
         string? generatorVersion = null)
     {
+        var sourceScenarioLogicalPath = GetPortableScenarioPath(sourceScenarioPath);
+        var sourceScenarioSha256 = GetScenarioSha256(sourceScenarioPath);
+
         return new SnapshotEnvelope<T>
         {
             FormatName = SnapshotConstants.FormatName,
@@ -34,12 +39,46 @@ public sealed class SnapshotPersistenceService : ISnapshotPersistenceService
             Metadata = new SnapshotMetadata
             {
                 CatalogFingerprint = catalogFingerprint,
-                SourceScenarioPath = sourceScenarioPath,
+                SourceScenarioPath = sourceScenarioLogicalPath,
+                SourceScenarioSha256 = sourceScenarioSha256,
                 SourceScenarioName = sourceScenarioName,
                 Warnings = warnings ?? Array.Empty<string>()
             },
             Payload = payload!
         };
+    }
+
+    private static string? GetPortableScenarioPath(string? sourceScenarioPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourceScenarioPath))
+        {
+            return null;
+        }
+
+        var trimmed = sourceScenarioPath.Trim();
+        if (Path.IsPathRooted(trimmed))
+        {
+            return Path.GetFileName(trimmed);
+        }
+
+        var normalized = trimmed.Replace('\\', '/');
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+
+        return normalized;
+    }
+
+    private static string? GetScenarioSha256(string? sourceScenarioPath)
+    {
+        if (string.IsNullOrWhiteSpace(sourceScenarioPath) || !File.Exists(sourceScenarioPath))
+        {
+            return null;
+        }
+
+        using var stream = File.OpenRead(sourceScenarioPath);
+        return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
     public void SaveSnapshot<T>(SnapshotEnvelope<T> envelope, string path, bool compress)

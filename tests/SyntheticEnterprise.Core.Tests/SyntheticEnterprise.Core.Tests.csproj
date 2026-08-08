@@ -3,6 +3,15 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <CoreProjectPath>$(MSBuildProjectDirectory)\..\..\src\SyntheticEnterprise.Core\SyntheticEnterprise.Core.csproj</CoreProjectPath>
+    <PluginHostProjectPath>$(MSBuildProjectDirectory)\..\..\src\SyntheticEnterprise.PluginHost\SyntheticEnterprise.PluginHost.csproj</PluginHostProjectPath>
+    <PluginHostArtifactsPath Condition="'$(ArtifactsPath)' != ''">$([System.IO.Path]::GetFullPath('$(ArtifactsPath)'))</PluginHostArtifactsPath>
+    <PluginHostArtifactsPath Condition="'$(PluginHostArtifactsPath)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\obj\plugin-host-artifacts'))</PluginHostArtifactsPath>
+    <PluginHostBuildProperties>ArtifactsPath=$(PluginHostArtifactsPath);UseArtifactsOutput=true</PluginHostBuildProperties>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,16 +29,45 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\SyntheticEnterprise.Core\SyntheticEnterprise.Core.csproj" />
+    <ProjectReference Include="..\..\src\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" AdditionalProperties="$(PluginHostBuildProperties)" />
+    <ProjectReference Include="..\..\src\SyntheticEnterprise.Core\SyntheticEnterprise.Core.csproj" AdditionalProperties="$(PluginHostBuildProperties)" />
   </ItemGroup>
 
-  <Target Name="CopyPluginHostArtifacts" AfterTargets="Build">
+  <ItemGroup>
+    <Content Include="..\..\catalogs\**\*" Link="catalogs\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\packs\first-party\**\*" Link="packs\first-party\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DataGenRepositoryRoot</_Parameter1>
+      <_Parameter2>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>DataGenPluginHostArtifactsPath</_Parameter1>
+      <_Parameter2>$(PluginHostArtifactsPath)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <Target Name="RestoreIsolatedProjectReferencesForTests" BeforeTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true'">
+    <MSBuild Projects="$(CoreProjectPath)" Targets="Restore" Properties="$(PluginHostBuildProperties)" BuildInParallel="false" />
+  </Target>
+
+  <Target Name="ResolvePluginHostTargetPathForTests" BeforeTargets="CopyPluginHostArtifacts">
+    <MSBuild Projects="$(PluginHostProjectPath)" Targets="GetTargetPath" Properties="$(PluginHostBuildProperties)" BuildInParallel="false">
+      <Output TaskParameter="TargetOutputs" ItemName="PluginHostTargetPath" />
+    </MSBuild>
+  </Target>
+
+  <Target Name="CopyPluginHostArtifacts" AfterTargets="Build" DependsOnTargets="ResolvePluginHostTargetPathForTests">
     <ItemGroup>
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\..\src\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.dll" />
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\..\src\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.deps.json" />
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\..\src\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.runtimeconfig.json" />
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\..\src\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.exe" Condition="'$(OS)' == 'Windows_NT'" />
+      <PluginHostArtifact Include="@(PluginHostTargetPath)" />
+      <PluginHostArtifact Include="@(PluginHostTargetPath->'%(RootDir)%(Directory)SyntheticEnterprise.PluginHost.deps.json')" />
+      <PluginHostArtifact Include="@(PluginHostTargetPath->'%(RootDir)%(Directory)SyntheticEnterprise.PluginHost.runtimeconfig.json')" />
+      <PluginHostArtifact Include="@(PluginHostTargetPath->'%(RootDir)%(Directory)SyntheticEnterprise.PluginHost.exe')" Condition="'$(OS)' == 'Windows_NT'" />
     </ItemGroup>
+    <Error Condition="'@(PluginHostTargetPath)' == ''" Text="The isolated PluginHost build did not return a TargetPath." />
     <Copy SourceFiles="@(PluginHostArtifact)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(PluginHostArtifact.FullPath)')" />
+    <WriteLinesToFile File="$(OutDir)isolated-plugin-host-source-path.txt" Lines="@(PluginHostTargetPath)" Overwrite="true" />
   </Target>
 </Project>

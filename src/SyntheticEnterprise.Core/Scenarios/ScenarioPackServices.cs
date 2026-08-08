@@ -20,8 +20,7 @@ public sealed class FirstPartyPackPathResolver : IFirstPartyPackPathResolver
         var searchRoots = new[]
         {
             AppContext.BaseDirectory,
-            Path.GetDirectoryName(typeof(FirstPartyPackPathResolver).Assembly.Location),
-            Environment.CurrentDirectory
+            Path.GetDirectoryName(typeof(FirstPartyPackPathResolver).Assembly.Location)
         }
         .Where(path => !string.IsNullOrWhiteSpace(path))
         .Select(path => Path.GetFullPath(path!))

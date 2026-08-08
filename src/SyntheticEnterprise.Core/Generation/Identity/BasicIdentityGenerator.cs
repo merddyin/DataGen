@@ -3152,7 +3152,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private string BuildSyntheticExternalTaxIdentifier(string country, string organizationName)
     {
         var normalizedCountry = country.Trim();
-        var ordinal = Math.Abs(StringComparer.OrdinalIgnoreCase.GetHashCode(organizationName)) % 9_000_000;
+        var ordinal = StableHash.GetIndex(
+            "identity.external-organization.tax-identifier",
+            9_000_000,
+            organizationName.ToUpperInvariant());
 
         return normalizedCountry switch
         {
@@ -3521,8 +3524,18 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             }
         }
 
-        var firstSeed = Math.Abs(HashCode.Combine(ordinal, employmentType, employerName));
-        var lastSeed = Math.Abs(HashCode.Combine(ordinal, sponsor.Id, employerName));
+        var firstSeed = StableHash.GetIndex(
+            "identity.external-person.first-name",
+            firstNames.Count,
+            ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            employmentType,
+            employerName);
+        var lastSeed = StableHash.GetIndex(
+            "identity.external-person.last-name",
+            lastNames.Count,
+            ordinal.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            sponsor.Id,
+            employerName);
 
         for (var firstOffset = 0; firstOffset < firstNames.Count; firstOffset++)
         {

@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.9.3
+
+- replaced process-salted generation choices with stable hashing where those choices contribute to a seeded world, so the same supported inputs do not vary by process
+- made snapshot and normalized-export provenance portable, with canonical cross-platform artifact ordering and newline behavior and one deterministic export-manifest identity
+- added trusted-operator, unsigned deterministic-generation evidence tooling that issues two parent contracts, captures separate-run provenance, and writes a receipt only when the canonical payloads match
+- documented the boundary: declared sensitive inputs are redacted before evidence is serialized or hashed, so they are excluded from the equality proof and intentionally generated credential material can still differ
+
 ### v0.9.2
 
 - refreshed the documentation toolchain lockfile to patched transitive versions after repository security scanning identified critical, high, moderate, and low npm advisories in the Docusaurus build and development dependency graph
@@ -218,8 +225,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.9.2 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.2\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.9.3 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.3\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

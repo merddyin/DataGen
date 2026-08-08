@@ -239,7 +239,10 @@ public sealed class TemporalSimulationService : ITemporalSimulationService
 
             if (plan.TerminationDay.HasValue)
             {
-                var reason = TerminationReasons[Math.Abs(plan.Person.Id.GetHashCode()) % TerminationReasons.Length];
+                var reason = TerminationReasons[StableHash.GetIndex(
+                    "temporal.person.termination-reason",
+                    TerminationReasons.Length,
+                    plan.Person.Id)];
                 yield return new TemporalEventRecord
                 {
                     EventType = "person.terminated",

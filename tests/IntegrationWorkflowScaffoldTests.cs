@@ -16,9 +16,10 @@ public sealed class IntegrationWorkflowScaffoldTests
     [Fact]
     public void End_To_End_Workflow_Generates_Snapshot_And_Exports()
     {
-        var repoRoot = ResolveRepoRoot();
-        var scenarioPath = Path.Combine(repoRoot, "examples", "regional-manufacturer.json");
-        var catalogPath = Path.Combine(repoRoot, "catalogs");
+        IntegrationTestAssets.AssertMirrorIsValid();
+
+        var scenarioPath = IntegrationTestAssets.GetOutputPath("examples", "regional-manufacturer.json");
+        var catalogPath = IntegrationTestAssets.GetOutputPath("catalogs");
         var exportPath = Path.Combine(Path.GetTempPath(), $"datagen-export-{Guid.NewGuid():N}");
         var snapshotPath = Path.Combine(Path.GetTempPath(), $"datagen-snapshot-{Guid.NewGuid():N}.json");
 
@@ -86,6 +87,4 @@ public sealed class IntegrationWorkflowScaffoldTests
         }
     }
 
-    private static string ResolveRepoRoot()
-        => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
 }
