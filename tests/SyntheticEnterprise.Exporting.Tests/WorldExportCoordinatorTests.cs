@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
@@ -14,6 +15,90 @@ namespace SyntheticEnterprise.Exporting.Tests;
 
 public sealed class WorldExportCoordinatorTests
 {
+    [Fact]
+    public void Export_OrdersRowsOrdinallyRegardlessOfCurrentCulture()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+        var originalCulture = CultureInfo.CurrentCulture;
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+            var coordinator = new WorldExportCoordinator(
+                new CultureSensitiveEntityTableProvider(),
+                new EmptyLinkTableProvider(),
+                new JsonArtifactWriter(),
+                new ExportManifestBuilder(),
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var manifest = coordinator.Export(new { }, new ExportRequest
+            {
+                Format = ExportSerializationFormat.Json,
+                OutputPath = temp,
+                IncludeManifest = false,
+                IncludeSummary = false,
+                ExportedAtUtc = DateTimeOffset.Parse("2026-07-22T00:00:00Z")
+            });
+
+            using var document = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(manifest.OutputPath, "entities", "culture_rows.json")));
+            var values = document.RootElement.EnumerateArray()
+                .Select(row => row.GetProperty("value").GetString())
+                .ToArray();
+            Assert.Equal(new[] { "z", "\u00E4" }, values);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_BuildsManifestOnceAndPersistsItsPortableIdentity()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var manifestBuilder = new StatefulManifestBuilder();
+            var coordinator = new WorldExportCoordinator(
+                new EmptyEntityTableProvider(),
+                new EmptyLinkTableProvider(),
+                new JsonArtifactWriter(),
+                manifestBuilder,
+                new ExportSummaryBuilder(),
+                new ExportPathResolver());
+
+            var returned = coordinator.Export(new { }, new ExportRequest
+            {
+                Format = ExportSerializationFormat.Json,
+                OutputPath = temp,
+                ArtifactPrefix = "stable-export",
+                IncludeManifest = true,
+                IncludeSummary = true,
+                ExportedAtUtc = DateTimeOffset.Parse("2026-07-22T00:00:00Z")
+            });
+            var persisted = JsonSerializer.Deserialize<ExportManifestV2>(
+                File.ReadAllBytes(Path.Combine(returned.OutputPath, "manifest.json")))!;
+
+            Assert.Equal(1, manifestBuilder.CallCount);
+            Assert.Equal("stateful-1", returned.ExportId);
+            Assert.Equal(returned.ExportId, persisted.ExportId);
+            Assert.Equal(Path.Combine(Path.GetFullPath(temp), "stable-export"), returned.OutputPath);
+            Assert.Equal(".", persisted.OutputPath);
+            Assert.Equal(returned.Artifacts.Count, persisted.Artifacts.Count);
+            Assert.Equal(returned.Artifacts[0].RelativePath, persisted.Artifacts[0].RelativePath);
+            Assert.Equal(returned.Artifacts[0].Sha256, persisted.Artifacts[0].Sha256);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
     [Fact]
     public void Export_Writes_Summary_And_Returns_Manifest()
     {
@@ -1953,6 +2038,43 @@ public sealed class WorldExportCoordinatorTests
     private sealed class EmptyLinkTableProvider : ILinkTableProvider
     {
         public IReadOnlyList<object> GetDescriptors() => [];
+    }
+
+    private sealed class CultureSensitiveEntityTableProvider : IEntityTableProvider
+    {
+        public IReadOnlyList<object> GetDescriptors()
+            =>
+            [
+                new EntityTableDescriptor<string>
+                {
+                    LogicalName = "culture_rows",
+                    RelativePathStem = "entities/culture_rows",
+                    Columns = ["value"],
+                    RecordAccessor = _ => ["\u00E4", "z"],
+                    RowProjector = value => new Dictionary<string, object?> { ["value"] = value },
+                    SortKeySelector = value => value
+                }
+            ];
+    }
+
+    private sealed class StatefulManifestBuilder : IExportManifestBuilder
+    {
+        public int CallCount { get; private set; }
+
+        public ExportManifestV2 Build(ExportRequest request, IReadOnlyList<ExportArtifactDescriptor> artifacts)
+        {
+            CallCount++;
+            return new ExportManifestV2
+            {
+                ExportId = $"stateful-{CallCount}",
+                SchemaVersion = "2.0.0",
+                Format = request.Format,
+                Profile = request.Profile,
+                ExportedAtUtc = request.ExportedAtUtc,
+                OutputPath = request.OutputPath,
+                Artifacts = artifacts
+            };
+        }
     }
 
     [Fact]

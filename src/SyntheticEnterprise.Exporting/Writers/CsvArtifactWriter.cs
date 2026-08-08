@@ -23,12 +23,12 @@ public sealed class CsvArtifactWriter : IArtifactWriter
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
 
         var sb = new StringBuilder();
-        sb.AppendLine(string.Join(",", columns.Select(Escape)));
+        sb.Append(string.Join(",", columns.Select(Escape))).Append('\n');
 
         foreach (var row in rows)
         {
             var ordered = columns.Select(c => row.TryGetValue(c, out var value) ? Escape(Format(value)) : string.Empty);
-            sb.AppendLine(string.Join(",", ordered));
+            sb.Append(string.Join(",", ordered)).Append('\n');
         }
 
         var bytes = Encoding.UTF8.GetBytes(sb.ToString());
@@ -59,6 +59,7 @@ public sealed class CsvArtifactWriter : IArtifactWriter
 
     private static string Escape(string value)
     {
+        value = value.ReplaceLineEndings("\n");
         if (value.Contains('"'))
         {
             value = value.Replace("\"", "\"\"");

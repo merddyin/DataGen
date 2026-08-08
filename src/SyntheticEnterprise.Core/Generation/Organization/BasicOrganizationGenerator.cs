@@ -937,7 +937,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var issuedUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var issuedDisplayNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var departmentsById = departments.ToDictionary(department => department.Id, department => department, StringComparer.OrdinalIgnoreCase);
-        var genderOffset = Math.Abs(HashCode.Combine(company.Id)) % 2;
+        var genderOffset = StableHash.GetIndex("organization.person.gender-offset", 2, company.Id);
 
         for (var i = 0; i < companyDefinition.EmployeeCount; i++)
         {
@@ -2102,7 +2102,12 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var allLastNames = BuildScopedNamePool(primaryLastPool, curatedLastPool, fallbackLastPool);
         if (allLastNames.Count > 0)
         {
-            var lastSeed = Math.Abs(HashCode.Combine(personIndex, title, first.Name));
+            var lastSeed = StableHash.GetIndex(
+                "organization.person.last-name",
+                allLastNames.Count,
+                personIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                title,
+                first.Name);
             for (var offset = 0; offset < allLastNames.Count; offset++)
             {
                 var candidateLast = allLastNames[(lastSeed + offset) % allLastNames.Count];
@@ -2120,8 +2125,17 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             fallbackFirstPool);
         if (allFirstNames.Count > 0 && allLastNames.Count > 0)
         {
-            var firstSeed = Math.Abs(HashCode.Combine(personIndex, title));
-            var lastSeed = Math.Abs(HashCode.Combine(personIndex, title, last.Name));
+            var firstSeed = StableHash.GetIndex(
+                "organization.person.first-name",
+                allFirstNames.Count,
+                personIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                title);
+            var lastSeed = StableHash.GetIndex(
+                "organization.person.last-name",
+                allLastNames.Count,
+                personIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                title,
+                last.Name);
             for (var firstOffset = 0; firstOffset < allFirstNames.Count; firstOffset++)
             {
                 var candidateFirst = allFirstNames[(firstSeed + firstOffset) % allFirstNames.Count];

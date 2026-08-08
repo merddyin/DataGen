@@ -1656,15 +1656,19 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
     private static IPv4Pool CreateOnPremPool(string companyId)
     {
-        var hash = Math.Abs(StringComparer.OrdinalIgnoreCase.GetHashCode(companyId));
-        var secondStart = 10 + (hash % 120);
+        var secondStart = 10 + StableHash.GetIndex(
+            "infrastructure.network.on-prem-ipv4-pool",
+            120,
+            companyId.ToUpperInvariant());
         return new IPv4Pool(10, secondStart, 255);
     }
 
     private static IPv4Pool CreateCloudPool(string companyId)
     {
-        var hash = Math.Abs(StringComparer.OrdinalIgnoreCase.GetHashCode(companyId + "-cloud"));
-        var secondStart = 16 + (hash % 8);
+        var secondStart = 16 + StableHash.GetIndex(
+            "infrastructure.network.cloud-ipv4-pool",
+            8,
+            companyId.ToUpperInvariant());
         return new IPv4Pool(172, secondStart, 31);
     }
 

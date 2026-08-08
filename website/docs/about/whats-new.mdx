@@ -7,6 +7,25 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.9.3
+
+This patch makes repeatable generation evidence useful across separate processes and machines without presenting it as signed release attestation.
+
+### Highlights
+
+- **Stable seeded generation**
+  Generation choices that previously depended on process-salted hashes now use stable hashing. With the same scenario, seed, fixed times, DataGen version, source identity, and catalog content, supported generation paths no longer inherit per-process hash variation.
+- **Portable artifact provenance**
+  Snapshots and normalized exports carry portable provenance. Canonical output uses ordinal cross-platform ordering and normalized newlines, while a single deterministic export manifest represents the artifact set.
+- **Independent-run receipt tooling**
+  The new invocation-contract, wrapper, and receipt scripts preissue two parent challenges, bind each run to its inputs and tooling, then compare canonical payload inventories. The resulting receipt records whether both independently invoked candidates matched.
+- **Deliberate evidence boundary**
+  This is trusted-operator, unsigned QA evidence. It helps catch stale inputs, accidental reruns, copied candidates, and ordinary process mistakes; it does not authenticate an operator or resist a writer who can alter the evidence files. Declared sensitive arguments are redacted before serialization and hashing, so they are intentionally outside the equality claim.
+- **Guarded documentation image inputs**
+  The supported `npm run build` command scans the local website source tree and rejects symlinked paths plus ICNS, JXL, and HEIF-family extensions or signatures before it starts Docusaurus. It is a compensating control for normal builds, not an audit suppression or a defense against someone who intentionally invokes Docusaurus directly: npm continues to report the upstream advisory path until a supported patched release exists.
+
+For the complete operating pattern, see [Repeatable Lab Runs](/walkthroughs/repeatable-lab-runs).
+
 ## v0.9.2
 
 This security patch refreshes the locked documentation toolchain dependencies used to build and preview the DataGen website.

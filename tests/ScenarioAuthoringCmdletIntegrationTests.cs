@@ -352,6 +352,9 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
     [Fact]
     public void ResolveSEScenario_Maps_Bundled_Packs_Into_Resolved_Plugin_Profile()
     {
+        IntegrationTestAssets.AssertMirroredFile("packs", "first-party", "itsm", "itsm.generator.json");
+        IntegrationTestAssets.AssertMirroredFile("packs", "first-party", "itsm", "itsm.pack.ps1");
+
         using var powershell = System.Management.Automation.PowerShell.Create();
         powershell.AddCommand("Import-Module")
             .AddParameter("Name", typeof(NewSEEnterpriseWorldCommand).Assembly.Location);
@@ -383,9 +386,18 @@ public sealed class ScenarioAuthoringCmdletIntegrationTests
         var result = Assert.Single(powershell.Invoke<ScenarioDefinition>());
 
         Assert.False(powershell.HadErrors);
-        Assert.Contains(
-            result.ExternalPlugins.PluginRootPaths,
-            path => path.EndsWith(Path.Combine("packs", "first-party"), StringComparison.OrdinalIgnoreCase));
+        var expectedPackRoot = IntegrationTestAssets.GetOutputPath("packs", "first-party");
+        var resolvedPackRoot = Path.GetFullPath(Assert.Single(result.ExternalPlugins.PluginRootPaths));
+        Assert.True(IntegrationTestAssets.IsPathWithin(resolvedPackRoot, expectedPackRoot));
+        Assert.Equal(expectedPackRoot, resolvedPackRoot, ignoreCase: true);
+
+        var expectedManifestPath = IntegrationTestAssets.GetOutputPath(
+            "packs", "first-party", "itsm", "itsm.generator.json");
+        var resolvedManifestPath = Path.GetFullPath(
+            Path.Combine(resolvedPackRoot, "itsm", "itsm.generator.json"));
+        Assert.True(IntegrationTestAssets.IsPathWithin(resolvedManifestPath, expectedPackRoot));
+        Assert.Equal(expectedManifestPath, resolvedManifestPath, ignoreCase: true);
+        Assert.True(File.Exists(resolvedManifestPath));
         Assert.Contains("FirstParty.ITSM", result.ExternalPlugins.EnabledCapabilities);
         Assert.Equal("11", Assert.Single(result.ExternalPlugins.CapabilityConfigurations).Settings["TicketCount"]);
     }

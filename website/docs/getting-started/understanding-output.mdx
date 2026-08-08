@@ -20,7 +20,7 @@ This is the best form to use inside PowerShell pipelines.
 
 ## Snapshot
 
-`Save-SEEnterpriseWorld` writes a portable snapshot that can later be loaded with `Import-SEEnterpriseWorld`.
+`Save-SEEnterpriseWorld` writes a portable snapshot that can later be loaded with `Import-SEEnterpriseWorld`. In v0.9.3, the snapshot provenance is portable: it describes the generated world and supplied source context without treating the local checkout path as its identity.
 
 Use snapshots when you want:
 
@@ -37,6 +37,21 @@ Normalized export is the best choice when:
 - another tool needs files rather than a .NET object graph
 - you want deterministic tables or JSON artifacts
 - you are building a bridge or adapter for a consumer system
+
+For a repeatable export, provide a fixed `-ExportedAtUtc` value and include the manifest. v0.9.3 writes the artifact set in canonical ordinal order with normalized newlines across supported platforms. The resulting `manifest.json` is the single export identity to retain with the artifact folder; it is not a replacement for keeping the scenario, catalog, and source version that produced it.
+
+## Reproducibility prerequisites
+
+The same seed alone is not enough to make an equality claim. For two independently generated outputs, retain and use the same:
+
+- scenario content
+- seed
+- generation, snapshot, and export timestamps
+- DataGen version and source identity
+- catalog content
+- public generation arguments and export profile
+
+When those inputs are fixed, the deterministic-generation receipt tooling can compare complete payload inventories. It deliberately excludes declared sensitive inputs from its equality proof. Outputs that intentionally generate credential material can therefore differ even when the non-sensitive world and export contract are the same.
 
 ## What realism means in practice
 

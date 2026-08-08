@@ -1,6 +1,6 @@
 ---
 title: Repeatable Lab Runs
-description: Use fixed scenarios, seeds, snapshots, and normalized exports to refresh DataGen-backed labs safely.
+description: Use fixed inputs, canonical artifacts, and independent-run receipts to refresh DataGen-backed labs safely.
 ---
 
 # Repeatable Lab Runs
@@ -9,56 +9,63 @@ Use this walkthrough when you need the same synthetic enterprise more than once:
 
 The repeatable pattern is simple:
 
-1. keep the scenario JSON under source control
-2. use an explicit seed
-3. save a `.seworld` snapshot
-4. export normalized artifacts
-5. compare exports before applying changes to a downstream lab
-6. reset or apply deltas deliberately
+1. keep the scenario JSON and catalog baseline under source control
+2. use an explicit seed and fixed generation, snapshot, and export times
+3. save a `.seworld` snapshot and export normalized artifacts with one manifest
+4. use the receipt tooling when an independent equality check is needed
+5. reset or apply deltas deliberately
 
 ## Requirements
 
 - DataGen module imported
 - committed scenario JSON
-- a fixed seed value
-- a writable output root
+- the same DataGen version, source identity, catalog content, scenario content, seed, fixed times, and public arguments for both runs
+- a writable output root, plus two absent or empty candidate directories for receipt work
 - a downstream lab reset plan if you are applying the output to AD, Entra, CMDB, or another system
 
-## 1. Choose the scenario and seed
+## 1. Choose fixed inputs
 
 ```powershell
 $scenarioPath = Resolve-Path .\general-enterprise-lab.json
 $seed = 4242
+$generatedAt = [DateTimeOffset]'2026-08-07T12:00:00Z'
+$snapshotId = [Guid]'a4eebcf9-bb33-4d57-a756-612cc0e3d06d'
 $runId = "general-enterprise-$seed"
 $outputRoot = Join-Path $PWD "out\$runId"
 
 Test-SEScenario -Path $scenarioPath
 ```
 
-The scenario controls what is generated. The seed controls the deterministic choices made during generation. Changing either one should be treated as a meaningful lab change.
+The scenario controls what is generated. The seed controls deterministic choices. For a reproducibility check, fix the generation, snapshot, and export times too; a same-seed run made at a different time is a different input.
 
 ## 2. Generate, snapshot, and export
 
 ```powershell
 New-Item -ItemType Directory -Force -Path $outputRoot | Out-Null
 
-$world = New-SEEnterpriseWorld -ScenarioPath $scenarioPath -Seed $seed
+$world = New-SEEnterpriseWorld -ScenarioPath $scenarioPath -Seed $seed -GeneratedAt $generatedAt
 $world | Get-SEWorldSummary
 
 $snapshotPath = Join-Path $outputRoot "$runId.seworld"
-$exportPath = Join-Path $outputRoot "normalized"
+$exportPath = Join-Path $outputRoot 'normalized'
 
-$world | Save-SEEnterpriseWorld -Path $snapshotPath -Compress
+$world | Save-SEEnterpriseWorld `
+  -Path $snapshotPath `
+  -Compress `
+  -SavedAt $generatedAt `
+  -SnapshotId $snapshotId
+
 $world | Export-SEEnterpriseWorld `
   -OutputPath $exportPath `
   -Format Json `
   -Profile Normalized `
   -IncludeManifest `
   -IncludeSummary `
+  -ExportedAtUtc $generatedAt `
   -Overwrite
 ```
 
-Keep the snapshot when you need to inspect the same world later without regenerating it. Use the normalized export when another system needs files.
+Keep the snapshot when you need to inspect the same world later without regenerating it. The normalized export is for another system that needs files. In v0.9.3 the export uses canonical ordinal ordering and normalized newlines across supported platforms; retain its `manifest.json` as the one export identity alongside the snapshot and input record.
 
 ## 3. Prove that the snapshot round-trips
 
@@ -69,63 +76,132 @@ $imported | Get-SEWorldSummary
 
 The round-trip check catches broken snapshots before you hand the artifact to another operator or pipeline.
 
-## 4. Compare two runs
+## 4. Produce an independent-run receipt
 
-Generate a second run with the same scenario and seed, then compare the normalized artifacts.
+Use this procedure when a plain file comparison is not enough. It runs the same generation adapter twice in separate PowerShell processes, binds each run to a preissued contract, and writes one receipt outside both candidate roots.
+
+The example uses Windows paths because the tools are PowerShell 7 scripts. On Linux or macOS, set `$repoRoot` and `$workingRoot` to absolute POSIX paths; `Join-Path` keeps the remaining path construction portable. The Git and .NET executable paths must be fully qualified.
+
+```powershell
+# Windows example. The working root may exist, but candidate-a and candidate-b
+# must not already exist or must be empty.
+$repoRoot = 'G:\source\DataGen'
+$workingRoot = 'C:\Lab\DataGen-v0.9.3-evidence'
+New-Item -ItemType Directory -Force -Path $workingRoot | Out-Null
+
+$pwshPath = (Get-Command pwsh -ErrorAction Stop).Source
+$gitPath = (Get-Command git -ErrorAction Stop).Source
+$dotnetPath = (Get-Command dotnet -ErrorAction Stop).Source
+$scenarioPath = Join-Path $repoRoot 'examples\regional_manufacturer.scenario.json'
+$generationScriptPath = Join-Path $workingRoot 'generate-normalized-artifacts.ps1'
+$generatedAt = [DateTimeOffset]'2026-08-07T12:00:00Z'
+$snapshotId = [Guid]'a4eebcf9-bb33-4d57-a756-612cc0e3d06d'
+$candidateA = Join-Path $workingRoot 'candidate-a'
+$candidateB = Join-Path $workingRoot 'candidate-b'
+$contractAPath = Join-Path $workingRoot 'candidate-a.contract.json'
+$contractBPath = Join-Path $workingRoot 'candidate-b.contract.json'
+$receiptPath = Join-Path $workingRoot 'determinism-receipt.json'
+
+if ((Test-Path -LiteralPath $candidateA) -or (Test-Path -LiteralPath $candidateB)) {
+  throw 'Candidate roots must be absent or manually emptied before this evidence run.'
+}
+```
+
+The wrapper requires a generation script with four standard parameters. This adapter produces a portable snapshot and canonical normalized export in its assigned candidate root. It assumes the v0.9.3 PowerShell module is installed and discoverable by PowerShell.
+
+```powershell
+@'
+[CmdletBinding()]
+param(
+  [Parameter(Mandatory)][string]$OutputPath,
+  [Parameter(Mandatory)][string]$ScenarioPath,
+  [Parameter(Mandatory)][int]$Seed,
+  [Parameter(Mandatory)][DateTimeOffset]$GeneratedAt
+)
+
+$ErrorActionPreference = 'Stop'
+Import-Module SyntheticEnterprise.PowerShell -Force
+$snapshotId = [Guid]'a4eebcf9-bb33-4d57-a756-612cc0e3d06d'
+$world = New-SEEnterpriseWorld -ScenarioPath $ScenarioPath -Seed $Seed -GeneratedAt $GeneratedAt
+$world | Save-SEEnterpriseWorld -Path (Join-Path $OutputPath 'world.seworld') -Compress -SavedAt $GeneratedAt -SnapshotId $snapshotId
+$world | Export-SEEnterpriseWorld -OutputPath (Join-Path $OutputPath 'normalized') -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -ExportedAtUtc $GeneratedAt -CredentialExportMode Masked -Overwrite
+'@ | Set-Content -LiteralPath $generationScriptPath -Encoding utf8NoBOM
+
+$contractParameters = @{
+  ScenarioPath = $scenarioPath
+  ExpectedGenerationScriptPath = $generationScriptPath
+  Seed = 4242
+  GeneratedAt = $generatedAt
+  RepoRoot = $repoRoot
+  GitPath = $gitPath
+  DotNetPath = $dotnetPath
+}
+
+$contractA = & (Join-Path $repoRoot 'scripts\new-generation-invocation-contract.ps1') @contractParameters -ChallengeLabel candidate-1 -OutputPath $contractAPath
+$contractB = & (Join-Path $repoRoot 'scripts\new-generation-invocation-contract.ps1') @contractParameters -ChallengeLabel candidate-2 -OutputPath $contractBPath
+```
+
+Run the wrapper once per candidate. Each `pwsh` invocation is a separate process. Do not copy one candidate to make the second; the receipt checks the individual parent challenges and process identities.
+
+```powershell
+$wrapperPath = Join-Path $repoRoot 'scripts\invoke-deterministic-generation.ps1'
+
+& $pwshPath -NoProfile -File $wrapperPath -CandidatePath $candidateA -ScenarioPath $scenarioPath -Seed 4242 -GeneratedAt $generatedAt -GenerationScriptPath $generationScriptPath -InvocationContractPath $contractAPath -GitPath $gitPath -DotNetPath $dotnetPath -RepoRoot $repoRoot
+& $pwshPath -NoProfile -File $wrapperPath -CandidatePath $candidateB -ScenarioPath $scenarioPath -Seed 4242 -GeneratedAt $generatedAt -GenerationScriptPath $generationScriptPath -InvocationContractPath $contractBPath -GitPath $gitPath -DotNetPath $dotnetPath -RepoRoot $repoRoot
+
+$receipt = & (Join-Path $repoRoot 'scripts\new-determinism-receipt.ps1') `
+  -CandidatePath $candidateA, $candidateB `
+  -ScenarioPath $scenarioPath `
+  -Seed 4242 `
+  -GeneratedAt $generatedAt `
+  -OutputPath $receiptPath `
+  -ExpectedGenerationScriptPath $generationScriptPath `
+  -ExpectedInvocationInputDigest $contractA.expected.invocation.argumentDigestSha256 `
+  -ExpectedInvocationContractPath $contractAPath, $contractBPath `
+  -GitPath $gitPath `
+  -DotNetPath $dotnetPath `
+  -RepoRoot $repoRoot `
+  -FailOnMismatch
+
+$receipt.passed
+Get-Content -LiteralPath $receiptPath -Raw
+```
+
+`$receipt.passed` is `True` only when both payload inventories have the same canonical hash, file count, and byte count. The receipt uses `candidate-1` and `candidate-2` labels and relative artifact paths, so it can travel without exposing either candidate's absolute root.
+
+### Sensitive inputs and the trust boundary
+
+The receipt is trusted-operator, unsigned QA evidence. It detects an accidental rerun, changed scenario or public argument, stale source/runtime/tool identity, copied candidate, and payload change. It does not authenticate the operator or provide cryptographic tamper attestation; someone with write access can alter public contracts, sidecars, and receipts.
+
+For an adapter with a secret-bearing option, declare the option on all three tools. For example, an adapter that accepts `-BootstrapPassword` would pass `-GenerationArgumentList @('-BootstrapPassword', $env:DATAGEN_BOOTSTRAP_PASSWORD)` and `-SensitiveGenerationArgumentName BootstrapPassword` when issuing each contract and invoking each wrapper. When creating the receipt, pass the same values as `-ExpectedGenerationArgumentList @('-BootstrapPassword', $env:DATAGEN_BOOTSTRAP_PASSWORD)` and `-SensitiveGenerationArgumentName BootstrapPassword`. The value is replaced before the contract, sidecar, and receipt are serialized or hashed.
+
+That redaction is intentional: sensitive inputs are excluded from the equality proof. Keep generated passwords, access tokens, and similar material out of deterministic fixture comparisons. Final artifacts can differ when credential material is intentionally generated, even with the same scenario, seed, fixed times, DataGen version, source, and catalog.
+
+## 5. Compare two runs without a receipt
+
+For an informal comparison, generate a second run with the same fixed inputs and compare the normalized artifacts.
 
 ```powershell
 $runA = Resolve-Path .\out\general-enterprise-4242\normalized
 $runB = Resolve-Path .\out\general-enterprise-4242-rerun\normalized
 
-$filesA = Get-ChildItem $runA -Recurse -File |
-  ForEach-Object {
-    [pscustomobject]@{
-      RelativePath = $_.FullName.Substring($runA.Path.Length).TrimStart('\')
-      Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-    }
+$filesA = Get-ChildItem $runA -Recurse -File | ForEach-Object {
+  [pscustomobject]@{
+    RelativePath = $_.FullName.Substring($runA.Path.Length).TrimStart('\')
+    Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
   }
-
-$filesB = Get-ChildItem $runB -Recurse -File |
-  ForEach-Object {
-    [pscustomobject]@{
-      RelativePath = $_.FullName.Substring($runB.Path.Length).TrimStart('\')
-      Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-    }
+}
+$filesB = Get-ChildItem $runB -Recurse -File | ForEach-Object {
+  [pscustomobject]@{
+    RelativePath = $_.FullName.Substring($runB.Path.Length).TrimStart('\')
+    Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
   }
+}
 
 Compare-Object $filesA $filesB -Property RelativePath, Hash
 ```
 
-An empty comparison means the exported files match. If the comparison shows differences, check whether the scenario changed, the seed changed, the DataGen version changed, or the export profile changed.
-
-## 5. Know what may intentionally differ
-
-Most normalized lab data should be stable for the same scenario, seed, DataGen version, and catalog content. Credential material is the common exception. If you export generated passwords or rotate credentials during population, treat those values as lab secrets rather than deterministic fixture data.
-
-For CI or demo validation, compare the files that matter to the workflow instead of relying on a single whole-folder verdict. For example:
-
-```powershell
-$importantArtifacts = @(
-  'entities\accounts.json',
-  'entities\groups.json',
-  'entities\organizational_units.json',
-  'links\group_memberships.json',
-  'entities\applications.json',
-  'entities\configuration_items.json'
-)
-
-foreach ($artifact in $importantArtifacts) {
-  $left = Join-Path $runA $artifact
-  $right = Join-Path $runB $artifact
-
-  [pscustomobject]@{
-    Artifact = $artifact
-    LeftHash = (Get-FileHash $left -Algorithm SHA256).Hash
-    RightHash = (Get-FileHash $right -Algorithm SHA256).Hash
-    Matches = (Get-FileHash $left -Algorithm SHA256).Hash -eq (Get-FileHash $right -Algorithm SHA256).Hash
-  }
-}
-```
+An empty comparison means the selected files match. If there are differences, first check the scenario, seed, fixed times, DataGen version, source, catalog, public arguments, export profile, and credential mode.
 
 ## 6. Refresh a populated lab
 
@@ -135,12 +211,13 @@ Pick a refresh strategy before applying new output:
 - **Compare and approve:** compare the old and new exports, review changed entities and memberships, then apply only the approved changes.
 - **Snapshot freeze:** keep the `.seworld` file as the demo fixture and export from that snapshot whenever you need fresh files.
 
-For AD and Entra labs, reset-and-replay is usually the cleanest pattern. It avoids accidentally accumulating stale accounts, duplicate groups, and old memberships that no longer reflect the generated world.
+For AD and Entra labs, reset-and-replay is usually the cleanest pattern. It avoids accumulating stale accounts, duplicate groups, and old memberships that no longer reflect the generated world.
 
 ## 7. Re-export from a frozen snapshot
 
 ```powershell
 $world = Import-SEEnterpriseWorld -Path .\out\general-enterprise-4242\general-enterprise-4242.seworld
+$exportedAt = [DateTimeOffset]'2026-08-07T12:00:00Z'
 
 $world | Export-SEEnterpriseWorld `
   -OutputPath .\out\general-enterprise-4242\normalized-refresh `
@@ -148,33 +225,22 @@ $world | Export-SEEnterpriseWorld `
   -Profile Normalized `
   -IncludeManifest `
   -IncludeSummary `
+  -ExportedAtUtc $exportedAt `
   -Overwrite
 ```
 
 This is useful when the downstream adapter wants a clean export folder but the world itself should not change.
 
-## 8. Use selective regeneration deliberately
+## 8. Automate the repeatable run
 
-DataGen includes layer-level regeneration commands for workflows where you want to refresh only part of the world. Use them when the test explicitly needs a controlled change, such as identity churn or new infrastructure, and then compare the export before applying it.
+Make scenario path, seed, timestamps, catalog identity, and output root explicit parameters. A good automation run records:
 
-```powershell
-# Example shape. Pick the layer that matches the lab question.
-$world | Add-SEIdentityLayer
-$world | Export-SEEnterpriseWorld -OutputPath .\out\identity-refresh\normalized -Format Json -Profile Normalized -IncludeManifest -IncludeSummary -Overwrite
-```
-
-Selective regeneration is powerful, but it changes the lab story. Record the reason for the refresh and keep the previous export long enough to explain the delta.
-
-## 9. Automate the repeatable run
-
-Wrap the pattern in a script and make scenario path, seed, and output root explicit parameters. A good automation run prints:
-
-- scenario path
-- seed
-- DataGen version
+- scenario path and hash
+- seed and fixed timestamps
+- DataGen version, source identity, and catalog identity
 - snapshot path
-- normalized export path
-- world summary
-- comparison result when a baseline is supplied
+- normalized export and manifest paths
+- receipt path and result when independent evidence is required
+- world summary and any approved delta
 
 That gives the next operator enough evidence to know whether they are looking at the intended lab state.
