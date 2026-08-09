@@ -7,6 +7,21 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.9.4
+
+This patch corrects the opt-in representative relationship facts introduced for enterprise discovery and integration testing. Generated history now points to real same-company entities and follows the application topology already present in the world.
+
+### Highlights
+
+- **Graph-backed application placement**
+  `InstalledOn` history starts from a real application, follows one of its generated services to a server host, and requires software inventory on that server. Active and removed observations use the same truthful application/server pair.
+- **Ownership without invention**
+  A missing owner no longer suppresses valid application/server history. DataGen emits `Owns` observations only when it can select a real same-company person from the application's owning department; otherwise ownership remains absent rather than being fabricated.
+- **Exact opt-in behavior**
+  Representative relationship history follows the same switch and count as representative management observations. Disabling the feature or setting `infrastructure.representativeManagementObservationCount` to `0` produces neither surface.
+- **Stable consumer boundary**
+  The public models and normalized export schema are unchanged. Existing adapters still translate product-neutral DataGen facts, but datasets generated with representative management observations should be regenerated when adopting v0.9.4 so they no longer contain the invalid v0.9.3 relationship references.
+
 ## v0.9.3
 
 This patch makes repeatable generation evidence useful across separate processes and machines without presenting it as signed release attestation.

@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.9.4
+
+- corrected opt-in representative relationship history so `Application` references resolve to real same-company application records and `InstalledOn` evidence follows generated application-service hosting to a server with software inventory
+- added deterministic active and removed `InstalledOn` history without requiring an owner, while emitting active and removed `Owns` history only when a real person in the application's owning department exists
+- preserved scenario boundaries: disabled representative observations and an explicit observation count of zero now produce no representative management or relationship-history facts
+- retained the product-neutral public contracts and normalized export schema; consumers can continue translating generic enterprise facts without DataGen carrying downstream identifiers or logic
+
 ### v0.9.3
 
 - replaced process-salted generation choices with stable hashing where those choices contribute to a seeded world, so the same supported inputs do not vary by process
@@ -225,8 +232,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.9.3 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.3\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.9.4 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.4\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
