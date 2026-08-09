@@ -3,6 +3,7 @@ namespace SyntheticEnterprise.Core.Generation.Applications;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Generation.Infrastructure;
 
 public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGenerator
 {
@@ -82,6 +83,19 @@ public sealed class BasicApplicationTopologyGenerator : IApplicationTopologyGene
                     ?? integration
                     ?? worker
                     ?? createdServices.First();
+            }
+
+            if (context.Scenario.Infrastructure is
+                {
+                    IncludeRepresentativeManagementObservations: true,
+                    RepresentativeManagementObservationCount: > 0,
+                })
+            {
+                RepresentativeManagementObservationGenerator.AddRepresentativeHistory(
+                    world,
+                    company,
+                    context.GeneratedAt,
+                    _idFactory);
             }
 
             foreach (var dependency in world.ApplicationDependencies.Where(item => item.CompanyId == company.Id).ToList())
