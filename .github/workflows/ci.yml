@@ -52,15 +52,38 @@ jobs:
       - name: Run solution tests
         run: dotnet test .\DataGen.slnx -v minimal /p:UseSharedCompilation=false -m:1 --no-restore
 
+      - name: Resolve package version
+        shell: pwsh
+        run: |
+          [xml]$props = Get-Content -LiteralPath 'Directory.Build.props' -Raw
+          $versionNode = $props.SelectSingleNode('/Project/PropertyGroup/Version')
+          if ($null -eq $versionNode) {
+            throw "Directory.Build.props does not define an authoritative Version."
+          }
+          $version = $versionNode.InnerText.Trim()
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "Directory.Build.props Version '$version' is not a valid package version."
+          }
+          "DATAGEN_PACKAGE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Package PowerShell module
         shell: pwsh
-        run: .\scripts\package-module.ps1 -Version 0.1.${{ github.run_number }} -Configuration Release
+        run: .\scripts\package-module.ps1 -Version $env:DATAGEN_PACKAGE_VERSION -Configuration Release
+
+      - name: Verify module package artifact
+        shell: pwsh
+        run: |
+          $packagePath = Join-Path 'artifacts/module' "SyntheticEnterprise.PowerShell-$env:DATAGEN_PACKAGE_VERSION.zip"
+          if (-not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
+            throw "Expected module package '$packagePath' was not created."
+          }
 
       - name: Upload module package artifact
         uses: actions/upload-artifact@v6
         with:
           name: SyntheticEnterprise.PowerShell-ci-package
           path: artifacts/module/**
+          if-no-files-found: error
 
       - name: Upload seeded catalog artifact
         uses: actions/upload-artifact@v6

@@ -257,6 +257,234 @@ function Assert-ReleaseWorkflowVersionContract {
     }
 }
 
+function Assert-CiWorkflowPackageVersionContract {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot
+    )
+
+    $workflowPath = Join-Path $RepositoryRoot '.github\workflows\ci.yml'
+    $workflow = Get-Content -LiteralPath $workflowPath -Raw
+
+    $resolveStepMatch = [regex]::Match(
+        $workflow,
+        '(?ms)^      - name: Resolve package version\r?\n(?<step>.*?)(?=^      - name: )'
+    )
+    if (-not $resolveStepMatch.Success) {
+        throw "CI workflow contract could not locate the 'Resolve package version' step in '$workflowPath'."
+    }
+
+    $resolveStep = $resolveStepMatch.Groups['step'].Value
+    $runMatch = [regex]::Match($resolveStep, '(?ms)^        run: \|\r?\n(?<run>.*)$')
+    if (-not $runMatch.Success) {
+        throw "CI workflow contract could not locate the PowerShell run block in '$workflowPath'."
+    }
+
+    $runSource = $runMatch.Groups['run'].Value
+    if ($runSource -match '\$\{\{') {
+        throw 'CI workflow contract forbids direct GitHub expression interpolation in the package-version PowerShell run block.'
+    }
+    if ($resolveStep -match '(?i)(github\.run_number|GITHUB_RUN_NUMBER)') {
+        throw 'CI workflow contract forbids a run-number source in the package-version resolution step.'
+    }
+    foreach ($requiredSourceMarker in @(
+        "Get-Content -LiteralPath 'Directory.Build.props' -Raw",
+        "SelectSingleNode('/Project/PropertyGroup/Version')",
+        '$env:GITHUB_ENV',
+        'DATAGEN_PACKAGE_VERSION='
+    )) {
+        if (-not $runSource.Contains($requiredSourceMarker, [StringComparison]::Ordinal)) {
+            throw "CI workflow contract requires '$requiredSourceMarker' in the package-version run block."
+        }
+    }
+    if ($runSource -notmatch '\$version\s+-notmatch\s+') {
+        throw 'CI workflow contract requires numeric version validation before the package step.'
+    }
+
+    $resolveExecutableLines = @($runSource -split '\r?\n' |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#', [StringComparison]::Ordinal) })
+    $versionAssignments = @($resolveExecutableLines | Where-Object { $_ -match '^\$version\s*=' })
+    if ($versionAssignments.Count -ne 1 -or $versionAssignments[0] -notmatch '^\$version\s*=\s*\$versionNode\.InnerText\.Trim\(\)\s*$') {
+        throw 'CI workflow contract requires a single authoritative version assignment derived from Directory.Build.props.'
+    }
+    if (-not ($resolveExecutableLines | Where-Object { $_ -match '^"DATAGEN_PACKAGE_VERSION=\$version"\s*\|\s*Out-File\s+-FilePath\s+\$env:GITHUB_ENV\b' })) {
+        throw 'CI workflow contract requires DATAGEN_PACKAGE_VERSION to be exported directly from the authoritative version value.'
+    }
+
+    $packageStepMatch = [regex]::Match(
+        $workflow,
+        '(?ms)^      - name: Package PowerShell module\r?\n(?<step>.*?)(?=^      - name: )'
+    )
+    if (-not $packageStepMatch.Success) {
+        throw "CI workflow contract could not locate the 'Package PowerShell module' step in '$workflowPath'."
+    }
+
+    $packageStep = $packageStepMatch.Groups['step'].Value
+    if ($packageStep -match '\$\{\{') {
+        throw 'CI workflow contract forbids direct GitHub expression interpolation in the package PowerShell run block.'
+    }
+    if ($packageStep -match '(?i)(github\.run_number|GITHUB_RUN_NUMBER)') {
+        throw 'CI workflow contract forbids a run-number source in the package step.'
+    }
+
+    $packageScalarRunMatch = [regex]::Match($packageStep, '(?m)^        run:[ \t]+(?<run>[^|\r\n][^\r\n]*)$')
+    $packageBlockRunMatch = [regex]::Match($packageStep, '(?ms)^        run:[ \t]*\|[ \t]*\r?\n(?<run>.*)$')
+    if ($packageScalarRunMatch.Success) {
+        $packageRunSource = $packageScalarRunMatch.Groups['run'].Value
+    }
+    elseif ($packageBlockRunMatch.Success) {
+        $packageRunSource = $packageBlockRunMatch.Groups['run'].Value
+    }
+    else {
+        throw "CI workflow contract could not parse the package step run value in '$workflowPath'."
+    }
+
+    $packageExecutableLines = @($packageRunSource -split '\r?\n' |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and -not $_.StartsWith('#', [StringComparison]::Ordinal) })
+    $directPackageCommands = @($packageExecutableLines | Where-Object {
+        $_ -match '^\.\\scripts\\package-module\.ps1\s+-Version\s+\$env:DATAGEN_PACKAGE_VERSION\s+-Configuration\s+Release$'
+    })
+    if ($directPackageCommands.Count -ne 1) {
+        throw 'CI workflow contract requires one direct executable package command using DATAGEN_PACKAGE_VERSION.'
+    }
+
+    $verifyStepMatch = [regex]::Match(
+        $workflow,
+        '(?ms)^      - name: Verify module package artifact\r?\n(?<step>.*?)(?=^      - name: )'
+    )
+    if (-not $verifyStepMatch.Success) {
+        throw "CI workflow contract could not locate the 'Verify module package artifact' step in '$workflowPath'."
+    }
+    $verifyStep = $verifyStepMatch.Groups['step'].Value
+    $verifyRunMatch = [regex]::Match($verifyStep, '(?ms)^        run: \|\r?\n(?<run>.*)$')
+    if (-not $verifyRunMatch.Success) {
+        throw "CI workflow contract could not locate the artifact-verification PowerShell run block in '$workflowPath'."
+    }
+    $verifyRunSource = $verifyRunMatch.Groups['run'].Value
+    if ($verifyRunSource -match '\$\{\{') {
+        throw 'CI workflow contract forbids direct GitHub expression interpolation in the artifact-verification PowerShell run block.'
+    }
+    if ($verifyRunSource -notmatch '(?m)^\s*\$packagePath\s*=\s*Join-Path\s+''artifacts/module''\s+"SyntheticEnterprise\.PowerShell-\$env:DATAGEN_PACKAGE_VERSION\.zip"\s*$') {
+        throw 'CI workflow contract requires the expected package archive path to derive from DATAGEN_PACKAGE_VERSION.'
+    }
+    if ($verifyRunSource -notmatch '(?m)^\s*if\s*\(\s*-not\s*\(\s*Test-Path\s+-LiteralPath\s+\$packagePath\s+-PathType\s+Leaf\s*\)\s*\)\s*\{\s*$') {
+        throw 'CI workflow contract requires an explicit package-file existence check before upload.'
+    }
+
+    $uploadStepMatch = [regex]::Match(
+        $workflow,
+        '(?ms)^      - name: Upload module package artifact\r?\n(?<step>.*?)(?=^      - name: )'
+    )
+    if (-not $uploadStepMatch.Success) {
+        throw "CI workflow contract could not locate the 'Upload module package artifact' step in '$workflowPath'."
+    }
+    if ($uploadStepMatch.Groups['step'].Value -notmatch '(?m)^          if-no-files-found:\s*error\s*$') {
+        throw 'CI workflow contract requires module artifact upload to fail when no files are found.'
+    }
+
+    if (-not ($resolveStepMatch.Index -lt $packageStepMatch.Index -and
+        $packageStepMatch.Index -lt $verifyStepMatch.Index -and
+        $verifyStepMatch.Index -lt $uploadStepMatch.Index)) {
+        throw 'CI workflow contract requires version resolution, packaging, file verification, and upload in that order.'
+    }
+}
+
+function Assert-CiWorkflowPackageVersionMutationContract {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string]$ContractOutputRoot
+    )
+
+    $workflowPath = Join-Path $RepositoryRoot '.github\workflows\ci.yml'
+    $workflow = Get-Content -LiteralPath $workflowPath -Raw
+    $newline = if ($workflow.Contains("`r`n", [StringComparison]::Ordinal)) { "`r`n" } else { "`n" }
+
+    $resolveStepAnchor = "      - name: Resolve package version${newline}        shell: pwsh${newline}"
+    $derivedVersionAnchor = '          $version = $versionNode.InnerText.Trim()' + $newline
+    $packageCommandAnchor = '        run: .\scripts\package-module.ps1 -Version $env:DATAGEN_PACKAGE_VERSION -Configuration Release'
+    foreach ($anchor in @($resolveStepAnchor, $derivedVersionAnchor, $packageCommandAnchor)) {
+        if (-not $workflow.Contains($anchor, [StringComparison]::Ordinal)) {
+            throw "CI workflow mutation contract could not locate fixture anchor '$anchor'."
+        }
+    }
+
+    $runNumberEnvironment = @(
+        '        env:',
+        '          CI_RUN_NUMBER: ${{ github.run_number }}'
+    ) -join $newline
+    $runNumberWorkflow = $workflow.Replace(
+        $resolveStepAnchor,
+        $resolveStepAnchor + $runNumberEnvironment + $newline,
+        [StringComparison]::Ordinal
+    ).Replace(
+        $derivedVersionAnchor,
+        $derivedVersionAnchor + '          $version = "0.1.$env:CI_RUN_NUMBER"' + $newline,
+        [StringComparison]::Ordinal
+    )
+
+    $literalOverrideWorkflow = $workflow.Replace(
+        $derivedVersionAnchor,
+        $derivedVersionAnchor + "          `$version = '9.9.9'" + $newline,
+        [StringComparison]::Ordinal
+    )
+
+    $commentedCommandWorkflow = $workflow.Replace(
+        $packageCommandAnchor,
+        @(
+            '        run: |',
+            '          # .\scripts\package-module.ps1 -Version $env:DATAGEN_PACKAGE_VERSION -Configuration Release',
+            "          Write-Host 'package deliberately skipped'"
+        ) -join $newline,
+        [StringComparison]::Ordinal
+    )
+
+    $mutations = @(
+        [pscustomobject]@{
+            Name = 'synthetic-run-number-version'
+            Workflow = $runNumberWorkflow
+            ExpectedRejection = '*run-number*'
+        },
+        [pscustomobject]@{
+            Name = 'hard-coded-literal-version-override'
+            Workflow = $literalOverrideWorkflow
+            ExpectedRejection = '*single authoritative version assignment*'
+        },
+        [pscustomobject]@{
+            Name = 'commented-package-command'
+            Workflow = $commentedCommandWorkflow
+            ExpectedRejection = '*direct executable package command*'
+        }
+    )
+
+    $mutationRoot = Join-Path $ContractOutputRoot 'ci-workflow-version-mutations'
+    $failures = [Collections.Generic.List[string]]::new()
+    foreach ($mutation in $mutations) {
+        $probeRoot = Join-Path $mutationRoot $mutation.Name
+        $probeWorkflowRoot = Join-Path $probeRoot '.github\workflows'
+        New-Item -ItemType Directory -Path $probeWorkflowRoot -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $probeWorkflowRoot 'ci.yml') -Value $mutation.Workflow -Encoding utf8 -NoNewline
+
+        try {
+            Assert-CiWorkflowPackageVersionContract -RepositoryRoot $probeRoot
+            $failures.Add("CI workflow contract accepted prohibited mutation '$($mutation.Name)'.")
+        }
+        catch {
+            if ($_.Exception.Message -notlike $mutation.ExpectedRejection) {
+                $failures.Add("CI workflow mutation '$($mutation.Name)' was rejected for the wrong reason: $($_.Exception.Message)")
+            }
+        }
+    }
+
+    if ($failures.Count -gt 0) {
+        throw ($failures -join [Environment]::NewLine)
+    }
+}
+
 function Assert-ReleaseVersionContract {
     param(
         [Parameter(Mandatory)]
@@ -299,6 +527,8 @@ function Assert-ReleaseVersionContract {
     }
 
     Assert-ReleaseWorkflowVersionContract -RepositoryRoot $RepositoryRoot -ContractOutputRoot $outputRoot
+    Assert-CiWorkflowPackageVersionContract -RepositoryRoot $RepositoryRoot
+    Assert-CiWorkflowPackageVersionMutationContract -RepositoryRoot $RepositoryRoot -ContractOutputRoot $outputRoot
 }
 
 function Assert-NoDebugSymbolArtifacts {
