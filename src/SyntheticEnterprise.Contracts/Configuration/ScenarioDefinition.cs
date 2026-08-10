@@ -101,7 +101,13 @@ public record InfrastructureProfile
     public bool IncludeNetworkAssets { get; init; } = true;
     public bool IncludeTelephony { get; init; } = true;
     public bool IncludeRepresentativeManagementObservations { get; init; }
+    /// <summary>Maximum current management observations emitted per company.</summary>
     public int RepresentativeManagementObservationCount { get; init; } = 15;
+    /// <summary>
+    /// Maximum historical management observations emitted per company in addition to
+    /// <see cref="RepresentativeManagementObservationCount"/>. Zero disables history.
+    /// </summary>
+    public int RepresentativeManagementHistoryObservationCount { get; init; } = 1;
     public int HostedComputeObservationPercentage { get; init; } = 20;
 }
 

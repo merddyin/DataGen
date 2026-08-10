@@ -7,6 +7,25 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.10.0
+
+This release makes representative endpoint-management observations useful for lifecycle and correction workflows without turning DataGen into a provider-specific connector. It adds a small, bounded history surface to the existing opt-in observations and gives downstream consumers the fields needed to distinguish a current fact from the older fact it replaces.
+
+### What changed
+
+- **Provider-neutral lifecycle history**
+  Endpoint-management observations remain generic enterprise facts. They retain a management-provider value for realism, but do not introduce a vendor product, tenant, or consumer-specific status model. A current row has `lifecycle_state` `Current`; an earlier row has `Historical`.
+- **Explicit currentness and supersession**
+  The normalized `endpoint_management_observations` table now includes `lifecycle_state`, `is_current`, and `superseded_by_observation_id`. Historical rows set `is_current` to `false` and point to the current observation that governs them. Current rows set `is_current` to `true` and leave the supersession field empty. Use these fields instead of inferring lifecycle from a stale check-in, reachability, or capability value.
+- **A separately bounded history budget**
+  `infrastructure.representativeManagementHistoryObservationCount` controls history independently of `representativeManagementObservationCount`. It is an additional per-company limit, not a multiplier of the current-observation count. Set it to `0` when a scenario needs only current facts; leaving representative observations disabled still emits neither current nor historical management observations.
+- **Deterministic chronology**
+  For the same scenario, seed, and generated timestamp, the selected current observations and their historical predecessors are stable. Each historical observation is dated before its successor and has an earlier last check-in. Consumers should order a history view by `observed_at_utc` and then `id`; they should not rely on the physical row order of an export file.
+- **Compatible adoption path**
+  The public model defaults remain current-only, and the three normalized columns are additive. Existing current-state adapters can initially filter on `is_current = true`; history-aware adapters can retain every row and follow `superseded_by_observation_id`. Accept missing or unfamiliar lifecycle values conservatively when reading exports from an older DataGen release, and keep provider-specific interpretation in the consumer adapter.
+
+For the normalized table and processing guidance, see [Normalized Export](/integrations/normalized-export).
+
 ## v0.9.4
 
 This patch corrects the opt-in representative relationship facts introduced for enterprise discovery and integration testing. Generated history now points to real same-company entities and follows the application topology already present in the world.

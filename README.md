@@ -4,6 +4,15 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.10.0
+
+- added provider-neutral management-observation history for representative endpoint-management facts, with explicit `Current` and `Historical` lifecycle states rather than inferring age from health or check-in fields
+- added `is_current` and `superseded_by_observation_id` so a historical record identifies its governing current observation without encoding a downstream provider, tenant, or product model
+- separated `infrastructure.representativeManagementHistoryObservationCount` from the current-observation count; the history budget is additive, bounded per company, and `0` disables historical rows
+- extended the normalized `endpoint_management_observations` export with `lifecycle_state`, `is_current`, and `superseded_by_observation_id`; consumers can retain their current-only behavior by filtering `is_current = true`
+- made history chronology deterministic for a fixed scenario, seed, and generated time: historical observations precede their current successor and retain an earlier last check-in
+- preserved compatibility for existing consumers: public defaults still describe current observations, the new normalized columns are additive, and adapters should treat unknown or missing lifecycle fields conservatively while they adopt history-aware processing
+
 ### v0.9.4
 
 - corrected opt-in representative relationship history so `Application` references resolve to real same-company application records and `InstalledOn` evidence follows generated application-service hosting to a server with software inventory
@@ -239,8 +248,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.9.4 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.4\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.10.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.10.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

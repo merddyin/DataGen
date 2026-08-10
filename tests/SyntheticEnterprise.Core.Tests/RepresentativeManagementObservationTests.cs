@@ -210,6 +210,16 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
+    public void EndpointManagementObservation_DefaultsExistingConstructedRowsToCurrent()
+    {
+        var observation = new EndpointManagementObservation();
+
+        Assert.Equal("Current", observation.LifecycleState);
+        Assert.True(observation.IsCurrent);
+        Assert.Null(observation.SupersededByObservationId);
+    }
+
+    [Fact]
     public void WorldGenerator_DoesNotAddRepresentativeManagementFacts_WithoutOptIn()
     {
         var result = Generate(includeRepresentativeFacts: false);
@@ -299,6 +309,256 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
+    public void WorldGenerator_ProducesOrderedNeutralCorrectionHistory()
+    {
+        var world = Generate(includeRepresentativeFacts: true).World;
+
+        Assert.Equal(
+            world.RelationshipHistoryObservations.Count,
+            world.RelationshipHistoryObservations.Select(observation => observation.Id).Distinct(StringComparer.Ordinal).Count());
+        var relationshipGroups = world.RelationshipHistoryObservations
+            .GroupBy(observation => new
+            {
+                observation.CompanyId,
+                observation.RelationshipType,
+                observation.FromEntityType,
+                observation.FromEntityId,
+                observation.ToEntityType,
+                observation.ToEntityId,
+                observation.SourceSystem,
+            })
+            .ToArray();
+        Assert.NotEmpty(relationshipGroups);
+        Assert.All(relationshipGroups, group =>
+        {
+            var history = group.OrderBy(observation => observation.ObservedAtUtc).ToArray();
+            var removedRelationship = Assert.Single(history, observation => observation.LifecycleState == "Removed");
+            var restoredRelationship = Assert.Single(history, observation => observation.LifecycleState == "Active");
+            Assert.True(removedRelationship.ObservedAtUtc < removedRelationship.RemovedAtUtc);
+            Assert.True(removedRelationship.RemovedAtUtc < restoredRelationship.ObservedAtUtc);
+            Assert.Null(restoredRelationship.RemovedAtUtc);
+            Assert.Same(restoredRelationship, history[^1]);
+        });
+
+        Assert.Equal(
+            world.ManagementObservations.Count,
+            world.ManagementObservations.Select(observation => observation.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(15, world.ManagementObservations.Count(observation => observation.IsCurrent));
+        var managementHistoryGroups = GetManagementHistoryGroups(world);
+        var managementHistory = Assert.Single(managementHistoryGroups);
+        AssertManagementHistory(managementHistory, expectedHistoryCount: 1);
+    }
+
+    [Fact]
+    public void WorldGenerator_ReplaysTemporalCorrectionsForSameSeedAndVariesThemForDifferentSeeds()
+    {
+        var firstWorld = Generate(includeRepresentativeFacts: true, seed: 1130).World;
+        var replayWorld = Generate(includeRepresentativeFacts: true, seed: 1130).World;
+        var first = ProjectTemporalCorrections(firstWorld);
+        var replay = ProjectTemporalCorrections(replayWorld);
+
+        Assert.Equal(first.Relationships, replay.Relationships);
+        Assert.Equal(first.Management, replay.Management);
+        Assert.All(GetManagementHistoryGroups(firstWorld), history => AssertManagementHistory(history, expectedHistoryCount: 1));
+
+        var variations = new[] { 1130, 2210, 3901 }
+            .Select(seed => Generate(includeRepresentativeFacts: true, seed: seed).World)
+            .Select(world =>
+            {
+                var history = Assert.Single(GetManagementHistoryGroups(world));
+                AssertManagementHistory(history, expectedHistoryCount: 1);
+                var historical = Assert.Single(history, observation => !observation.IsCurrent);
+                var current = Assert.Single(history, observation => observation.IsCurrent);
+                return $"{(current.ObservedAtUtc - historical.ObservedAtUtc).Ticks}|{(historical.ObservedAtUtc - historical.LastCheckInAtUtc!.Value).Ticks}";
+            })
+            .ToArray();
+        Assert.True(variations.Distinct(StringComparer.Ordinal).Count() > 1);
+        Assert.All(first.Management, observation =>
+        {
+            Assert.DoesNotContain("cartograph", observation, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("review queue", observation, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public void WorldGenerator_CountOneIncludesOneCurrentAndOneBudgetedHistoricalObservation()
+    {
+        var world = Generate(
+            includeRepresentativeFacts: true,
+            representativeObservationCount: 1,
+            representativeHistoryObservationCount: 1).World;
+
+        Assert.Equal(2, world.ManagementObservations.Count);
+        Assert.Single(world.ManagementObservations, observation => observation.IsCurrent);
+        Assert.Single(world.ManagementObservations, observation => !observation.IsCurrent);
+        var current = Assert.Single(world.ManagementObservations, observation => observation.IsCurrent);
+        Assert.Equal(TimeSpan.FromDays(1), current.ObservedAtUtc - current.LastCheckInAtUtc!.Value);
+        var history = Assert.Single(GetManagementHistoryGroups(world));
+        AssertManagementHistory(history, expectedHistoryCount: 1);
+    }
+
+    [Fact]
+    public void Apply_CountOneAtDateTimeOffsetMinimum_DoesNotThrowAndPreservesValidHistoryBoundary()
+    {
+        var world = new SyntheticEnterpriseWorld();
+        var company = new Company { Id = "CO-001", Name = "Boundary-safe management" };
+        world.Companies.Add(company);
+        world.Servers.Add(new ServerAsset
+        {
+            Id = "SRV-001",
+            CompanyId = company.Id,
+            Hostname = "boundary-safe-01",
+            OperatingSystem = "Windows Server",
+        });
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition { Name = "Boundary-safe management" },
+                Seed = 1130,
+                GeneratedAt = DateTimeOffset.MinValue,
+            },
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                IncludeServers = true,
+                IncludeWorkstations = false,
+                IncludeNetworkAssets = false,
+                IncludeTelephony = false,
+                RepresentativeManagementObservationCount = 1,
+                RepresentativeManagementHistoryObservationCount = 1,
+            });
+
+        Assert.Equal(1, world.ManagementObservations.Count(observation => observation.IsCurrent));
+        var history = world.ManagementObservations
+            .OrderBy(observation => observation.ObservedAtUtc)
+            .ToArray();
+        Assert.InRange(history.Length, 1, 2);
+
+        if (history.Length == 2)
+        {
+            var historical = Assert.Single(history, observation => !observation.IsCurrent);
+            var current = Assert.Single(history, observation => observation.IsCurrent);
+            Assert.True(historical.LastCheckInAtUtc < historical.ObservedAtUtc);
+            Assert.True(historical.ObservedAtUtc < current.ObservedAtUtc);
+        }
+        else
+        {
+            Assert.Single(history, observation => observation.IsCurrent);
+        }
+    }
+
+    [Fact]
+    public void WorldGenerator_DefaultHistoryBudgetDemonstratesCountOneCorrectionStory()
+    {
+        var scenario = CreateScenario(
+            includeRepresentativeFacts: true,
+            representativeObservationCount: 1,
+            representativeHistoryObservationCount: 1,
+            companyCount: 1) with
+        {
+            Infrastructure = new InfrastructureProfile
+            {
+                IncludeServers = true,
+                IncludeWorkstations = true,
+                IncludeNetworkAssets = false,
+                IncludeTelephony = false,
+                IncludeRepresentativeManagementObservations = true,
+                RepresentativeManagementObservationCount = 1,
+            },
+        };
+        using var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+
+        var world = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = scenario,
+                Seed = 1130,
+                GeneratedAt = DateTimeOffset.Parse("2026-07-22T00:00:00Z"),
+            },
+            new CatalogSet()).World;
+
+        Assert.Equal(1, scenario.Infrastructure.RepresentativeManagementHistoryObservationCount);
+        Assert.Equal(2, world.ManagementObservations.Count);
+        AssertManagementHistory(Assert.Single(GetManagementHistoryGroups(world)), expectedHistoryCount: 1);
+    }
+
+    [Fact]
+    public void WorldGenerator_MultiCompanyHistoryStaysWithinSeparatePerCompanyBudgets()
+    {
+        const int companyCount = 2;
+        const int currentBudget = 3;
+        const int historyBudget = 2;
+        var world = Generate(
+            includeRepresentativeFacts: true,
+            representativeObservationCount: currentBudget,
+            representativeHistoryObservationCount: historyBudget,
+            companyCount: companyCount).World;
+
+        Assert.Equal(companyCount * (currentBudget + historyBudget), world.ManagementObservations.Count);
+        Assert.Equal(
+            world.ManagementObservations.Count,
+            world.ManagementObservations.Select(observation => observation.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(world.Companies, company =>
+        {
+            var companyObservations = world.ManagementObservations
+                .Where(observation => observation.CompanyId == company.Id)
+                .ToArray();
+            Assert.Equal(currentBudget, companyObservations.Count(observation => observation.IsCurrent));
+            Assert.Equal(historyBudget, companyObservations.Count(observation => !observation.IsCurrent));
+            Assert.True(companyObservations.Length <= currentBudget + historyBudget);
+        });
+        Assert.Equal(companyCount * historyBudget, GetManagementHistoryGroups(world).Length);
+        Assert.All(GetManagementHistoryGroups(world), history => AssertManagementHistory(history, expectedHistoryCount: 1));
+    }
+
+    [Fact]
+    public void AddStaleManagementHistory_ClampsAtDateTimeOffsetLowerBoundWithoutBreakingOrdering()
+    {
+        var world = new SyntheticEnterpriseWorld();
+        world.ManagementObservations.Add(CreateCurrentObservation(
+            "MGO-CURRENT",
+            DateTimeOffset.MinValue.AddTicks(2)));
+
+        RepresentativeManagementObservationGenerator.AddStaleManagementHistory(
+            world,
+            "CO-001",
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition { Name = "Boundary-safe management history" },
+                Seed = 1130,
+            },
+            new TestIdFactory(),
+            historyBudget: 1);
+
+        var history = Assert.Single(GetManagementHistoryGroups(world));
+        var historical = Assert.Single(history, observation => !observation.IsCurrent);
+        var current = Assert.Single(history, observation => observation.IsCurrent);
+        Assert.Equal(DateTimeOffset.MinValue, historical.LastCheckInAtUtc);
+        Assert.True(historical.LastCheckInAtUtc < historical.ObservedAtUtc);
+        Assert.True(historical.ObservedAtUtc < current.ObservedAtUtc);
+
+        var minimumWorld = new SyntheticEnterpriseWorld();
+        minimumWorld.ManagementObservations.Add(CreateCurrentObservation("MGO-MINIMUM", DateTimeOffset.MinValue));
+        RepresentativeManagementObservationGenerator.AddStaleManagementHistory(
+            minimumWorld,
+            "CO-001",
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition { Name = "Minimum management history" },
+                Seed = 1130,
+            },
+            new TestIdFactory(),
+            historyBudget: 1);
+        Assert.Single(minimumWorld.ManagementObservations);
+    }
+
+    [Fact]
     public void WorldGenerator_IsDeterministic_ForSameSeedScenarioAndGenerationTime()
     {
         var first = JsonSerializer.Serialize(Generate(includeRepresentativeFacts: true));
@@ -309,7 +569,10 @@ public sealed class RepresentativeManagementObservationTests
 
     private static GenerationResult Generate(
         bool includeRepresentativeFacts,
-        int representativeObservationCount = 15)
+        int representativeObservationCount = 15,
+        int representativeHistoryObservationCount = 1,
+        int seed = 1130,
+        int companyCount = 1)
     {
         using var services = new ServiceCollection()
             .AddSyntheticEnterpriseCore()
@@ -318,16 +581,22 @@ public sealed class RepresentativeManagementObservationTests
         return generator.Generate(
             new GenerationContext
             {
-                Seed = 1130,
+                Seed = seed,
                 GeneratedAt = DateTimeOffset.Parse("2026-07-22T00:00:00Z"),
-                Scenario = CreateScenario(includeRepresentativeFacts, representativeObservationCount),
+                Scenario = CreateScenario(
+                    includeRepresentativeFacts,
+                    representativeObservationCount,
+                    representativeHistoryObservationCount,
+                    companyCount),
             },
             new CatalogSet());
     }
 
     private static ScenarioDefinition CreateScenario(
         bool includeRepresentativeFacts,
-        int representativeObservationCount)
+        int representativeObservationCount,
+        int representativeHistoryObservationCount,
+        int companyCount)
     {
         return new ScenarioDefinition
         {
@@ -341,6 +610,7 @@ public sealed class RepresentativeManagementObservationTests
                 IncludeTelephony = false,
                 IncludeRepresentativeManagementObservations = includeRepresentativeFacts,
                 RepresentativeManagementObservationCount = representativeObservationCount,
+                RepresentativeManagementHistoryObservationCount = representativeHistoryObservationCount,
             },
             Applications = new ApplicationProfile
             {
@@ -349,11 +619,10 @@ public sealed class RepresentativeManagementObservationTests
                 IncludeLineOfBusinessApplications = true,
                 IncludeSaaSApplications = true,
             },
-            Companies =
-            [
-                new ScenarioCompanyDefinition
+            Companies = Enumerable.Range(1, companyCount)
+                .Select(index => new ScenarioCompanyDefinition
                 {
-                    Name = "Representative Manufacturing",
+                    Name = $"Representative Manufacturing {index}",
                     Industry = "Manufacturing",
                     EmployeeCount = 120,
                     BusinessUnitCount = 2,
@@ -362,10 +631,107 @@ public sealed class RepresentativeManagementObservationTests
                     OfficeCount = 2,
                     ServerCount = 12,
                     Countries = ["United States"],
-                },
-            ],
+                })
+                .ToList(),
         };
     }
+
+    private static TemporalCorrectionProjection ProjectTemporalCorrections(SyntheticEnterpriseWorld world)
+        => new(
+            world.RelationshipHistoryObservations
+                .OrderBy(observation => observation.RelationshipType, StringComparer.Ordinal)
+                .ThenBy(observation => observation.FromEntityId, StringComparer.Ordinal)
+                .ThenBy(observation => observation.ToEntityId, StringComparer.Ordinal)
+                .ThenBy(observation => observation.ObservedAtUtc)
+                .Select(observation => string.Join('|',
+                    observation.RelationshipType,
+                    observation.FromEntityId,
+                    observation.ToEntityId,
+                    observation.LifecycleState,
+                    observation.ObservedAtUtc.ToString("O"),
+                    observation.RemovedAtUtc?.ToString("O") ?? string.Empty))
+                .ToArray(),
+            world.ManagementObservations
+                .OrderBy(observation => observation.CompanyId, StringComparer.Ordinal)
+                .ThenBy(observation => observation.EndpointType, StringComparer.Ordinal)
+                .ThenBy(observation => observation.EndpointId, StringComparer.Ordinal)
+                .ThenBy(observation => observation.ManagementProvider, StringComparer.Ordinal)
+                .ThenBy(observation => observation.ObservedAtUtc)
+                .Select(observation => string.Join('|',
+                    observation.CompanyId,
+                    observation.EndpointType,
+                    observation.EndpointId,
+                    observation.ManagementProvider,
+                    observation.LifecycleState,
+                    observation.IsCurrent,
+                    observation.SupersededByObservationId,
+                    observation.RegistrationState,
+                    observation.DeploymentCapability,
+                    observation.ObservedAtUtc.ToString("O"),
+                    observation.LastCheckInAtUtc?.ToString("O") ?? string.Empty))
+                .ToArray());
+
+    private static EndpointManagementObservation[][] GetManagementHistoryGroups(SyntheticEnterpriseWorld world)
+        => world.ManagementObservations
+            .GroupBy(observation => new
+            {
+                observation.CompanyId,
+                observation.EndpointType,
+                observation.EndpointId,
+                observation.ManagementProvider,
+            })
+            .Where(group => group.Any(observation => !observation.IsCurrent))
+            .Select(group => group.OrderBy(observation => observation.ObservedAtUtc).ToArray())
+            .ToArray();
+
+    private static void AssertManagementHistory(
+        EndpointManagementObservation[] history,
+        int expectedHistoryCount)
+    {
+        var current = Assert.Single(history, observation => observation.IsCurrent);
+        var historical = history.Where(observation => !observation.IsCurrent).ToArray();
+        Assert.Equal(expectedHistoryCount, historical.Length);
+        Assert.Equal("Current", current.LifecycleState);
+        Assert.Null(current.SupersededByObservationId);
+        Assert.All(historical, observation =>
+        {
+            Assert.Equal("Historical", observation.LifecycleState);
+            Assert.Equal(current.Id, observation.SupersededByObservationId);
+            Assert.Equal(current.CompanyId, observation.CompanyId);
+            Assert.Equal(current.EndpointType, observation.EndpointType);
+            Assert.Equal(current.EndpointId, observation.EndpointId);
+            Assert.Equal(current.ManagementProvider, observation.ManagementProvider);
+            Assert.Equal(current.RegistrationId, observation.RegistrationId);
+            Assert.Equal(current.AgentInstanceId, observation.AgentInstanceId);
+            Assert.True(observation.LastCheckInAtUtc < observation.ObservedAtUtc);
+            Assert.True(observation.ObservedAtUtc < current.ObservedAtUtc);
+            Assert.True(current.LastCheckInAtUtc > observation.LastCheckInAtUtc);
+            Assert.True(current.LastCheckInAtUtc <= current.ObservedAtUtc);
+            Assert.InRange(current.ObservedAtUtc - observation.ObservedAtUtc, TimeSpan.FromDays(21), TimeSpan.FromDays(27));
+            Assert.InRange(observation.ObservedAtUtc - observation.LastCheckInAtUtc!.Value, TimeSpan.FromDays(14), TimeSpan.FromDays(18));
+        });
+    }
+
+    private static EndpointManagementObservation CreateCurrentObservation(
+        string id,
+        DateTimeOffset observedAtUtc)
+        => new()
+        {
+            Id = id,
+            CompanyId = "CO-001",
+            EndpointType = "Device",
+            EndpointId = "DEV-001",
+            ObservationKind = "Registration",
+            ManagementProvider = "RepresentativeManagement",
+            AgentInstanceId = "agent-DEV-001",
+            RegistrationId = "registration-DEV-001",
+            RegistrationState = "Registered",
+            ConfigurationCapability = "Supported",
+            DeploymentCapability = "Supported",
+            UpdateCapability = "Supported",
+            ObservedAtUtc = observedAtUtc,
+            LastCheckInAtUtc = observedAtUtc,
+        };
 
     private static string FindSourceRoot([CallerFilePath] string sourceFile = "")
     {
@@ -390,4 +756,8 @@ public sealed class RepresentativeManagementObservationTests
 
         public string Next(string entityType) => $"{entityType}-{++_counter:D6}";
     }
+
+    private sealed record TemporalCorrectionProjection(
+        string[] Relationships,
+        string[] Management);
 }

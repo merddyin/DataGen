@@ -39,3 +39,26 @@ The export set can include artifacts for:
 - CMDB and observed views
 
 Treat these artifacts as the source for your downstream bridge, not as something to re-synthesize later.
+
+## Management observation history
+
+The `endpoint_management_observations` artifact contains provider-neutral management facts for scenarios that opt into representative management observations. In v0.10.0, the table can include both a current observation and a bounded historical predecessor for the same endpoint and provider context. This is lifecycle evidence, not a downstream vendor integration contract.
+
+### Fields for lifecycle processing
+
+Use these normalized fields together:
+
+- `lifecycle_state`: `Current` or `Historical`
+- `is_current`: the explicit currentness discriminator
+- `superseded_by_observation_id`: the current observation that governs a historical row; empty for current rows
+- `observed_at_utc` and `last_check_in_at_utc`: the chronological evidence, not lifecycle discriminators
+
+Do not classify a row as historical just because it is unreachable or has an old check-in. Those fields describe the observation's operating condition; lifecycle, currentness, and supersession are explicit.
+
+### Scenario budget and chronology
+
+`infrastructure.representativeManagementObservationCount` limits current observations per company. `infrastructure.representativeManagementHistoryObservationCount` is a separate, additional limit for historical observations; set it to `0` to suppress history. With a fixed scenario, seed, and generated timestamp, the selection and timestamps are deterministic. Build an ordered timeline from `observed_at_utc`, then `id` as a tie breaker, rather than trusting file row order.
+
+### Consumer compatibility
+
+Existing adapters that need only a current state can filter `is_current = true` and otherwise keep their current mapping. Adapters that need history should retain both rows, relate historical rows through `superseded_by_observation_id`, and keep provider-specific interpretation outside DataGen. The lifecycle columns are additive; when consuming an export produced before v0.10.0, treat absent lifecycle metadata as a current-only dataset rather than fabricating history.

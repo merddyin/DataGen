@@ -891,6 +891,104 @@ public sealed class ExternalPluginRuntimeTests
     }
 
     [Fact]
+    public void WorldGenerator_Preserves_Bounded_Management_History_Contract_In_Script_Plugin_Input()
+    {
+        var tempRoot = CreateTempDirectory();
+
+        try
+        {
+            File.WriteAllText(Path.Combine(tempRoot, "managementhistory.generator.json"), """
+                {
+                  "capability": "ManagementHistoryContract",
+                  "displayName": "Management History Contract",
+                  "executionMode": "PowerShellScript",
+                  "entryPoint": "managementhistory.plugin.ps1",
+                  "security": {
+                    "dataOnly": true,
+                    "requestedCapabilities": [ "GenerateData" ]
+                  }
+                }
+                """);
+            File.WriteAllText(Path.Combine(tempRoot, "managementhistory.plugin.ps1"), """
+                $currentRows = @($InputWorld.ManagementObservations | Where-Object { $_.IsCurrent })
+                $historyRows = @($InputWorld.ManagementObservations | Where-Object { -not $_.IsCurrent })
+                $historical = $historyRows[0]
+                $superseding = @($currentRows | Where-Object { $_.Id -eq $historical.SupersededByObservationId })[0]
+                $record = New-PluginRecord -RecordType 'ManagementHistoryContract' -AssociatedEntityType 'Company' -AssociatedEntityId $InputWorld.Companies[0].Id -Properties @{
+                  CurrentCount = [string]$currentRows.Count
+                  HistoryCount = [string]$historyRows.Count
+                  HistoricalLifecycle = [string]$historical.LifecycleState
+                  SupersedingLifecycle = [string]$superseding.LifecycleState
+                  RegistrationIdentityStable = [string]($historical.RegistrationId -eq $superseding.RegistrationId)
+                }
+                New-PluginResult -Records @($record) -Warnings @('management-history-contract-ok')
+                """);
+
+            var services = new ServiceCollection()
+                .AddSyntheticEnterpriseCore()
+                .BuildServiceProvider();
+            var generator = services.GetRequiredService<IWorldGenerator>();
+            var result = generator.Generate(
+                new GenerationContext
+                {
+                    Scenario = new ScenarioDefinition
+                    {
+                        Name = "Management history plugin boundary",
+                        Infrastructure = new InfrastructureProfile
+                        {
+                            IncludeServers = true,
+                            IncludeWorkstations = true,
+                            IncludeNetworkAssets = false,
+                            IncludeTelephony = false,
+                            IncludeRepresentativeManagementObservations = true,
+                            RepresentativeManagementObservationCount = 1,
+                            RepresentativeManagementHistoryObservationCount = 1,
+                        },
+                        Companies = new()
+                        {
+                            new ScenarioCompanyDefinition
+                            {
+                                Name = "Management History Co",
+                                Industry = "Technology",
+                                EmployeeCount = 6,
+                                OfficeCount = 1,
+                                ServerCount = 2,
+                                Countries = new() { "United States" },
+                            },
+                        },
+                    },
+                    Seed = 1130,
+                    GeneratedAt = DateTimeOffset.Parse("2026-07-22T00:00:00Z"),
+                    ExternalPlugins = new ExternalPluginExecutionSettings
+                    {
+                        Enabled = true,
+                        PluginRootPaths = new() { tempRoot },
+                        EnabledCapabilities = new() { "ManagementHistoryContract" },
+                        MaxInputPayloadBytes = 4 * 1024 * 1024,
+                    },
+                },
+                new CatalogSet());
+
+            var record = Assert.Single(result.World.PluginRecords, candidate =>
+                candidate.RecordType == "ManagementHistoryContract");
+            Assert.Equal("1", record.Properties["CurrentCount"]);
+            Assert.Equal("1", record.Properties["HistoryCount"]);
+            Assert.Equal("Historical", record.Properties["HistoricalLifecycle"]);
+            Assert.Equal("Current", record.Properties["SupersedingLifecycle"]);
+            Assert.Equal("True", record.Properties["RegistrationIdentityStable"]);
+            Assert.DoesNotContain(result.Warnings, warning =>
+                warning.Contains("Input payload exceeded", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void WorldGenerator_Truncates_External_Plugin_Output_To_Configured_Limit()
     {
         var tempRoot = CreateTempDirectory();

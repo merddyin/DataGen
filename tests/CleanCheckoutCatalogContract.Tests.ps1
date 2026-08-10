@@ -22,6 +22,12 @@ param(
     [switch]$TimestampOffsetRegressionOnly,
 
     [Parameter()]
+    [switch]$ReleaseVersionContractOnly,
+
+    [Parameter()]
+    [switch]$ReleaseArtifactContractOnly,
+
+    [Parameter()]
     [switch]$InternalRun,
 
     [Parameter()]
@@ -55,6 +61,12 @@ if (-not $InternalRun.IsPresent) {
     }
     if ($TimestampOffsetRegressionOnly.IsPresent) {
         $childArguments += '-TimestampOffsetRegressionOnly'
+    }
+    if ($ReleaseVersionContractOnly.IsPresent) {
+        $childArguments += '-ReleaseVersionContractOnly'
+    }
+    if ($ReleaseArtifactContractOnly.IsPresent) {
+        $childArguments += '-ReleaseArtifactContractOnly'
     }
     $childArguments += @('-DotNetPath', $DotNetPath)
 
@@ -123,6 +135,383 @@ function Assert-SafeOutputRoot {
 $sourceRoot = (Resolve-Path -LiteralPath $SourceRoot).Path
 $outputRoot = [IO.Path]::GetFullPath($OutputRoot)
 Assert-SafeOutputRoot -SourceRootPath $sourceRoot -OutputRootPath $outputRoot
+
+function Assert-ReleaseWorkflowVersionContract {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string]$ContractOutputRoot
+    )
+
+    $workflowPath = Join-Path $RepositoryRoot '.github\workflows\release-module.yml'
+    $workflow = Get-Content -LiteralPath $workflowPath -Raw
+    $resolveStepMatch = [regex]::Match(
+        $workflow,
+        '(?ms)^      - name: Resolve release version\r?\n(?<step>.*?)(?=^      - name: )'
+    )
+    if (-not $resolveStepMatch.Success) {
+        throw "Release workflow contract could not locate the 'Resolve release version' step in '$workflowPath'."
+    }
+
+    $resolveStep = $resolveStepMatch.Groups['step'].Value
+    $runMatch = [regex]::Match($resolveStep, '(?ms)^        run: \|\r?\n(?<run>.*)$')
+    if (-not $runMatch.Success) {
+        throw "Release workflow contract could not locate the PowerShell run block in '$workflowPath'."
+    }
+
+    $runSource = $runMatch.Groups['run'].Value
+    foreach ($expectedEnvironmentMapping in @(
+        'RELEASE_EVENT_NAME: ${{ github.event_name }}',
+        'RELEASE_INPUT_VERSION: ${{ inputs.version }}',
+        'RELEASE_REF_NAME: ${{ github.ref_name }}'
+    )) {
+        if (-not $resolveStep.Contains($expectedEnvironmentMapping, [StringComparison]::Ordinal)) {
+            throw "Release workflow contract requires '$expectedEnvironmentMapping' in the version step environment."
+        }
+    }
+
+    if ($runSource -match '\$\{\{') {
+        throw 'Release workflow contract forbids direct GitHub expression interpolation in the version PowerShell run block.'
+    }
+
+    foreach ($expectedDataRead in @(
+        '$env:RELEASE_EVENT_NAME',
+        '$env:RELEASE_INPUT_VERSION',
+        '$env:RELEASE_REF_NAME'
+    )) {
+        if (-not $runSource.Contains($expectedDataRead, [StringComparison]::Ordinal)) {
+            throw "Release workflow contract requires the version run block to read '$expectedDataRead' as data."
+        }
+    }
+
+    if ($runSource -notmatch '\$version\s+-notmatch\s+') {
+        throw 'Release workflow contract requires numeric version validation after environment data is resolved.'
+    }
+    if ($runSource -notmatch '\.\\scripts\\assert-release-version\.ps1\s+-Version\s+\$version') {
+        throw 'Release workflow contract requires the shared release-version assertion after numeric validation.'
+    }
+
+    $probeRoot = Join-Path $ContractOutputRoot 'release-workflow-version-probes'
+    New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
+    $probeScriptPath = Join-Path $probeRoot 'resolve-release-version.ps1'
+    Set-Content -LiteralPath $probeScriptPath -Value $runSource -Encoding utf8 -NoNewline
+
+    $cases = @(
+        [pscustomobject]@{
+            Name = 'workflow-dispatch-quoted-semicolon-comment'
+            EventName = 'workflow_dispatch'
+            InputVersion = "0.10.0';`$version='0.10.0';#"
+            RefName = ''
+        },
+        [pscustomobject]@{
+            Name = 'pushed-tag-quoted-semicolon-comment'
+            EventName = 'push'
+            InputVersion = ''
+            RefName = "v0.10.0';`$version='0.10.0';#"
+        }
+    )
+
+    foreach ($case in $cases) {
+        $caseRoot = Join-Path $probeRoot $case.Name
+        New-Item -ItemType Directory -Path $caseRoot -Force | Out-Null
+        $githubOutputPath = Join-Path $caseRoot 'github-output.txt'
+        $previousEventName = [Environment]::GetEnvironmentVariable('RELEASE_EVENT_NAME', 'Process')
+        $previousInputVersion = [Environment]::GetEnvironmentVariable('RELEASE_INPUT_VERSION', 'Process')
+        $previousRefName = [Environment]::GetEnvironmentVariable('RELEASE_REF_NAME', 'Process')
+        $previousGithubOutput = [Environment]::GetEnvironmentVariable('GITHUB_OUTPUT', 'Process')
+
+        try {
+            $env:RELEASE_EVENT_NAME = $case.EventName
+            $env:RELEASE_INPUT_VERSION = $case.InputVersion
+            $env:RELEASE_REF_NAME = $case.RefName
+            $env:GITHUB_OUTPUT = $githubOutputPath
+
+            Push-Location $RepositoryRoot
+            try {
+                $probeOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $probeScriptPath 2>&1 | Out-String
+                $probeExitCode = $LASTEXITCODE
+            }
+            finally {
+                Pop-Location
+            }
+        }
+        finally {
+            $env:RELEASE_EVENT_NAME = $previousEventName
+            $env:RELEASE_INPUT_VERSION = $previousInputVersion
+            $env:RELEASE_REF_NAME = $previousRefName
+            $env:GITHUB_OUTPUT = $previousGithubOutput
+            $global:LASTEXITCODE = 0
+        }
+
+        if ($probeExitCode -eq 0) {
+            throw "Release workflow accepted malicious $($case.Name) payload as a valid version. Output: $probeOutput"
+        }
+        if (Test-Path -LiteralPath $githubOutputPath) {
+            $githubOutput = Get-Content -LiteralPath $githubOutputPath -Raw
+            if (-not [string]::IsNullOrEmpty($githubOutput)) {
+                throw "Release workflow wrote a release output before rejecting malicious $($case.Name) payload: $githubOutput"
+            }
+        }
+    }
+}
+
+function Assert-ReleaseVersionContract {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot
+    )
+
+    $expectedVersion = '0.10.0'
+    $expectedAssemblyVersion = '0.10.0.0'
+    $propsPath = Join-Path $RepositoryRoot 'Directory.Build.props'
+    $packageScriptPath = Join-Path $RepositoryRoot 'scripts\package-module.ps1'
+    $websitePackagePath = Join-Path $RepositoryRoot 'website\package.json'
+    $websiteLockPath = Join-Path $RepositoryRoot 'website\package-lock.json'
+
+    $props = Get-Content -LiteralPath $propsPath -Raw
+    foreach ($marker in @(
+        "<Version>$expectedVersion</Version>",
+        "<AssemblyVersion>$expectedAssemblyVersion</AssemblyVersion>",
+        "<FileVersion>$expectedAssemblyVersion</FileVersion>",
+        "<InformationalVersion>$expectedVersion</InformationalVersion>"
+    )) {
+        if ($props -notlike "*$marker*") {
+            throw "Release version contract requires '$marker' in '$propsPath'."
+        }
+    }
+
+    $packageScript = Get-Content -LiteralPath $packageScriptPath -Raw
+    $expectedPackageDefault = "[string]`$Version = '$expectedVersion'"
+    if (-not $packageScript.Contains($expectedPackageDefault, [StringComparison]::Ordinal)) {
+        throw "Release version contract requires package-module.ps1 to default to '$expectedVersion'."
+    }
+
+    $websitePackage = Get-Content -LiteralPath $websitePackagePath -Raw | ConvertFrom-Json
+    if ($websitePackage.version -ne $expectedVersion) {
+        throw "Release version contract requires website/package.json version '$expectedVersion', found '$($websitePackage.version)'."
+    }
+
+    $websiteLock = Get-Content -LiteralPath $websiteLockPath -Raw | ConvertFrom-Json -AsHashtable
+    if ($websiteLock['version'] -ne $expectedVersion -or $websiteLock['packages']['']['version'] -ne $expectedVersion) {
+        throw "Release version contract requires website/package-lock.json root versions '$expectedVersion'."
+    }
+
+    Assert-ReleaseWorkflowVersionContract -RepositoryRoot $RepositoryRoot -ContractOutputRoot $outputRoot
+}
+
+function Assert-NoDebugSymbolArtifacts {
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageRoot,
+
+        [Parameter(Mandatory)]
+        [string]$Label
+    )
+
+    $debugSymbols = Get-ChildItem -LiteralPath $PackageRoot -File -Recurse |
+        Where-Object { $_.Extension -in @('.pdb', '.mdb', '.dbg') }
+    if ($debugSymbols) {
+        throw "$Label contains debug-symbol artifacts: $($debugSymbols.FullName -join ', ')."
+    }
+}
+
+function Assert-NoAbsoluteLocalPathsInSyntheticEnterpriseAssemblies {
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageRoot,
+
+        [Parameter(Mandatory)]
+        [string]$Label
+    )
+
+    foreach ($assembly in Get-ChildItem -LiteralPath $PackageRoot -File -Filter 'SyntheticEnterprise.*.dll' -Recurse) {
+        $contents = [Text.Encoding]::Latin1.GetString([IO.File]::ReadAllBytes($assembly.FullName))
+        if ($contents -match '(?i)(?<![A-Za-z0-9])[A-Z]:[\\/]') {
+            throw "$Label assembly '$($assembly.FullName)' embeds an absolute local path."
+        }
+    }
+}
+
+function Assert-SyntheticEnterpriseAssemblyVersions {
+    param(
+        [Parameter(Mandatory)]
+        [string]$PackageRoot,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedAssemblyVersion,
+
+        [Parameter(Mandatory)]
+        [string]$Label
+    )
+
+    $requiredAssemblyNames = @(
+        'SyntheticEnterprise.Contracts.dll',
+        'SyntheticEnterprise.Core.dll',
+        'SyntheticEnterprise.Exporting.dll',
+        'SyntheticEnterprise.PluginHost.dll',
+        'SyntheticEnterprise.PowerShell.dll'
+    )
+    $shippedAssemblies = @(Get-ChildItem -LiteralPath $PackageRoot -File -Filter 'SyntheticEnterprise.*.dll' -Recurse)
+    $shippedAssemblyNames = @($shippedAssemblies | ForEach-Object Name)
+    foreach ($requiredAssemblyName in $requiredAssemblyNames) {
+        if ($shippedAssemblyNames -notcontains $requiredAssemblyName) {
+            throw "$Label is missing required assembly '$requiredAssemblyName'."
+        }
+    }
+
+    foreach ($assembly in $shippedAssemblies) {
+        $assemblyVersion = [Reflection.AssemblyName]::GetAssemblyName($assembly.FullName).Version.ToString()
+        if ($assemblyVersion -ne $ExpectedAssemblyVersion) {
+            throw "$Label assembly '$($assembly.Name)' has version '$assemblyVersion', expected '$ExpectedAssemblyVersion'."
+        }
+    }
+}
+
+function Assert-ModuleManifestParity {
+    param(
+        [Parameter(Mandatory)]
+        [hashtable]$ExpectedManifest,
+
+        [Parameter(Mandatory)]
+        [hashtable]$ActualManifest,
+
+        [Parameter(Mandatory)]
+        [string]$Label
+    )
+
+    foreach ($propertyName in @('ModuleVersion', 'RootModule', 'Guid', 'PowerShellVersion')) {
+        if ([string]$ActualManifest[$propertyName] -ne [string]$ExpectedManifest[$propertyName]) {
+            throw "$Label manifest property '$propertyName' differs from versioned staging."
+        }
+    }
+
+    $expectedCmdlets = @($ExpectedManifest['CmdletsToExport'] | ForEach-Object { [string]$_ })
+    $actualCmdlets = @($ActualManifest['CmdletsToExport'] | ForEach-Object { [string]$_ })
+    if (($actualCmdlets -join "`n") -ne ($expectedCmdlets -join "`n")) {
+        throw "$Label manifest CmdletsToExport differs from versioned staging."
+    }
+}
+
+function Assert-ReleaseArtifactContract {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string]$ContractOutputRoot
+    )
+
+    [xml]$props = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'Directory.Build.props') -Raw
+    $expectedVersion = $props.SelectSingleNode('/Project/PropertyGroup/Version').InnerText.Trim()
+    $expectedAssemblyVersion = $props.SelectSingleNode('/Project/PropertyGroup/AssemblyVersion').InnerText.Trim()
+    $packageScriptPath = Join-Path $RepositoryRoot 'scripts\package-module.ps1'
+    $mismatchOutputRoot = Join-Path $ContractOutputRoot 'mismatch-rejection'
+    $packageOutputRoot = Join-Path $ContractOutputRoot 'module'
+
+    $mismatchOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $packageScriptPath `
+        -Version '999.999.999' -OutputRoot $mismatchOutputRoot 2>&1 | Out-String
+    $mismatchExitCode = $LASTEXITCODE
+    if ($mismatchExitCode -eq 0 -or $mismatchOutput -notlike '*does not match authoritative Directory.Build.props Version*') {
+        throw "package-module.ps1 accepted a mismatched requested version. Output: $mismatchOutput"
+    }
+
+    Set-Alias -Name dotnet -Value $DotNetPath -Scope Local
+    & $packageScriptPath -Version $expectedVersion -Configuration Release -OutputRoot $packageOutputRoot
+
+    $moduleName = 'SyntheticEnterprise.PowerShell'
+    $versionedStagePath = Join-Path $packageOutputRoot "$moduleName\$expectedVersion"
+    $publishStagePath = Join-Path $packageOutputRoot "publish\$moduleName"
+    $zipPath = Join-Path $packageOutputRoot "$moduleName-$expectedVersion.zip"
+    $buildPluginHostPath = Join-Path $packageOutputRoot 'build\bin\SyntheticEnterprise.PluginHost\release\SyntheticEnterprise.PluginHost.dll'
+    $versionedPluginHostPath = Join-Path $versionedStagePath 'SyntheticEnterprise.PluginHost.dll'
+    $publishedPluginHostPath = Join-Path $publishStagePath 'SyntheticEnterprise.PluginHost.dll'
+    $versionedManifestPath = Join-Path $versionedStagePath "$moduleName.psd1"
+    $publishedManifestPath = Join-Path $publishStagePath "$moduleName.psd1"
+    $packagedCatalogPath = Join-Path $publishStagePath 'catalogs\catalogs.sqlite'
+
+    foreach ($requiredPath in @($versionedStagePath, $publishStagePath, $zipPath, $buildPluginHostPath, $versionedPluginHostPath, $publishedPluginHostPath, $versionedManifestPath, $publishedManifestPath, $packagedCatalogPath)) {
+        if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf) -and -not (Test-Path -LiteralPath $requiredPath -PathType Container)) {
+            throw "Release artifact contract expected '$requiredPath'."
+        }
+    }
+
+    $isolatedPluginHostHash = (Get-FileHash -LiteralPath $buildPluginHostPath -Algorithm SHA256).Hash
+    foreach ($pluginHostPath in @($versionedPluginHostPath, $publishedPluginHostPath)) {
+        if ((Get-FileHash -LiteralPath $pluginHostPath -Algorithm SHA256).Hash -ne $isolatedPluginHostHash) {
+            throw "Packaged PluginHost '$pluginHostPath' does not match the current isolated build output."
+        }
+    }
+
+    Assert-SyntheticEnterpriseAssemblyVersions -PackageRoot $versionedStagePath -ExpectedAssemblyVersion $expectedAssemblyVersion -Label 'Versioned module staging'
+    Assert-SyntheticEnterpriseAssemblyVersions -PackageRoot $publishStagePath -ExpectedAssemblyVersion $expectedAssemblyVersion -Label 'Gallery publish staging'
+    Assert-NoDebugSymbolArtifacts -PackageRoot $versionedStagePath -Label 'Versioned module staging'
+    Assert-NoDebugSymbolArtifacts -PackageRoot $publishStagePath -Label 'Gallery publish staging'
+    Assert-NoAbsoluteLocalPathsInSyntheticEnterpriseAssemblies -PackageRoot $versionedStagePath -Label 'Versioned module staging'
+    Assert-NoAbsoluteLocalPathsInSyntheticEnterpriseAssemblies -PackageRoot $publishStagePath -Label 'Gallery publish staging'
+
+    $versionedManifest = Import-PowerShellDataFile -LiteralPath $versionedManifestPath
+    $publishedManifest = Import-PowerShellDataFile -LiteralPath $publishedManifestPath
+    if ([string]$versionedManifest['ModuleVersion'] -ne $expectedVersion -or [string]$versionedManifest['RootModule'] -ne "$moduleName.dll" -or @($versionedManifest['CmdletsToExport']).Count -eq 0) {
+        throw 'Versioned module manifest does not describe the expected functional module surface.'
+    }
+    Assert-ModuleManifestParity -ExpectedManifest $versionedManifest -ActualManifest $publishedManifest -Label 'Gallery publish staging'
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $archive = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $archiveEntries = @($archive.Entries)
+        $archiveNames = @($archiveEntries | ForEach-Object FullName)
+        $duplicateNames = @($archiveNames | Group-Object { $_.ToLowerInvariant() } | Where-Object Count -gt 1)
+        if ($duplicateNames) {
+            throw "Release archive contains duplicate paths: $($duplicateNames.Name -join ', ')."
+        }
+
+        foreach ($archiveName in $archiveNames) {
+            if ($archiveName.StartsWith('/') -or $archiveName -match '(^|/)\.\.(/|$)' -or -not $archiveName.StartsWith("$expectedVersion/")) {
+                throw "Release archive contains unsafe path '$archiveName'."
+            }
+            if ($archiveName -match '(?i)\.(pdb|mdb|dbg)$') {
+                throw "Release archive contains debug-symbol artifact '$archiveName'."
+            }
+        }
+    }
+    finally {
+        $archive.Dispose()
+    }
+
+    $archiveExtractionRoot = Join-Path $ContractOutputRoot 'archive'
+    Expand-Archive -LiteralPath $zipPath -DestinationPath $archiveExtractionRoot -Force
+    $archiveModulePath = Join-Path $archiveExtractionRoot $expectedVersion
+    $archivePluginHostPath = Join-Path $archiveModulePath 'SyntheticEnterprise.PluginHost.dll'
+    $archiveManifestPath = Join-Path $archiveModulePath "$moduleName.psd1"
+    if (-not (Test-Path -LiteralPath $archivePluginHostPath -PathType Leaf)) {
+        throw 'Release archive is missing SyntheticEnterprise.PluginHost.dll.'
+    }
+    if ((Get-FileHash -LiteralPath $archivePluginHostPath -Algorithm SHA256).Hash -ne $isolatedPluginHostHash) {
+        throw 'Release archive PluginHost does not match the current isolated build output.'
+    }
+
+    Assert-SyntheticEnterpriseAssemblyVersions -PackageRoot $archiveModulePath -ExpectedAssemblyVersion $expectedAssemblyVersion -Label 'Release archive'
+    Assert-NoDebugSymbolArtifacts -PackageRoot $archiveModulePath -Label 'Release archive'
+    Assert-NoAbsoluteLocalPathsInSyntheticEnterpriseAssemblies -PackageRoot $archiveModulePath -Label 'Release archive'
+    $archiveManifest = Import-PowerShellDataFile -LiteralPath $archiveManifestPath
+    Assert-ModuleManifestParity -ExpectedManifest $versionedManifest -ActualManifest $archiveManifest -Label 'Release archive'
+}
+
+Assert-ReleaseVersionContract -RepositoryRoot $sourceRoot
+if ($ReleaseVersionContractOnly.IsPresent) {
+    Write-Host 'Release version contract passed.' -ForegroundColor Green
+    exit 0
+}
+
+if ($ReleaseArtifactContractOnly.IsPresent) {
+    Assert-ReleaseArtifactContract -RepositoryRoot $sourceRoot -ContractOutputRoot $outputRoot
+    Write-Host 'Release artifact contract passed.' -ForegroundColor Green
+    exit 0
+}
 
 $snapshotRoot = Join-Path $outputRoot 'source'
 $logsRoot = Join-Path $outputRoot 'logs'
@@ -792,7 +1181,7 @@ try {
         throw "The packaged module does not contain '$packagedCatalogPath'."
     }
 
-    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.9.4\SyntheticEnterprise.PowerShell.psd1'
+    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.10.0\SyntheticEnterprise.PowerShell.psd1'
     if (-not (Test-Path -LiteralPath $versionedManifestPath -PathType Leaf)) {
         throw "The default package version did not produce '$versionedManifestPath'."
     }

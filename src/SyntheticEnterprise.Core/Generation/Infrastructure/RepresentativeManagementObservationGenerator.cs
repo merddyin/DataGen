@@ -4,6 +4,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Generation;
 
 internal static class RepresentativeManagementObservationGenerator
 {
@@ -26,6 +27,7 @@ internal static class RepresentativeManagementObservationGenerator
     {
         var observedAt = context.GeneratedAt;
         var requestedCount = Math.Max(0, configuration.RepresentativeManagementObservationCount);
+        var historyBudget = Math.Max(0, configuration.RepresentativeManagementHistoryObservationCount);
         if (requestedCount == 0)
         {
             return;
@@ -78,7 +80,8 @@ internal static class RepresentativeManagementObservationGenerator
         {
             var server = companyServers[index];
             var hosted = index < hostedTarget;
-            var profile = hosted && index == 0
+            var needsOnlyCurrentForHistory = requestedCount == 1 && historyBudget > 0;
+            var profile = hosted && index == 0 && !needsOnlyCurrentForHistory
                 ? ManagementProfiles[4]
                 : ManagementProfiles[(deviceTarget + index) % ManagementProfiles.Length];
             var hostingProvider = hosted ? HostedProvider(index) : null;
@@ -100,6 +103,96 @@ internal static class RepresentativeManagementObservationGenerator
                 software);
         }
 
+        AddStaleManagementHistory(world, company.Id, context, idFactory, historyBudget);
+    }
+
+    internal static void AddStaleManagementHistory(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        GenerationContext context,
+        IIdFactory idFactory,
+        int historyBudget)
+    {
+        if (historyBudget <= 0)
+        {
+            return;
+        }
+
+        var currentObservations = world.ManagementObservations
+            .Where(observation => observation.CompanyId == companyId
+                && observation.IsCurrent
+                && observation.LifecycleState == "Current"
+                && observation.SupersededByObservationId is null
+                && observation.RegistrationState == "Registered"
+                && observation.DeploymentCapability == "Supported")
+            .OrderBy(observation => observation.EndpointType, StringComparer.Ordinal)
+            .ThenBy(observation => observation.EndpointId, StringComparer.Ordinal)
+            .ThenBy(observation => observation.ManagementProvider, StringComparer.Ordinal)
+            .Take(historyBudget)
+            .ToArray();
+        var seedComponent = (context.Seed ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        foreach (var currentObservation in currentObservations)
+        {
+            var currentObservedAtUtc = currentObservation.ObservedAtUtc.ToUniversalTime();
+            if (currentObservedAtUtc.UtcTicks < DateTimeOffset.MinValue.UtcTicks + 2)
+            {
+                continue;
+            }
+
+            var historyScope = new[]
+            {
+                seedComponent,
+                currentObservation.CompanyId,
+                currentObservation.EndpointType,
+                currentObservation.EndpointId,
+                currentObservation.ManagementProvider,
+            };
+            var historicalAgeDays = 21 + StableHash.GetIndex(
+                "representative-management-history-age",
+                7,
+                historyScope);
+            var staleCheckInAgeDays = 14 + StableHash.GetIndex(
+                "representative-management-history-check-in",
+                5,
+                historyScope);
+            var historicalObservedAt = SubtractClamped(
+                currentObservedAtUtc,
+                TimeSpan.FromDays(historicalAgeDays),
+                DateTimeOffset.MinValue.AddTicks(1));
+            var historicalLastCheckInAt = SubtractClamped(
+                historicalObservedAt,
+                TimeSpan.FromDays(staleCheckInAgeDays),
+                DateTimeOffset.MinValue);
+
+            world.ManagementObservations.Add(currentObservation with
+            {
+                Id = idFactory.Next("MGO"),
+                LifecycleState = "Historical",
+                IsCurrent = false,
+                SupersededByObservationId = currentObservation.Id,
+                RegistrationState = "Unreachable",
+                ConfigurationCapability = "Unknown",
+                DeploymentCapability = "Unknown",
+                UpdateCapability = "Unknown",
+                ObservedAtUtc = historicalObservedAt,
+                LastCheckInAtUtc = historicalLastCheckInAt,
+                Confidence = Math.Min(currentObservation.Confidence, 0.55m),
+            });
+        }
+    }
+
+    private static DateTimeOffset SubtractClamped(
+        DateTimeOffset value,
+        TimeSpan amount,
+        DateTimeOffset minimum)
+    {
+        var valueTicks = value.UtcTicks;
+        var minimumTicks = minimum.UtcTicks;
+        var resultTicks = valueTicks - minimumTicks < amount.Ticks
+            ? minimumTicks
+            : valueTicks - amount.Ticks;
+        return new DateTimeOffset(resultTicks, TimeSpan.Zero);
     }
 
     private static void AddObservation(
@@ -138,6 +231,9 @@ internal static class RepresentativeManagementObservationGenerator
             AgentSoftwareId = agentSoftwareId,
             AgentInstanceId = agentSoftwareId is null ? null : $"agent-{endpointId}",
             RegistrationId = profile.RegistrationState == "Registered" ? $"registration-{endpointId}" : null,
+            LifecycleState = "Current",
+            IsCurrent = true,
+            SupersededByObservationId = null,
             RegistrationState = profile.RegistrationState,
             JoinState = joinState,
             ConfigurationCapability = profile.Capability,
@@ -149,7 +245,9 @@ internal static class RepresentativeManagementObservationGenerator
             HostingProvider = hostingProvider,
             OutOfBandGuestDeploymentCapability = outOfBandGuestDeploymentCapability,
             ObservedAtUtc = observedAt,
-            LastCheckInAtUtc = profile.CheckInAgeDays is int age ? observedAt.AddDays(-age) : null,
+            LastCheckInAtUtc = profile.CheckInAgeDays is int age
+                ? SubtractClamped(observedAt, TimeSpan.FromDays(age), DateTimeOffset.MinValue)
+                : null,
             ExpectedCheckInIntervalSeconds = 86400,
             Confidence = profile.Confidence,
         });

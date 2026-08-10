@@ -88,17 +88,23 @@ jobs:
       - name: Resolve release version
         id: version
         shell: pwsh
+        env:
+          RELEASE_EVENT_NAME: ${{ github.event_name }}
+          RELEASE_INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
         run: |
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
-            $version = '${{ inputs.version }}'
+          if ($env:RELEASE_EVENT_NAME -eq 'workflow_dispatch') {
+            $version = [string]$env:RELEASE_INPUT_VERSION
           }
           else {
-            $version = '${{ github.ref_name }}' -replace '^v', ''
+            $version = ([string]$env:RELEASE_REF_NAME) -replace '^v', ''
           }
 
           if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
             throw "Version '$version' must be numeric and match x.y.z or x.y.z.w."
           }
+
+          .\scripts\assert-release-version.ps1 -Version $version
 
           "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 

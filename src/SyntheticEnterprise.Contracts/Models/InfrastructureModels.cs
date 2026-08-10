@@ -194,7 +194,9 @@ public record ServerSoftwareInstallation
 
 /// <summary>
 /// Product-neutral evidence that an endpoint was observed through a management
-/// or registration surface. Consumers decide what the observation means.
+/// or registration surface. Current rows are the backwards-compatible default.
+/// Historical rows identify their governing current row through
+/// <see cref="SupersededByObservationId"/>.
 /// </summary>
 public record EndpointManagementObservation
 {
@@ -207,8 +209,29 @@ public record EndpointManagementObservation
     public string SourceKind { get; init; } = "EndpointCollector";
     public string ManagementProvider { get; init; } = "Unknown";
     public string? AgentSoftwareId { get; init; }
+    /// <summary>
+    /// Stable observed-resource key within a company, endpoint, and management-provider
+    /// history. It may repeat across observations and does not imply currentness.
+    /// </summary>
     public string? AgentInstanceId { get; init; }
+    /// <summary>
+    /// Stable observed-resource key within a company, endpoint, and management-provider
+    /// history. It may repeat across observations and does not imply currentness.
+    /// </summary>
     public string? RegistrationId { get; init; }
+    /// <summary>
+    /// Observation lifecycle. Supported generated values are Current and Historical.
+    /// Defaults to Current for observations constructed before lifecycle history existed.
+    /// </summary>
+    public string LifecycleState { get; init; } = "Current";
+    /// <summary>
+    /// Explicit currentness discriminator. Historical observations set this to false.
+    /// </summary>
+    public bool IsCurrent { get; init; } = true;
+    /// <summary>
+    /// Observation ID that governs this historical row. Current observations leave this null.
+    /// </summary>
+    public string? SupersededByObservationId { get; init; }
     public string RegistrationState { get; init; } = "Unknown";
     public string JoinState { get; init; } = "Unknown";
     public string ConfigurationCapability { get; init; } = "Unknown";
