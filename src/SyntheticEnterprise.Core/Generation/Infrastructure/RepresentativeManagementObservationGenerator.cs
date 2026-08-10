@@ -44,7 +44,7 @@ internal static class RepresentativeManagementObservationGenerator
         var serverTarget = Math.Min(companyServers.Length, Math.Max(1, requestedCount / 3));
         var deviceTarget = Math.Min(companyDevices.Length, requestedCount - serverTarget);
         serverTarget = Math.Min(companyServers.Length, requestedCount - deviceTarget);
-        var hostedTarget = configuration.HostedComputeObservationPercentage <= 0
+        var hostedTarget = serverTarget == 0 || configuration.HostedComputeObservationPercentage <= 0
             ? 0
             : Math.Clamp(
                 (int)Math.Round(
@@ -76,15 +76,16 @@ internal static class RepresentativeManagementObservationGenerator
                 software);
         }
 
-        for (var index = 0; index < serverTarget; index++)
+        var selectedServers = SelectRepresentativeServers(companyServers, serverTarget, hostedTarget);
+        var hostedObservationIndex = 0;
+        for (var index = 0; index < selectedServers.Length; index++)
         {
-            var server = companyServers[index];
-            var hosted = index < hostedTarget;
+            var server = selectedServers[index];
+            var hosted = IsHostedServer(server);
             var needsOnlyCurrentForHistory = requestedCount == 1 && historyBudget > 0;
-            var profile = hosted && index == 0 && !needsOnlyCurrentForHistory
+            var profile = hosted && hostedObservationIndex == 0 && !needsOnlyCurrentForHistory
                 ? ManagementProfiles[4]
                 : ManagementProfiles[(deviceTarget + index) % ManagementProfiles.Length];
-            var hostingProvider = hosted ? HostedProvider(index) : null;
             AddObservation(
                 world,
                 idFactory,
@@ -96,14 +97,75 @@ internal static class RepresentativeManagementObservationGenerator
                 ResolveJoinState(server.DomainJoined, server.CloudDirectoryAccountId, deviceTarget + index),
                 hosted ? "hosted-server-inventory" : "datacenter-server-inventory",
                 hosted ? "HostedCompute" : "NonHosted",
-                hostingProvider,
-                hosted && index == 0 ? "Supported" : hosted ? "Unknown" : "Unavailable",
+                hosted ? server.CloudProvider : null,
+                hosted && hostedObservationIndex == 0 ? "Supported" : hosted ? "Unknown" : "Unavailable",
                 profile,
                 observedAt,
                 software);
+
+            if (hosted)
+            {
+                hostedObservationIndex++;
+            }
         }
 
         AddStaleManagementHistory(world, company.Id, context, idFactory, historyBudget);
+    }
+
+    private static ServerAsset[] SelectRepresentativeServers(
+        IReadOnlyList<ServerAsset> servers,
+        int serverTarget,
+        int hostedTarget)
+    {
+        var hostedServers = servers.Where(IsHostedServer).ToArray();
+        var nonHostedServers = servers.Where(server => !IsHostedServer(server)).ToArray();
+        var selected = new List<ServerAsset>(serverTarget);
+        var selectedIds = new HashSet<string>(StringComparer.Ordinal);
+
+        void AddUnique(IEnumerable<ServerAsset> candidates, int targetCount)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (selected.Count >= targetCount)
+                {
+                    return;
+                }
+
+                if (selectedIds.Add(candidate.Id))
+                {
+                    selected.Add(candidate);
+                }
+            }
+        }
+
+        var diverseHostedServers = hostedServers
+            .GroupBy(server => server.CloudProvider ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(server => server.Id, StringComparer.Ordinal);
+        AddUnique(diverseHostedServers, hostedTarget);
+        AddUnique(hostedServers, hostedTarget);
+
+        var nonHostedTarget = serverTarget - hostedTarget;
+        AddUnique(nonHostedServers, selected.Count + nonHostedTarget);
+
+        AddUnique(hostedServers, serverTarget);
+        AddUnique(nonHostedServers, serverTarget);
+        return selected.ToArray();
+    }
+
+    private static bool IsHostedServer(ServerAsset server)
+    {
+        if (string.Equals(server.HostingLocationType, "Cloud", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(server.HostingLocationType, "OnPremises", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(server.CloudProvider);
     }
 
     internal static void AddStaleManagementHistory(
@@ -391,13 +453,6 @@ internal static class RepresentativeManagementObservationGenerator
         operatingSystem.StartsWith("Windows", StringComparison.OrdinalIgnoreCase) ? "Windows" :
         operatingSystem.StartsWith("macOS", StringComparison.OrdinalIgnoreCase) ? "macOS" :
         "Linux";
-
-    private static string HostedProvider(int index) => (index % 3) switch
-    {
-        0 => "Azure",
-        1 => "AWS",
-        _ => "PrivateCloud",
-    };
 
     private static void AddInstallation(
         SyntheticEnterpriseWorld world,
