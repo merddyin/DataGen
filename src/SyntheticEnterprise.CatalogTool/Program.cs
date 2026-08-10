@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Core.Catalogs;
 
@@ -33,6 +34,7 @@ internal static class CatalogToolProgram
         var outputPath = GetOption(options, "output") ?? Path.Combine(catalogRoot, "catalogs.sqlite");
         var includeRawNamesCache = HasSwitch(options, "include-raw-names-cache");
         var includeUncuratedSources = HasSwitch(options, "include-uncurated-sources");
+        var buildTimestampUtc = ParseBuildTimestampUtc(GetOption(options, "build-timestamp-utc"));
 
         var sourceRoots = new List<string> { Path.GetFullPath(catalogRoot) };
 
@@ -48,7 +50,7 @@ internal static class CatalogToolProgram
             sourceRoots.Add(Path.GetFullPath(rawNamesRoot));
         }
 
-        CatalogSqliteDatabaseBuilder.Build(Path.GetFullPath(outputPath), sourceRoots, includeUncuratedSources);
+        CatalogSqliteDatabaseBuilder.Build(Path.GetFullPath(outputPath), sourceRoots, includeUncuratedSources, buildTimestampUtc);
         Console.WriteLine(Path.GetFullPath(outputPath));
         return 0;
     }
@@ -239,6 +241,31 @@ internal static class CatalogToolProgram
     private static bool HasSwitch(IReadOnlyDictionary<string, string?> options, string key)
         => options.ContainsKey(key);
 
+    private static DateTimeOffset? ParseBuildTimestampUtc(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var hasExplicitUtcOffset = value.EndsWith('Z')
+            || (value.Length >= 6
+                && (value[^6] == '+' || value[^6] == '-')
+                && char.IsDigit(value[^5])
+                && char.IsDigit(value[^4])
+                && value[^3] == ':'
+                && char.IsDigit(value[^2])
+                && char.IsDigit(value[^1]));
+
+        if (!hasExplicitUtcOffset
+            || !DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var timestamp))
+        {
+            throw new ArgumentException("Option '--build-timestamp-utc' must be an ISO-8601 timestamp with an explicit UTC offset.");
+        }
+
+        return timestamp.ToUniversalTime();
+    }
+
     private static string Escape(string? value)
         => value?.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("|", "\\|", StringComparison.Ordinal) ?? "<null>";
 
@@ -288,7 +315,7 @@ internal static class CatalogToolProgram
         Console.WriteLine("SyntheticEnterprise.CatalogTool");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  build   --catalog-root <path> [--output <path>] [--origin-root <path>] [--raw-names-root <path>] [--include-raw-names-cache] [--include-uncurated-sources]");
+        Console.WriteLine("  build   --catalog-root <path> [--output <path>] [--origin-root <path>] [--raw-names-root <path>] [--build-timestamp-utc <ISO-8601>] [--include-raw-names-cache] [--include-uncurated-sources]");
         Console.WriteLine("  compare --left <path> --right <path>");
         Console.WriteLine("  export  --input <path> --table <name> --output <path>");
     }

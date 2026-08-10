@@ -25,6 +25,9 @@ param(
     [string]$CompareTo,
 
     [Parameter()]
+    [DateTimeOffset]$BuildTimestampUtc,
+
+    [Parameter()]
     [switch]$InstallToCatalogRoot
 )
 
@@ -71,6 +74,10 @@ if ($IncludeRawNamesCache.IsPresent) {
 
 if ($IncludeUncuratedSources.IsPresent) {
     $buildArguments += '--include-uncurated-sources'
+}
+
+if ($PSBoundParameters.ContainsKey('BuildTimestampUtc')) {
+    $buildArguments += @('--build-timestamp-utc', $BuildTimestampUtc.ToUniversalTime().ToString('O'))
 }
 
 dotnet @buildArguments

@@ -100,7 +100,6 @@ internal static class RepresentativeManagementObservationGenerator
                 software);
         }
 
-        AddRepresentativeHistory(world, company, observedAt, idFactory);
     }
 
     private static void AddObservation(
@@ -192,64 +191,95 @@ internal static class RepresentativeManagementObservationGenerator
         return ids;
     }
 
-    private static void AddRepresentativeHistory(
+    internal static void AddRepresentativeHistory(
         SyntheticEnterpriseWorld world,
         Company company,
         DateTimeOffset observedAt,
         IIdFactory idFactory)
     {
-        var server = world.Servers
-            .Where(candidate => candidate.CompanyId == company.Id)
-            .OrderBy(candidate => candidate.Id, StringComparer.Ordinal)
-            .FirstOrDefault();
-        var software = world.SoftwarePackages
-            .OrderBy(candidate => candidate.Id, StringComparer.Ordinal)
-            .FirstOrDefault();
-        if (server is not null && software is not null)
-        {
-            world.RelationshipHistoryObservations.Add(new RelationshipHistoryObservation
+        var applications = world.Applications
+            .Where(application => application.CompanyId == company.Id)
+            .ToDictionary(application => application.Id, StringComparer.Ordinal);
+        var services = world.ApplicationServices
+            .Where(service => service.CompanyId == company.Id)
+            .ToDictionary(service => service.Id, StringComparer.Ordinal);
+        var servers = world.Servers
+            .Where(server => server.CompanyId == company.Id)
+            .ToDictionary(server => server.Id, StringComparer.Ordinal);
+        var installedServerIds = world.ServerSoftwareInstallations
+            .Select(installation => installation.ServerId)
+            .ToHashSet(StringComparer.Ordinal);
+        var candidate = world.ApplicationServiceHostings
+            .Where(hosting => hosting.CompanyId == company.Id
+                              && string.Equals(hosting.HostType, "Server", StringComparison.OrdinalIgnoreCase)
+                              && !string.IsNullOrWhiteSpace(hosting.HostId)
+                              && services.TryGetValue(hosting.ApplicationServiceId, out _)
+                              && servers.ContainsKey(hosting.HostId)
+                              && installedServerIds.Contains(hosting.HostId))
+            .Select(hosting => new
             {
-                Id = idFactory.Next("RHO"),
-                CompanyId = company.Id,
-                RelationshipType = "InstalledOn",
-                FromArtifact = "software_packages",
-                FromEntityType = "Application",
-                FromEntityId = software.Id,
-                ToArtifact = "servers",
-                ToEntityType = "Server",
-                ToEntityId = server.Id,
-                LifecycleState = "Removed",
-                SourceSystem = "ConfigurationManagement",
-                ObservedAtUtc = observedAt.AddDays(-45),
-                RemovedAtUtc = observedAt.AddDays(-20),
-                Detail = "A prior inventory snapshot contained this installation.",
-            });
+                Hosting = hosting,
+                Application = applications.GetValueOrDefault(services[hosting.ApplicationServiceId].ApplicationId),
+                Server = servers[hosting.HostId!]
+            })
+            .Where(item => item.Application is not null)
+            .OrderBy(item => item.Application!.Id, StringComparer.Ordinal)
+            .ThenBy(item => item.Server.Id, StringComparer.Ordinal)
+            .ThenBy(item => item.Hosting.Id, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (candidate?.Application is null)
+        {
+            return;
         }
 
+        AddRelationshipHistory("InstalledOn", "applications", candidate.Application.Id, "servers", candidate.Server.Id,
+            "ConfigurationManagement", "An inventory snapshot recorded this hosted application.", observedAt.AddDays(-7), null, "Active");
+        AddRelationshipHistory("InstalledOn", "applications", candidate.Application.Id, "servers", candidate.Server.Id,
+            "ConfigurationManagement", "A prior inventory snapshot recorded this hosted application.", observedAt.AddDays(-45), observedAt.AddDays(-20), "Removed");
+
         var owner = world.People
-            .Where(candidate => candidate.CompanyId == company.Id)
-            .OrderBy(candidate => candidate.Id, StringComparer.Ordinal)
+            .Where(person => person.CompanyId == company.Id
+                             && person.DepartmentId == candidate.Application.OwnerDepartmentId)
+            .OrderBy(person => person.Id, StringComparer.Ordinal)
             .FirstOrDefault();
-        if (owner is not null && software is not null)
+        if (owner is null)
         {
+            return;
+        }
+
+        AddRelationshipHistory("Owns", "people", owner.Id, "applications", candidate.Application.Id,
+            "ServiceCatalog", "The current service catalog names this owner.", observedAt.AddDays(-7), null, "Active");
+        AddRelationshipHistory("Owns", "people", owner.Id, "applications", candidate.Application.Id,
+            "ServiceCatalog", "A prior service catalog named this owner.", observedAt.AddDays(-90), observedAt.AddDays(-30), "Removed");
+
+        void AddRelationshipHistory(
+            string relationshipType,
+            string fromArtifact,
+            string fromEntityId,
+            string toArtifact,
+            string toEntityId,
+            string sourceSystem,
+            string detail,
+            DateTimeOffset observedAtUtc,
+            DateTimeOffset? removedAtUtc,
+            string lifecycleState) =>
             world.RelationshipHistoryObservations.Add(new RelationshipHistoryObservation
             {
                 Id = idFactory.Next("RHO"),
                 CompanyId = company.Id,
-                RelationshipType = "Owns",
-                FromArtifact = "people",
-                FromEntityType = "Person",
-                FromEntityId = owner.Id,
-                ToArtifact = "software_packages",
-                ToEntityType = "Application",
-                ToEntityId = software.Id,
-                LifecycleState = "Removed",
-                SourceSystem = "ServiceCatalog",
-                ObservedAtUtc = observedAt.AddDays(-90),
-                RemovedAtUtc = observedAt.AddDays(-30),
-                Detail = "A prior service inventory named this owner.",
+                RelationshipType = relationshipType,
+                FromArtifact = fromArtifact,
+                FromEntityType = relationshipType == "Owns" ? "Person" : "Application",
+                FromEntityId = fromEntityId,
+                ToArtifact = toArtifact,
+                ToEntityType = relationshipType == "Owns" ? "Application" : "Server",
+                ToEntityId = toEntityId,
+                LifecycleState = lifecycleState,
+                SourceSystem = sourceSystem,
+                ObservedAtUtc = observedAtUtc,
+                RemovedAtUtc = removedAtUtc,
+                Detail = detail,
             });
-        }
     }
 
     private static string ResolveJoinState(bool domainJoined, string? cloudDirectoryAccountId, int index) =>

@@ -1,9 +1,128 @@
 using SyntheticEnterprise.Core.Catalogs;
+using Microsoft.Data.Sqlite;
+using System.Security.Cryptography;
 
 namespace SyntheticEnterprise.Core.Tests;
 
 public sealed class CatalogSqliteDatabaseBuilderTests
 {
+    private static readonly object SourceDateEpochLock = new();
+
+    [Fact]
+    public void Build_Produces_ByteIdentical_Databases_From_Copied_Source_Roots()
+    {
+        var tempRoot = CreateTempDirectory();
+        var firstCatalogRoot = Path.Combine(tempRoot, "first-source", "catalogs");
+        var secondCatalogRoot = Path.Combine(tempRoot, "second-source", "catalogs");
+        var firstOutputPath = Path.Combine(tempRoot, "first", "catalogs.sqlite");
+        var secondOutputPath = Path.Combine(tempRoot, "second", "catalogs.sqlite");
+        var buildTimestamp = new DateTimeOffset(2026, 8, 9, 15, 30, 0, TimeSpan.Zero);
+
+        try
+        {
+            WriteDeterministicCatalogFixture(firstCatalogRoot);
+            WriteDeterministicCatalogFixture(secondCatalogRoot);
+
+            CatalogSqliteDatabaseBuilder.Build(firstOutputPath, new[] { firstCatalogRoot }, buildTimestampUtc: buildTimestamp);
+            CatalogSqliteDatabaseBuilder.Build(secondOutputPath, new[] { secondCatalogRoot }, buildTimestampUtc: buildTimestamp);
+            SqliteConnection.ClearAllPools();
+
+            Assert.Equal(
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(firstOutputPath))),
+                Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(secondOutputPath))));
+
+            var catalogs = new FileSystemCatalogLoader().LoadFromPath(firstOutputPath);
+            Assert.Equal("2026-08-09T15:30:00.0000000+00:00", catalogs.BuildMetadata?.BuiltAtUtc);
+            Assert.Equal("3", catalogs.BuildMetadata?.Version);
+            Assert.Equal("deterministic-test-1", catalogs.BuildMetadata?.ManifestVersion);
+            var source = Assert.Single(catalogs.Sources);
+            Assert.Equal("catalog-root-001", source.SourceRoot);
+            Assert.DoesNotContain(tempRoot, source.SourceRoot, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            if (Directory.Exists(tempRoot))
+            {
+                try
+                {
+                    Directory.Delete(tempRoot, recursive: true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Build_Uses_SourceDateEpoch_When_No_Explicit_Timestamp_Is_Supplied()
+    {
+        var tempRoot = CreateTempDirectory();
+        var catalogRoot = Path.Combine(tempRoot, "catalogs");
+        var outputPath = Path.Combine(tempRoot, "catalogs.sqlite");
+
+        try
+        {
+            WriteDeterministicCatalogFixture(catalogRoot);
+            lock (SourceDateEpochLock)
+            {
+                var original = Environment.GetEnvironmentVariable("SOURCE_DATE_EPOCH");
+                try
+                {
+                    Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", "1786289400");
+                    CatalogSqliteDatabaseBuilder.Build(outputPath, new[] { catalogRoot });
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", original);
+                }
+            }
+
+            var catalogs = new FileSystemCatalogLoader().LoadFromPath(outputPath);
+            Assert.Equal("2026-08-09T15:30:00.0000000+00:00", catalogs.BuildMetadata?.BuiltAtUtc);
+        }
+        finally
+        {
+            DeleteTempDirectory(tempRoot);
+        }
+    }
+
+    [Fact]
+    public void Build_Leaves_Build_Time_Absent_When_No_Provenance_Timestamp_Is_Supplied()
+    {
+        var tempRoot = CreateTempDirectory();
+        var catalogRoot = Path.Combine(tempRoot, "catalogs");
+        var outputPath = Path.Combine(tempRoot, "catalogs.sqlite");
+
+        try
+        {
+            WriteDeterministicCatalogFixture(catalogRoot);
+            lock (SourceDateEpochLock)
+            {
+                var original = Environment.GetEnvironmentVariable("SOURCE_DATE_EPOCH");
+                try
+                {
+                    Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", null);
+                    CatalogSqliteDatabaseBuilder.Build(outputPath, new[] { catalogRoot });
+                }
+                finally
+                {
+                    Environment.SetEnvironmentVariable("SOURCE_DATE_EPOCH", original);
+                }
+            }
+
+            var catalogs = new FileSystemCatalogLoader().LoadFromPath(outputPath);
+            Assert.Null(catalogs.BuildMetadata?.BuiltAtUtc);
+        }
+        finally
+        {
+            DeleteTempDirectory(tempRoot);
+        }
+    }
+
     [Fact]
     public void Build_Creates_Curated_Runtime_Tables_With_Metadata()
     {
@@ -532,5 +651,39 @@ public sealed class CatalogSqliteDatabaseBuilderTests
         var path = Path.Combine(Path.GetTempPath(), $"datagen-core-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    private static void WriteDeterministicCatalogFixture(string catalogRoot)
+    {
+        Directory.CreateDirectory(catalogRoot);
+        File.WriteAllText(Path.Combine(catalogRoot, "catalog-import-manifest.json"), """
+            {
+              "version": "deterministic-test-1",
+              "tables": [
+                { "tableName": "software_catalog", "strategy": "copy_csv", "sourceFiles": [ "software_catalog.csv" ] }
+              ]
+            }
+            """);
+        File.WriteAllText(Path.Combine(catalogRoot, "software_catalog.csv"), """
+            Name,Category,Vendor,Version
+            Deterministic App,Security,Contoso,1.0
+            """);
+    }
+
+    private static void DeleteTempDirectory(string tempRoot)
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+
+        if (Directory.Exists(tempRoot))
+        {
+            try
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 }

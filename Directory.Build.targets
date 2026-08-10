@@ -1,0 +1,439 @@
+<Project>
+  <PropertyGroup>
+    <DataGenRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</DataGenRepositoryRoot>
+    <DataGenCatalogArtifactPath Condition="'$(DataGenCatalogArtifactPath)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\catalog\catalogs.sqlite'))</DataGenCatalogArtifactPath>
+    <DataGenCatalogFingerprintPath Condition="'$(DataGenCatalogFingerprintPath)' == ''">$(DataGenCatalogArtifactPath).inputs.sha256</DataGenCatalogFingerprintPath>
+    <DataGenCatalogRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)catalogs'))</DataGenCatalogRoot>
+    <DataGenPowerShellExecutable Condition="'$(OS)' == 'Windows_NT'">pwsh.exe</DataGenPowerShellExecutable>
+    <DataGenPowerShellExecutable Condition="'$(DataGenPowerShellExecutable)' == ''">pwsh</DataGenPowerShellExecutable>
+  </PropertyGroup>
+
+  <UsingTask TaskName="EnsureDataGenCatalogArtifact"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <RepositoryRoot ParameterType="System.String" Required="true" />
+      <CatalogRoot ParameterType="System.String" Required="true" />
+      <ArtifactPath ParameterType="System.String" Required="true" />
+      <FingerprintPath ParameterType="System.String" Required="true" />
+      <CatalogScript ParameterType="System.String" Required="true" />
+      <PowerShellExecutable ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.Diagnostics" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="System.Security.Cryptography" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Threading" />
+      <Using Namespace="System.Xml" />
+      <Using Namespace="Microsoft.Build.Utilities" />
+      <Code Type="Class" Language="cs"><![CDATA[
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading;
+using System.Xml;
+
+public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Task
+{
+    public string RepositoryRoot { get; set; } = string.Empty;
+    public string CatalogRoot { get; set; } = string.Empty;
+    public string ArtifactPath { get; set; } = string.Empty;
+    public string FingerprintPath { get; set; } = string.Empty;
+    public string CatalogScript { get; set; } = string.Empty;
+    public string PowerShellExecutable { get; set; } = string.Empty;
+
+    public override bool Execute()
+    {
+        var repositoryRoot = Path.GetFullPath(RepositoryRoot);
+        var catalogRoot = Path.GetFullPath(CatalogRoot);
+        var artifactPath = Path.GetFullPath(ArtifactPath);
+        var fingerprintPath = Path.GetFullPath(FingerprintPath);
+        using var mutex = CreateMutex("CatalogArtifact", artifactPath);
+        var mutexHeld = false;
+
+        try
+        {
+            try
+            {
+                mutexHeld = mutex.WaitOne(TimeSpan.FromMinutes(10));
+            }
+            catch (AbandonedMutexException)
+            {
+                mutexHeld = true;
+            }
+
+            if (!mutexHeld)
+            {
+                Log.LogError("Timed out waiting to generate catalog artifact '{0}'.", artifactPath);
+                return false;
+            }
+
+            var fingerprint = ComputeFingerprint(repositoryRoot, catalogRoot, artifactPath, fingerprintPath);
+            if (File.Exists(artifactPath)
+                && TryReadIntegrityRecord(fingerprintPath, out var integrityRecord)
+                && integrityRecord.FormatVersion == 1
+                && string.Equals(integrityRecord.InputFingerprint, fingerprint, StringComparison.Ordinal)
+                && string.Equals(integrityRecord.ArtifactSha256, ComputeFileHash(artifactPath), StringComparison.Ordinal))
+            {
+                Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Low, "Seeded catalog database is current at '{0}'.", artifactPath);
+                return true;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(artifactPath)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(fingerprintPath)!);
+            var temporaryArtifactPath = artifactPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var temporaryFingerprintPath = fingerprintPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using var toolMutex = CreateMutex("CatalogToolBuild", repositoryRoot);
+                var toolMutexHeld = false;
+                try
+                {
+                    try
+                    {
+                        toolMutexHeld = toolMutex.WaitOne(TimeSpan.FromMinutes(10));
+                    }
+                    catch (AbandonedMutexException)
+                    {
+                        toolMutexHeld = true;
+                    }
+
+                    if (!toolMutexHeld)
+                    {
+                        Log.LogError("Timed out waiting to build the catalog tool for repository '{0}'.", repositoryRoot);
+                        return false;
+                    }
+
+                    var startInfo = new ProcessStartInfo(PowerShellExecutable)
+                    {
+                        UseShellExecute = false,
+                        Arguments = "-NoLogo -NoProfile -NonInteractive -File " + Quote(CatalogScript) + " -CatalogRoot " + Quote(catalogRoot) + " -OutputPath " + Quote(temporaryArtifactPath)
+                    };
+
+                    using var process = Process.Start(startInfo);
+                    if (process is null)
+                    {
+                        Log.LogError("Unable to start catalog generator '{0}'.", PowerShellExecutable);
+                        return false;
+                    }
+
+                    process.WaitForExit();
+                    if (process.ExitCode != 0)
+                    {
+                        Log.LogError("Catalog generator exited with code {0} for '{1}'.", process.ExitCode, artifactPath);
+                        return false;
+                    }
+                }
+                finally
+                {
+                    if (toolMutexHeld)
+                    {
+                        toolMutex.ReleaseMutex();
+                    }
+                }
+
+                if (!File.Exists(temporaryArtifactPath))
+                {
+                    Log.LogError("Catalog generator did not produce '{0}'.", temporaryArtifactPath);
+                    return false;
+                }
+
+                PublishAtomically(temporaryArtifactPath, artifactPath);
+                WriteIntegrityRecordAtomically(
+                    temporaryFingerprintPath,
+                    fingerprintPath,
+                    new CatalogIntegrityRecord
+                    {
+                        FormatVersion = 1,
+                        InputFingerprint = fingerprint,
+                        ArtifactSha256 = ComputeFileHash(artifactPath)
+                    });
+                Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Normal, "Seeded catalog database generated at '{0}'.", artifactPath);
+                return true;
+            }
+            finally
+            {
+                if (File.Exists(temporaryArtifactPath))
+                {
+                    File.Delete(temporaryArtifactPath);
+                }
+
+                if (File.Exists(temporaryFingerprintPath))
+                {
+                    File.Delete(temporaryFingerprintPath);
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            Log.LogErrorFromException(exception, true, true, null);
+            return false;
+        }
+        finally
+        {
+            if (mutexHeld)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
+    }
+
+    private static string ComputeFingerprint(string repositoryRoot, string catalogRoot, string artifactPath, string fingerprintPath)
+    {
+        var inputFiles = new List<string>();
+        inputFiles.AddRange(Directory.EnumerateFiles(catalogRoot, "*", SearchOption.AllDirectories)
+            .Where(path => !IsOwnedOutput(path, artifactPath, fingerprintPath))
+            .Where(path => !IsCatalogCache(path, catalogRoot)));
+        inputFiles.Add(Path.Combine(repositoryRoot, "Directory.Build.props"));
+        inputFiles.Add(Path.Combine(repositoryRoot, "Directory.Build.targets"));
+        inputFiles.Add(Path.Combine(repositoryRoot, "scripts", "build-catalog-artifact.ps1"));
+        var projectDirectories = new HashSet<string>(
+            Directory.EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*.csproj", SearchOption.AllDirectories)
+                .Select(Path.GetDirectoryName)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => Path.GetFullPath(path!)),
+            StringComparer.OrdinalIgnoreCase);
+        inputFiles.AddRange(Directory.EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*", SearchOption.AllDirectories)
+            .Where(path => !IsOwnedProjectBuildOutput(path, projectDirectories))
+            .Where(path => !IsOwnedOutput(path, artifactPath, fingerprintPath)));
+
+        var fingerprintLines = inputFiles
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(path => GetRelativePath(repositoryRoot, path).Replace('\\', '/') + "|" + ComputeHash(File.ReadAllBytes(path)));
+
+        return ComputeHash(Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, fingerprintLines)));
+    }
+
+    private static bool IsOwnedOutput(string path, string artifactPath, string fingerprintPath)
+    {
+        var fullPath = Path.GetFullPath(path);
+        return fullPath.Equals(artifactPath, StringComparison.OrdinalIgnoreCase)
+            || fullPath.Equals(fingerprintPath, StringComparison.OrdinalIgnoreCase)
+            || IsOwnedTemporaryPath(fullPath, artifactPath)
+            || IsOwnedTemporaryPath(fullPath, fingerprintPath);
+    }
+
+    private static bool IsOwnedTemporaryPath(string path, string ownedPath)
+        => path.StartsWith(ownedPath + ".", StringComparison.OrdinalIgnoreCase)
+            && path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCatalogCache(string path, string catalogRoot)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var catalogCache = Path.Combine(Path.GetFullPath(catalogRoot), "catalogs.sqlite");
+        return fullPath.Equals(catalogCache, StringComparison.OrdinalIgnoreCase)
+            || fullPath.Equals(catalogCache + ".inputs.sha256", StringComparison.OrdinalIgnoreCase)
+            || IsOwnedTemporaryPath(fullPath, catalogCache)
+            || IsOwnedTemporaryPath(fullPath, catalogCache + ".inputs.sha256");
+    }
+
+    private static bool IsOwnedProjectBuildOutput(string path, ISet<string> projectDirectories)
+    {
+        var fullPath = Path.GetFullPath(path);
+        foreach (var projectDirectory in projectDirectories)
+        {
+            var relativePath = GetRelativePath(projectDirectory, fullPath);
+            var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (segments.Length < 2 || segments[0].StartsWith("..", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (segments[0].Equals("bin", StringComparison.OrdinalIgnoreCase))
+            {
+                return IsKnownBuildConfiguration(segments[1]);
+            }
+
+            if (!segments[0].Equals("obj", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return IsKnownGeneratedObjRootFile(segments[1]) || IsKnownBuildConfiguration(segments[1]);
+        }
+
+        return false;
+    }
+
+    private static bool IsKnownBuildConfiguration(string segment)
+        => segment.Equals("Debug", StringComparison.OrdinalIgnoreCase)
+            || segment.Equals("Release", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsKnownGeneratedObjRootFile(string fileName)
+        => fileName.Equals("project.assets.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.Equals("project.nuget.cache", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".csproj.nuget.g.props", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".csproj.nuget.g.targets", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".csproj.nuget.dgspec.json", StringComparison.OrdinalIgnoreCase);
+
+    private static Mutex CreateMutex(string purpose, string identity)
+    {
+        var name = "DataGen." + purpose + "." + ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(identity).ToUpperInvariant()));
+        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+        {
+            name = "Global\\" + name;
+        }
+
+        try
+        {
+            return new Mutex(false, name);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException("Unable to establish catalog generation coordination for '" + purpose + "'.", exception);
+        }
+    }
+
+    private static bool TryReadIntegrityRecord(string fingerprintPath, out CatalogIntegrityRecord integrityRecord)
+    {
+        integrityRecord = new CatalogIntegrityRecord();
+        if (!File.Exists(fingerprintPath))
+        {
+            return false;
+        }
+
+        try
+        {
+            var settings = new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null,
+                MaxCharactersFromEntities = 0,
+                MaxCharactersInDocument = 4096
+            };
+            using var reader = XmlReader.Create(fingerprintPath, settings);
+            var document = new XmlDocument
+            {
+                XmlResolver = null
+            };
+            document.Load(reader);
+            var root = document.DocumentElement;
+            if (root is null
+                || !string.Equals(root.Name, "catalogIntegrity", StringComparison.Ordinal)
+                || !int.TryParse(root.GetAttribute("formatVersion"), out var formatVersion)
+                || string.IsNullOrWhiteSpace(root.GetAttribute("inputFingerprint"))
+                || string.IsNullOrWhiteSpace(root.GetAttribute("artifactSha256")))
+            {
+                return false;
+            }
+
+            integrityRecord = new CatalogIntegrityRecord
+            {
+                FormatVersion = formatVersion,
+                InputFingerprint = root.GetAttribute("inputFingerprint"),
+                ArtifactSha256 = root.GetAttribute("artifactSha256")
+            };
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
+    }
+
+    private static void WriteIntegrityRecordAtomically(string temporaryPath, string destinationPath, CatalogIntegrityRecord integrityRecord)
+    {
+        var document = new XmlDocument();
+        var root = document.CreateElement("catalogIntegrity");
+        root.SetAttribute("formatVersion", integrityRecord.FormatVersion.ToString());
+        root.SetAttribute("inputFingerprint", integrityRecord.InputFingerprint);
+        root.SetAttribute("artifactSha256", integrityRecord.ArtifactSha256);
+        document.AppendChild(root);
+        using (var writer = XmlWriter.Create(temporaryPath, new XmlWriterSettings
+        {
+            Encoding = new UTF8Encoding(false),
+            Indent = false,
+            OmitXmlDeclaration = true
+        }))
+        {
+            document.Save(writer);
+        }
+
+        PublishAtomically(temporaryPath, destinationPath);
+    }
+
+    private static void PublishAtomically(string temporaryPath, string destinationPath)
+    {
+        if (File.Exists(destinationPath))
+        {
+            File.Replace(temporaryPath, destinationPath, null);
+            return;
+        }
+
+        File.Move(temporaryPath, destinationPath);
+    }
+
+    private static string ComputeFileHash(string path)
+    {
+        using var stream = File.OpenRead(path);
+        using var sha256 = SHA256.Create();
+        return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", string.Empty);
+    }
+
+    private static string ComputeHash(byte[] bytes)
+    {
+        using (var sha256 = SHA256.Create())
+        {
+            return BitConverter.ToString(sha256.ComputeHash(bytes)).Replace("-", string.Empty);
+        }
+    }
+
+    private static string GetRelativePath(string basePath, string path)
+    {
+        var baseUri = new Uri(AppendDirectorySeparator(Path.GetFullPath(basePath)));
+        var pathUri = new Uri(Path.GetFullPath(path));
+        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(pathUri).ToString()).Replace('/', Path.DirectorySeparatorChar);
+    }
+
+    private static string AppendDirectorySeparator(string path)
+    {
+        return path.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal) ? path : path + Path.DirectorySeparatorChar;
+    }
+
+    private static string Quote(string value)
+    {
+        return "\"" + value.Replace("\"", "\\\"") + "\"";
+    }
+
+    private sealed class CatalogIntegrityRecord
+    {
+        public int FormatVersion { get; set; }
+        public string InputFingerprint { get; set; } = string.Empty;
+        public string ArtifactSha256 { get; set; } = string.Empty;
+    }
+}
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="GenerateSeededCatalogDatabase"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(GenerateSeededCatalogDatabase)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+    <EnsureDataGenCatalogArtifact RepositoryRoot="$(DataGenRepositoryRoot)"
+                                  CatalogRoot="$(DataGenCatalogRoot)"
+                                  ArtifactPath="$(DataGenCatalogArtifactPath)"
+                                  FingerprintPath="$(DataGenCatalogFingerprintPath)"
+                                  CatalogScript="$(MSBuildThisFileDirectory)scripts\build-catalog-artifact.ps1"
+                                  PowerShellExecutable="$(DataGenPowerShellExecutable)" />
+    <Error Condition="!Exists('$(DataGenCatalogArtifactPath)')" Text="Seeded catalog database was not generated at '$(DataGenCatalogArtifactPath)'." />
+    <Error Condition="!Exists('$(DataGenCatalogFingerprintPath)')" Text="Seeded catalog fingerprint was not generated at '$(DataGenCatalogFingerprintPath)'." />
+  </Target>
+</Project>

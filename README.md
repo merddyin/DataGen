@@ -4,6 +4,16 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.9.4
+
+- corrected opt-in representative relationship history so `Application` references resolve to real same-company application records and `InstalledOn` evidence follows generated application-service hosting to a server with software inventory
+- added deterministic active and removed `InstalledOn` history without requiring an owner, while emitting active and removed `Owns` history only when a real person in the application's owning department exists
+- preserved scenario boundaries: disabled representative observations and an explicit observation count of zero now produce no representative management or relationship-history facts
+- retained the product-neutral public contracts and normalized export schema; consumers can continue translating generic enterprise facts without DataGen carrying downstream identifiers or logic
+- documented the current website dependency disposition: the Docusaurus `image-size@2.0.2` advisory remains open because no compatible upstream fix exists, while the supported build guard and read-only CI controls provide a bounded acceptance through 2026-09-30; see [docs/security/dependency-dispositions.md](docs/security/dependency-dispositions.md)
+- made catalog artifacts reproducible across copied checkouts: source records now retain ordered logical root identifiers rather than machine-specific paths, and a caller may supply an explicit UTC build timestamp or `SOURCE_DATE_EPOCH`
+- made missing catalog build-time provenance explicit rather than publishing a fabricated timestamp; the release workflow supplies one timestamp for all release catalog work
+
 ### v0.9.3
 
 - replaced process-salted generation choices with stable hashing where those choices contribute to a seeded world, so the same supported inputs do not vary by process
@@ -194,6 +204,10 @@ If you do not already have a local seeded catalog database, generate it first:
 
 That command writes the canonical build output to `artifacts\catalog\catalogs.sqlite` and installs a local working copy to `catalogs\catalogs.sqlite` for source builds.
 
+### Catalog provenance
+
+Catalog source records use stable logical identifiers such as `catalog-root-001`, not local filesystem paths, so the same catalog inputs can produce byte-identical artifacts from different checkout locations. A catalog records `built_at_utc` only when the producer explicitly supplies a timestamp. `.\scripts\build-catalog-artifact.ps1 -BuildTimestampUtc 2026-08-09T15:30:00Z` passes an ISO-8601 UTC value through to the catalog tool; build orchestration can instead set `SOURCE_DATE_EPOCH` to whole Unix seconds. When neither is provided, the field is deliberately empty rather than pretending a build happened at an arbitrary time.
+
 The separate `catalogs.sqlite` GitHub release asset is provided for inspection, custom catalog workflows, and direct consumers that want the SQLite file outside the module package.
 
 ### Build the solution
@@ -225,8 +239,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.9.3 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.3\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.9.4 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.9.4\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
