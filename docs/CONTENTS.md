@@ -34,6 +34,7 @@ Current focused documents include:
 - `PowerShell_Command_Surface_Audit.md`
 - `Product_Roadmap_PRD.md`
 - `Product_Roadmap_Engineering_Plan.md`
+- `security/dependency-dispositions.md`
 
 ## Historical design and milestone notes
 

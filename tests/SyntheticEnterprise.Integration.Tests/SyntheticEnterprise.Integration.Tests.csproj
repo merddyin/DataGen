@@ -3,6 +3,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateSeededCatalogDatabase>true</GenerateSeededCatalogDatabase>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,8 +26,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <IntegrationTestAssetSource Include="..\..\catalogs\**\*">
+    <IntegrationTestAssetSource Include="..\..\catalogs\**\*" Exclude="..\..\catalogs\catalogs.sqlite">
       <AssetRelativePath>catalogs\%(RecursiveDir)%(Filename)%(Extension)</AssetRelativePath>
+    </IntegrationTestAssetSource>
+    <IntegrationTestAssetSource Include="$(DataGenCatalogArtifactPath)">
+      <AssetRelativePath>catalogs\catalogs.sqlite</AssetRelativePath>
     </IntegrationTestAssetSource>
     <IntegrationTestAssetSource Include="..\..\examples\regional-manufacturer.json">
       <AssetRelativePath>examples\regional-manufacturer.json</AssetRelativePath>

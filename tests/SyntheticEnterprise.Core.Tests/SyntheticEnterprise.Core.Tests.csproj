@@ -4,6 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
+    <GenerateSeededCatalogDatabase>true</GenerateSeededCatalogDatabase>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -34,7 +35,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\..\catalogs\**\*" Link="catalogs\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\catalogs\**\*" Exclude="..\..\catalogs\catalogs.sqlite" Link="catalogs\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(DataGenCatalogArtifactPath)" Link="catalogs\catalogs.sqlite" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\packs\first-party\**\*" Link="packs\first-party\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

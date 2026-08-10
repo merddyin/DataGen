@@ -55,6 +55,13 @@ jobs:
           New-Item -ItemType Directory -Path $env:DIAGNOSTICS_DIR -Force | Out-Null
           "Release workflow started at $(Get-Date -Format o)" | Set-Content (Join-Path $env:DIAGNOSTICS_DIR 'run-summary.txt')
 
+      - name: Establish reproducible catalog provenance
+        shell: pwsh
+        run: |
+          $sourceDateEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          "SOURCE_DATE_EPOCH=$sourceDateEpoch" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "Catalog build provenance epoch: $sourceDateEpoch" | Add-Content (Join-Path $env:DIAGNOSTICS_DIR 'run-summary.txt')
+
       - name: Capture toolchain versions
         shell: pwsh
         run: |

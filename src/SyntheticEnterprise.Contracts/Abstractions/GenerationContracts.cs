@@ -23,6 +23,9 @@ public record CatalogSet
 
 public record CatalogBuildMetadata
 {
+    /// <summary>
+    /// UTC build provenance supplied explicitly by the producer, or <see langword="null"/> when no reproducible timestamp was supplied.
+    /// </summary>
     public string? BuiltAtUtc { get; init; }
     public string? Version { get; init; }
     public string? ManifestVersion { get; init; }
@@ -32,6 +35,9 @@ public record CatalogSourceMetadata
 {
     public required string CatalogName { get; init; }
     public required string SourceFile { get; init; }
+    /// <summary>
+    /// Stable logical source-root identifier such as <c>catalog-root-001</c>; this deliberately is not a machine-specific filesystem path.
+    /// </summary>
     public required string SourceRoot { get; init; }
     public required string SourceKind { get; init; }
     public string? Strategy { get; init; }

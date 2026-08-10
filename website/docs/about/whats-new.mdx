@@ -21,6 +21,8 @@ This patch corrects the opt-in representative relationship facts introduced for 
   Representative relationship history follows the same switch and count as representative management observations. Disabling the feature or setting `infrastructure.representativeManagementObservationCount` to `0` produces neither surface.
 - **Stable consumer boundary**
   The public models and normalized export schema are unchanged. Existing adapters still translate product-neutral DataGen facts, but datasets generated with representative management observations should be regenerated when adopting v0.9.4 so they no longer contain the invalid v0.9.3 relationship references.
+- **Bounded website dependency acceptance**
+  The current website lockfile still resolves `image-size@2.0.2` through Docusaurus, and `npm audit` does not pass because no compatible upstream fix is available. The build guard and read-only pull-request CI support a bounded acceptance through 2026-09-30; see the [repository dependency disposition](https://github.com/merddyin/DataGen/blob/main/docs/security/dependency-dispositions.md) for the affected surfaces, controls, residual risk, and re-review triggers.
 
 ## v0.9.3
 

@@ -3,10 +3,18 @@ namespace SyntheticEnterprise.Core.Catalogs;
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 using System.Text.Json;
+using System.Threading;
 
 public static class CatalogSqliteDatabaseBuilder
 {
-    public static void Build(string outputPath, IEnumerable<string> sourceRoots, bool includeUncuratedSources = false)
+    public const string SourceDateEpochEnvironmentVariable = "SOURCE_DATE_EPOCH";
+    private static readonly AsyncLocal<CatalogBuildContext?> CurrentBuildContext = new();
+
+    public static void Build(
+        string outputPath,
+        IEnumerable<string> sourceRoots,
+        bool includeUncuratedSources = false,
+        DateTimeOffset? buildTimestampUtc = null)
     {
         SQLitePCL.Batteries_V2.Init();
 
@@ -16,65 +24,74 @@ public static class CatalogSqliteDatabaseBuilder
             .Where(Directory.Exists)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var manifest = LoadManifest(normalizedRoots);
-
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
-        if (File.Exists(outputPath))
+        var previousBuildContext = CurrentBuildContext.Value;
+        CurrentBuildContext.Value = new CatalogBuildContext(normalizedRoots);
+        try
         {
-            File.Delete(outputPath);
-        }
+            var manifest = LoadManifest(normalizedRoots);
 
-        using var connection = new SqliteConnection($"Data Source={outputPath}");
-        connection.Open();
-
-        CreateMetadataTables(connection, manifest.Version);
-
-        var processedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var processedCatalogNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var definition in manifest.Tables)
-        {
-            ImportCuratedTable(connection, normalizedRoots, definition, processedFiles, processedCatalogNames);
-        }
-
-        if (!includeUncuratedSources)
-        {
-            return;
-        }
-
-        foreach (var sourceRoot in normalizedRoots)
-        {
-            foreach (var file in Directory.EnumerateFiles(sourceRoot, "*.csv", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outputPath))!);
+            if (File.Exists(outputPath))
             {
-                if (processedFiles.Contains(Path.GetFullPath(file)))
-                {
-                    continue;
-                }
-
-                var tableName = Path.GetFileNameWithoutExtension(file);
-                if (!processedCatalogNames.Add(tableName))
-                {
-                    continue;
-                }
-
-                ImportCsv(connection, sourceRoot, file, strategy: "copy_csv");
+                File.Delete(outputPath);
             }
 
-            foreach (var file in Directory.EnumerateFiles(sourceRoot, "*.json", SearchOption.AllDirectories))
+            using var connection = new SqliteConnection($"Data Source={outputPath}");
+            connection.Open();
+
+            CreateMetadataTables(connection, manifest.Version, ResolveBuildTimestampUtc(buildTimestampUtc));
+
+            var processedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var processedCatalogNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var definition in manifest.Tables)
             {
-                if (processedFiles.Contains(Path.GetFullPath(file))
-                    || string.Equals(Path.GetFileName(file), FileSystemCatalogLoader.ManifestFileName, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var catalogName = Path.GetFileNameWithoutExtension(file);
-                if (!processedCatalogNames.Add(catalogName))
-                {
-                    continue;
-                }
-
-                ImportJson(connection, sourceRoot, file, strategy: "copy_json");
+                ImportCuratedTable(connection, normalizedRoots, definition, processedFiles, processedCatalogNames);
             }
+
+            if (!includeUncuratedSources)
+            {
+                return;
+            }
+
+            foreach (var sourceRoot in normalizedRoots)
+            {
+                foreach (var file in Directory.EnumerateFiles(sourceRoot, "*.csv", SearchOption.AllDirectories))
+                {
+                    if (processedFiles.Contains(Path.GetFullPath(file)))
+                    {
+                        continue;
+                    }
+
+                    var tableName = Path.GetFileNameWithoutExtension(file);
+                    if (!processedCatalogNames.Add(tableName))
+                    {
+                        continue;
+                    }
+
+                    ImportCsv(connection, sourceRoot, file, strategy: "copy_csv");
+                }
+
+                foreach (var file in Directory.EnumerateFiles(sourceRoot, "*.json", SearchOption.AllDirectories))
+                {
+                    if (processedFiles.Contains(Path.GetFullPath(file))
+                        || string.Equals(Path.GetFileName(file), FileSystemCatalogLoader.ManifestFileName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var catalogName = Path.GetFileNameWithoutExtension(file);
+                    if (!processedCatalogNames.Add(catalogName))
+                    {
+                        continue;
+                    }
+
+                    ImportJson(connection, sourceRoot, file, strategy: "copy_json");
+                }
+            }
+        }
+        finally
+        {
+            CurrentBuildContext.Value = previousBuildContext;
         }
     }
 
@@ -133,13 +150,35 @@ public static class CatalogSqliteDatabaseBuilder
         };
     }
 
-    private static void CreateMetadataTables(SqliteConnection connection, string manifestVersion)
+    private static DateTimeOffset? ResolveBuildTimestampUtc(DateTimeOffset? buildTimestampUtc)
+    {
+        if (buildTimestampUtc.HasValue)
+        {
+            return buildTimestampUtc.Value.ToUniversalTime();
+        }
+
+        var sourceDateEpoch = Environment.GetEnvironmentVariable(SourceDateEpochEnvironmentVariable);
+        if (string.IsNullOrWhiteSpace(sourceDateEpoch))
+        {
+            return null;
+        }
+
+        if (!long.TryParse(sourceDateEpoch, NumberStyles.Integer, CultureInfo.InvariantCulture, out var secondsSinceUnixEpoch))
+        {
+            throw new InvalidOperationException(
+                $"{SourceDateEpochEnvironmentVariable} must be a whole number of seconds since the Unix epoch when catalog build provenance is requested.");
+        }
+
+        return DateTimeOffset.FromUnixTimeSeconds(secondsSinceUnixEpoch);
+    }
+
+    private static void CreateMetadataTables(SqliteConnection connection, string manifestVersion, DateTimeOffset? buildTimestampUtc)
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
             CREATE TABLE "__catalog_build"
             (
-                built_at_utc TEXT NOT NULL,
+                built_at_utc TEXT NULL,
                 version TEXT NOT NULL,
                 manifest_version TEXT NULL
             );
@@ -167,8 +206,8 @@ public static class CatalogSqliteDatabaseBuilder
             INSERT INTO "__catalog_build" (built_at_utc, version, manifest_version)
             VALUES ($builtAt, $version, $manifestVersion)
             """;
-        insertBuild.Parameters.AddWithValue("$builtAt", DateTimeOffset.UtcNow.ToString("O"));
-        insertBuild.Parameters.AddWithValue("$version", "2");
+        insertBuild.Parameters.AddWithValue("$builtAt", buildTimestampUtc?.ToString("O", CultureInfo.InvariantCulture) ?? (object)DBNull.Value);
+        insertBuild.Parameters.AddWithValue("$version", "3");
         insertBuild.Parameters.AddWithValue("$manifestVersion", manifestVersion);
         insertBuild.ExecuteNonQuery();
     }
@@ -1011,7 +1050,8 @@ public static class CatalogSqliteDatabaseBuilder
         insert.CommandText = """INSERT INTO "__catalog_source" (catalog_name, source_file, source_root, source_kind, strategy) VALUES ($name, $sourceFile, $sourceRoot, $kind, $strategy)""";
         insert.Parameters.AddWithValue("$name", catalogName);
         insert.Parameters.AddWithValue("$sourceFile", Path.GetRelativePath(sourceRoot, file));
-        insert.Parameters.AddWithValue("$sourceRoot", sourceRoot);
+        insert.Parameters.AddWithValue("$sourceRoot", CurrentBuildContext.Value?.GetLogicalSourceRootId(sourceRoot)
+            ?? throw new InvalidOperationException("Catalog source provenance is unavailable outside a catalog build operation."));
         insert.Parameters.AddWithValue("$kind", sourceKind);
         insert.Parameters.AddWithValue("$strategy", strategy ?? string.Empty);
         insert.ExecuteNonQuery();
@@ -1506,6 +1546,23 @@ public static class CatalogSqliteDatabaseBuilder
 
     private static string NormalizeKey(string value)
         => string.Concat(value.Trim().ToUpperInvariant().Where(ch => char.IsLetterOrDigit(ch) || char.IsWhiteSpace(ch)));
+
+    private sealed class CatalogBuildContext
+    {
+        private readonly IReadOnlyDictionary<string, string> logicalRootIds;
+
+        public CatalogBuildContext(IReadOnlyList<string> sourceRoots)
+        {
+            logicalRootIds = sourceRoots
+                .Select((sourceRoot, index) => new KeyValuePair<string, string>(sourceRoot, $"catalog-root-{index + 1:D3}"))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public string GetLogicalSourceRootId(string sourceRoot)
+            => logicalRootIds.TryGetValue(Path.GetFullPath(sourceRoot), out var logicalRootId)
+                ? logicalRootId
+                : throw new InvalidOperationException($"Catalog source root '{sourceRoot}' was not registered for this build.");
+    }
 
     private sealed record ResolvedCatalogSource(string SourceRoot, string FullPath);
 
