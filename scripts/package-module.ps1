@@ -2,7 +2,7 @@
 param(
     [Parameter()]
     [ValidatePattern('^\d+\.\d+\.\d+(\.\d+)?$')]
-    [string]$Version = '0.9.4',
+    [string]$Version = '0.10.0',
 
     [Parameter()]
     [ValidateSet('Debug', 'Release')]
@@ -181,6 +181,8 @@ function Assert-SafePackageStagingTree {
 }
 
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+$releaseVersionAssertionPath = Join-Path $PSScriptRoot 'assert-release-version.ps1'
+& $releaseVersionAssertionPath -Version $Version -RepositoryRoot $repoRoot
 $projectFullPath = [IO.Path]::GetFullPath((Join-Path $repoRoot $ProjectPath))
 $requestedModuleStageRoot = if ([System.IO.Path]::IsPathRooted($OutputRoot)) {
     $OutputRoot
@@ -272,6 +274,12 @@ foreach ($fullPath in $transientCleanupPaths) {
     if (Test-Path $fullPath) {
         Remove-Item -LiteralPath $fullPath -Recurse -Force
     }
+}
+
+$debugSymbolArtifacts = Get-ChildItem -LiteralPath $versionedStagePath -File -Recurse |
+    Where-Object { $_.Extension -in @('.pdb', '.mdb', '.dbg') }
+foreach ($debugSymbolArtifact in $debugSymbolArtifacts) {
+    Remove-Item -LiteralPath $debugSymbolArtifact.FullName -Force
 }
 
 $moduleDll = Assert-SafePackageStagingPath -ScopeRoot $moduleStageRoot -CandidatePath $moduleDll -Operation 'module binary'

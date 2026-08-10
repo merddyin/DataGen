@@ -16,6 +16,7 @@
     <ProjectReference Include="..\SyntheticEnterprise.Contracts\SyntheticEnterprise.Contracts.csproj" />
     <ProjectReference Include="..\SyntheticEnterprise.Core\SyntheticEnterprise.Core.csproj" />
     <ProjectReference Include="..\SyntheticEnterprise.Exporting\SyntheticEnterprise.Exporting.csproj" />
+    <ProjectReference Include="..\SyntheticEnterprise.PluginHost\SyntheticEnterprise.PluginHost.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="$(DataGenCatalogArtifactPath)" Link="catalogs\catalogs.sqlite">
@@ -34,13 +35,14 @@
     <Copy SourceFiles="@(SqliteNative)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(SqliteNative.FullPath)')" />
   </Target>
 
-  <Target Name="CopyPluginHostArtifacts" AfterTargets="Build">
+  <Target Name="CopyPluginHostArtifacts" AfterTargets="Build" Condition="'$(UseArtifactsOutput)' == 'true'">
     <ItemGroup>
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.dll" />
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.deps.json" />
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.runtimeconfig.json" />
-      <PluginHostArtifact Include="$(MSBuildThisFileDirectory)..\SyntheticEnterprise.PluginHost\bin\$(Configuration)\net8.0\SyntheticEnterprise.PluginHost.exe" Condition="'$(OS)' == 'Windows_NT'" />
+      <PluginHostArtifact Include="$(ArtifactsPath)\bin\SyntheticEnterprise.PluginHost\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\SyntheticEnterprise.PluginHost.dll" />
+      <PluginHostArtifact Include="$(ArtifactsPath)\bin\SyntheticEnterprise.PluginHost\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\SyntheticEnterprise.PluginHost.deps.json" />
+      <PluginHostArtifact Include="$(ArtifactsPath)\bin\SyntheticEnterprise.PluginHost\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\SyntheticEnterprise.PluginHost.runtimeconfig.json" />
+      <PluginHostArtifact Include="$(ArtifactsPath)\bin\SyntheticEnterprise.PluginHost\$([System.String]::Copy('$(Configuration)').ToLowerInvariant())\SyntheticEnterprise.PluginHost.exe" Condition="'$(OS)' == 'Windows_NT'" />
     </ItemGroup>
-    <Copy SourceFiles="@(PluginHostArtifact)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('%(PluginHostArtifact.FullPath)')" />
+    <Error Condition="!Exists('%(PluginHostArtifact.FullPath)')" Text="Expected PluginHost build artifact '%(PluginHostArtifact.FullPath)' was not produced in the isolated artifacts output." />
+    <Copy SourceFiles="@(PluginHostArtifact)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>
