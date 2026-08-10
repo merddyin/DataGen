@@ -7,6 +7,23 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.10.1
+
+This patch corrects a correlation error in representative server-management observations. Earlier generation could label an arbitrary selected server as hosted even when that server's own hosting facts described it as on-premises. Consumers could therefore receive a plausible management row that contradicted the server it referenced.
+
+### What changed
+
+- **Hosting facts now govern the observation**
+  DataGen selects hosted examples from servers that are actually cloud-hosted and copies the generated provider from that server. It selects non-hosted examples from the on-premises population and does not invent a provider.
+- **Requested coverage remains representative**
+  The configured hosted percentage is still honored where the generated population permits it. When one hosting category has too few servers, DataGen fills the remaining observation budget from the available category without changing those servers' facts.
+- **Out-of-band capability stays truthful**
+  A supported out-of-band guest deployment path is attached only to a real hosted server. On-premises observations remain unavailable, and additional hosted observations remain unknown unless the scenario provides stronger evidence.
+- **Selection remains repeatable**
+  The same scenario, seed, generated time, and server population produce the same observations. When several hosted providers are present, the bounded sample represents different providers before taking additional servers from one provider.
+
+The normalized schema is unchanged. Consumers should regenerate synthetic datasets that rely on representative management observations so the corrected server-to-observation correlation is present in the data.
+
 ## v0.10.0
 
 This release makes representative endpoint-management observations useful for lifecycle and correction workflows without turning DataGen into a provider-specific connector. It adds a small, bounded history surface to the existing opt-in observations and gives downstream consumers the fields needed to distinguish a current fact from the older fact it replaces.

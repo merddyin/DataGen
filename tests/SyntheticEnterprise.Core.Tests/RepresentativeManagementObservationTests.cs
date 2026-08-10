@@ -210,6 +210,172 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
+    public void Apply_CorrelatesServerManagementObservationsWithSelectedServerHostingFacts()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 50,
+            CreateServer("SRV-001", "OnPremises"),
+            CreateServer("SRV-002", "Cloud", "Azure"),
+            CreateServer("SRV-003", "Cloud", "AWS"));
+        var serversById = world.Servers.ToDictionary(server => server.Id, StringComparer.Ordinal);
+        var observations = CurrentServerObservations(world);
+
+        Assert.Equal(3, observations.Length);
+        Assert.All(observations.Where(observation => observation.HostingEnvironmentKind == "HostedCompute"), observation =>
+        {
+            var server = serversById[observation.EndpointId];
+            Assert.Equal("Cloud", server.HostingLocationType);
+            Assert.Equal(server.CloudProvider, observation.HostingProvider);
+        });
+        Assert.All(observations.Where(observation => observation.HostingEnvironmentKind == "NonHosted"), observation =>
+        {
+            var server = serversById[observation.EndpointId];
+            Assert.Equal("OnPremises", server.HostingLocationType);
+            Assert.Null(server.CloudProvider);
+            Assert.Null(observation.HostingProvider);
+            Assert.Equal("Unavailable", observation.OutOfBandGuestDeploymentCapability);
+        });
+
+        var azure = Assert.Single(observations, observation => observation.EndpointId == "SRV-002");
+        Assert.Equal("HostedCompute", azure.HostingEnvironmentKind);
+        Assert.Equal("Azure", azure.HostingProvider);
+        Assert.Equal("Supported", azure.OutOfBandGuestDeploymentCapability);
+    }
+
+    [Fact]
+    public void Apply_TreatsExplicitOnPremisesAsNonHostedWhenCloudProviderIsPresent()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 100,
+            CreateServer("SRV-001", "OnPremises", "Azure"));
+
+        var observation = Assert.Single(CurrentServerObservations(world));
+
+        Assert.Equal("NonHosted", observation.HostingEnvironmentKind);
+        Assert.Null(observation.HostingProvider);
+        Assert.Equal("Unavailable", observation.OutOfBandGuestDeploymentCapability);
+    }
+
+    [Fact]
+    public void Apply_UsesCloudProviderFallbackForMissingOrUnknownHostingLocationType()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 100,
+            CreateServer("SRV-001", "Legacy", "Azure"),
+            CreateServer("SRV-002", null, "AWS"));
+
+        var observations = CurrentServerObservations(world);
+
+        Assert.Equal(2, observations.Length);
+        Assert.All(observations, observation =>
+            Assert.Equal("HostedCompute", observation.HostingEnvironmentKind));
+        Assert.Equal("Azure", Assert.Single(observations, observation => observation.EndpointId == "SRV-001").HostingProvider);
+        Assert.Equal("AWS", Assert.Single(observations, observation => observation.EndpointId == "SRV-002").HostingProvider);
+    }
+
+    [Fact]
+    public void Apply_FillsAZeroPercentHostedTargetWithHostedServersWhenNoOnPremisesServersExist()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 0,
+            CreateServer("SRV-001", "Cloud", "Azure"),
+            CreateServer("SRV-002", "Cloud", "AWS"));
+
+        var observations = CurrentServerObservations(world);
+
+        Assert.Equal(2, observations.Length);
+        Assert.All(observations, observation => Assert.Equal("HostedCompute", observation.HostingEnvironmentKind));
+        Assert.All(observations, observation => Assert.False(string.IsNullOrWhiteSpace(observation.HostingProvider)));
+    }
+
+    [Fact]
+    public void Apply_FillsAHundredPercentHostedTargetWithOnPremisesServersWhenNoHostedServersExist()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 100,
+            CreateServer("SRV-001", "OnPremises"),
+            CreateServer("SRV-002", "OnPremises"));
+
+        var observations = CurrentServerObservations(world);
+
+        Assert.Equal(2, observations.Length);
+        Assert.All(observations, observation => Assert.Equal("NonHosted", observation.HostingEnvironmentKind));
+        Assert.All(observations, observation => Assert.Null(observation.HostingProvider));
+        Assert.All(observations, observation => Assert.Equal("Unavailable", observation.OutOfBandGuestDeploymentCapability));
+    }
+
+    [Fact]
+    public void Apply_FillsAHundredPercentHostedTargetWithOnPremisesServersWhenHostedCapacityIsInsufficient()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 12,
+            hostedPercentage: 100,
+            CreateServer("SRV-001", "OnPremises"),
+            CreateServer("SRV-002", "OnPremises"),
+            CreateServer("SRV-003", "Cloud", "Azure"),
+            CreateServer("SRV-004", "Cloud", "AWS"));
+
+        var observations = CurrentServerObservations(world);
+
+        Assert.Equal(4, observations.Length);
+        Assert.Equal(2, observations.Count(observation => observation.HostingEnvironmentKind == "HostedCompute"));
+        Assert.Equal(2, observations.Count(observation => observation.HostingEnvironmentKind == "NonHosted"));
+    }
+
+    [Fact]
+    public void Apply_FillsServerObservationBudgetFromAvailableHostingCategories()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 12,
+            hostedPercentage: 50,
+            CreateServer("SRV-001", "OnPremises"),
+            CreateServer("SRV-002", "OnPremises"),
+            CreateServer("SRV-003", "Cloud", "Azure"));
+
+        var observations = CurrentServerObservations(world);
+
+        Assert.Equal(3, observations.Length);
+        Assert.Equal(1, observations.Count(observation => observation.HostingEnvironmentKind == "HostedCompute"));
+        Assert.Equal(2, observations.Count(observation => observation.HostingEnvironmentKind == "NonHosted"));
+    }
+
+    [Fact]
+    public void Apply_DoesNotEmitServerManagementObservationsWhenNoServersExist()
+    {
+        var world = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 50);
+
+        Assert.Empty(CurrentServerObservations(world));
+    }
+
+    [Fact]
+    public void Apply_IsDeterministicForSameSeedTimeSettingsAndHostingPopulation()
+    {
+        var first = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 50,
+            CreateServer("SRV-001", "OnPremises"),
+            CreateServer("SRV-002", "Cloud", "Azure"),
+            CreateServer("SRV-003", "Cloud", "AWS"));
+        var second = GenerateManagementObservations(
+            requestedCount: 6,
+            hostedPercentage: 50,
+            CreateServer("SRV-001", "OnPremises"),
+            CreateServer("SRV-002", "Cloud", "Azure"),
+            CreateServer("SRV-003", "Cloud", "AWS"));
+
+        Assert.Equal(
+            JsonSerializer.Serialize(first.ManagementObservations),
+            JsonSerializer.Serialize(second.ManagementObservations));
+    }
+
+    [Fact]
     public void EndpointManagementObservation_DefaultsExistingConstructedRowsToCurrent()
     {
         var observation = new EndpointManagementObservation();
@@ -635,6 +801,56 @@ public sealed class RepresentativeManagementObservationTests
                 .ToList(),
         };
     }
+
+    private static SyntheticEnterpriseWorld GenerateManagementObservations(
+        int requestedCount,
+        int hostedPercentage,
+        params ServerAsset[] servers)
+    {
+        var world = new SyntheticEnterpriseWorld();
+        var company = new Company { Id = "CO-001", Name = "Management observation test" };
+        world.Companies.Add(company);
+        world.Servers.AddRange(servers);
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            new GenerationContext
+            {
+                Scenario = new ScenarioDefinition { Name = "Management observation test" },
+                Seed = 1130,
+                GeneratedAt = DateTimeOffset.Parse("2026-07-22T00:00:00Z"),
+            },
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                RepresentativeManagementObservationCount = requestedCount,
+                RepresentativeManagementHistoryObservationCount = 0,
+                HostedComputeObservationPercentage = hostedPercentage,
+            });
+
+        return world;
+    }
+
+    private static ServerAsset CreateServer(
+        string id,
+        string? hostingLocationType,
+        string? cloudProvider = null)
+        => new()
+        {
+            Id = id,
+            CompanyId = "CO-001",
+            Hostname = id.ToLowerInvariant(),
+            OperatingSystem = "Windows Server",
+            HostingLocationType = hostingLocationType!,
+            CloudProvider = cloudProvider,
+        };
+
+    private static EndpointManagementObservation[] CurrentServerObservations(SyntheticEnterpriseWorld world)
+        => world.ManagementObservations
+            .Where(observation => observation.IsCurrent && observation.EndpointType == "Server")
+            .OrderBy(observation => observation.EndpointId, StringComparer.Ordinal)
+            .ToArray();
 
     private static TemporalCorrectionProjection ProjectTemporalCorrections(SyntheticEnterpriseWorld world)
         => new(

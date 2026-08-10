@@ -4,6 +4,13 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.10.1
+
+- corrected representative server-management observations so hosted-compute evidence is attached only to servers whose generated hosting facts identify them as cloud-hosted
+- retained the server observation budget when a generated company has fewer hosted or on-premises servers than the requested percentage, while preserving the actual hosting category and provider of every selected server
+- made hosted-server selection deterministic and provider-diverse where the generated population permits it, without inventing providers or changing the provider-neutral observation contract
+- ensured out-of-band guest deployment support is emitted only for a real hosted server and remains unavailable for on-premises servers
+
 ### v0.10.0
 
 - added provider-neutral management-observation history for representative endpoint-management facts, with explicit `Current` and `Historical` lifecycle states rather than inferring age from health or check-in fields
@@ -248,8 +255,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.10.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.10.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.10.1 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.10.1\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
