@@ -136,6 +136,50 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
+    public void WorldGenerator_CoversEndpointPopulationWithCohortDominantProvidersAndBoundedOutliers()
+    {
+        var world = Generate(
+            includeRepresentativeFacts: true,
+            managementObservationPopulationCoveragePercentage: 100).World;
+        var current = world.ManagementObservations
+            .Where(observation => observation.IsCurrent)
+            .ToArray();
+        var endpoints = world.Devices
+            .Select(device => new { EndpointType = "Device", EndpointId = device.Id, device.OperatingSystem })
+            .Concat(world.Servers.Select(server => new { EndpointType = "Server", EndpointId = server.Id, server.OperatingSystem }))
+            .ToArray();
+
+        Assert.Equal(endpoints.Length, current.Length);
+        Assert.All(endpoints, endpoint =>
+            Assert.Single(current, observation =>
+                observation.EndpointType == endpoint.EndpointType
+                && observation.EndpointId == endpoint.EndpointId));
+
+        var windowsDevices = endpoints
+            .Where(endpoint => endpoint.EndpointType == "Device"
+                && endpoint.OperatingSystem.StartsWith("Windows", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var macDevices = endpoints
+            .Where(endpoint => endpoint.EndpointType == "Device"
+                && endpoint.OperatingSystem.StartsWith("macOS", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var windowsServers = endpoints
+            .Where(endpoint => endpoint.EndpointType == "Server"
+                && endpoint.OperatingSystem.StartsWith("Windows", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        Assert.True(CurrentProviderCount(current, windowsDevices.Select(endpoint => (endpoint.EndpointType, endpoint.EndpointId)), "MicrosoftIntune") * 100 >= windowsDevices.Length * 80);
+        Assert.True(CurrentProviderCount(current, macDevices.Select(endpoint => (endpoint.EndpointType, endpoint.EndpointId)), "Jamf") * 100 >= macDevices.Length * 80);
+        Assert.True(CurrentProviderCount(current, windowsServers.Select(endpoint => (endpoint.EndpointType, endpoint.EndpointId)), "ConfigurationManager") * 100 >= windowsServers.Length * 80);
+        Assert.Contains(current, observation =>
+            observation.RegistrationState == "Registered"
+            && observation.LastCheckInAtUtc <= observation.ObservedAtUtc.AddDays(-21));
+        Assert.Contains(current, observation =>
+            observation.ManagementProvider is "ConfigurationManager" or "Rmm" or "BigFix" or "Puppet" or "Ansible"
+            && observation.DeploymentCapability == "Supported");
+    }
+
+    [Fact]
     public void WorldGenerator_UsesGenericDistributionsWithoutScenarioKeysOrConclusions()
     {
         var world = Generate(includeRepresentativeFacts: true).World;
@@ -404,6 +448,223 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
+    public void Apply_DefaultPopulationCoveragePreservesRepresentativeObservationCount()
+    {
+        var world = CreatePopulationWorld(companyCount: 1, endpointsPerCompany: 20);
+        var company = Assert.Single(world.Companies);
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            CreateGenerationContext(),
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                RepresentativeManagementObservationCount = 3,
+                RepresentativeManagementHistoryObservationCount = 0,
+            });
+
+        Assert.Equal(3, world.ManagementObservations.Count(observation => observation.IsCurrent));
+    }
+
+    [Fact]
+    public void Apply_DefaultPopulationCoveragePreservesLegacySoftwareDefinitionsAndInstallationIdentityOrder()
+    {
+        var world = CreatePopulationWorld(companyCount: 1, endpointsPerCompany: 3);
+        var company = Assert.Single(world.Companies);
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            CreateGenerationContext(),
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                RepresentativeManagementObservationCount = 3,
+                RepresentativeManagementHistoryObservationCount = 0,
+            });
+
+        Assert.Equal(
+            [
+                "SW-000001|Microsoft Intune Management Extension",
+                "SW-000002|Configuration Manager Client",
+                "SW-000003|BigFix Client",
+                "SW-000004|Remote Monitoring Agent",
+                "SW-000005|Ansible Automation Platform",
+            ],
+            world.SoftwarePackages.Select(package => $"{package.Id}|{package.Name}"));
+        Assert.Equal(
+            [
+                "DSI-000006|DEV-1-001|SW-000001",
+                "DSI-000008|DEV-1-002|SW-000002",
+                "DSI-000010|DEV-1-003|SW-000003",
+            ],
+            world.DeviceSoftwareInstallations.Select(installation =>
+                $"{installation.Id}|{installation.DeviceId}|{installation.SoftwareId}"));
+        Assert.Equal(3, world.ManagementObservations.Count(observation => observation.IsCurrent));
+    }
+
+    [Fact]
+    public void Apply_PopulationCoverageSupportsEveryPercentageDeterministicallyPerCompany()
+    {
+        for (var percentage = 1; percentage <= 100; percentage++)
+        {
+            var first = GeneratePopulationCoverage(percentage, companyCount: 2, endpointsPerCompany: 20);
+            var replay = GeneratePopulationCoverage(percentage, companyCount: 2, endpointsPerCompany: 20);
+            var expectedPerCompany = (int)Math.Ceiling(20 * percentage / 100m);
+
+            Assert.Equal(
+                first.ManagementObservations.Select(ProjectObservation),
+                replay.ManagementObservations.Select(ProjectObservation));
+            Assert.All(first.Companies, company =>
+            {
+                var observations = first.ManagementObservations
+                    .Where(observation => observation.CompanyId == company.Id)
+                    .ToArray();
+                Assert.Equal(expectedPerCompany, observations.Length);
+                Assert.All(observations, observation =>
+                {
+                    var device = Assert.Single(first.Devices, device => device.Id == observation.EndpointId);
+                    Assert.Equal(company.Id, device.CompanyId);
+                });
+            });
+        }
+    }
+
+    [Fact]
+    public void Apply_PopulationCoverageDoesNotDuplicateExistingEndpointSoftwarePairs()
+    {
+        var world = CreatePopulationWorld(companyCount: 1, endpointsPerCompany: 1);
+        var company = Assert.Single(world.Companies);
+        world.SoftwarePackages.Add(new SoftwarePackage
+        {
+            Id = "SW-INTUNE",
+            Name = "Microsoft Intune Management Extension",
+        });
+        world.DeviceSoftwareInstallations.Add(new DeviceSoftwareInstallation
+        {
+            Id = "DSI-EXISTING",
+            DeviceId = "DEV-1-001",
+            SoftwareId = "SW-INTUNE",
+        });
+        world.Servers.Add(new ServerAsset
+        {
+            Id = "SRV-001",
+            CompanyId = company.Id,
+            Hostname = "server-001",
+            OperatingSystem = "Windows Server 2022",
+        });
+        world.SoftwarePackages.Add(new SoftwarePackage
+        {
+            Id = "SW-CONFIGURATION-MANAGER",
+            Name = "Configuration Manager Client",
+        });
+        world.ServerSoftwareInstallations.Add(new ServerSoftwareInstallation
+        {
+            Id = "SSI-EXISTING",
+            ServerId = "SRV-001",
+            SoftwareId = "SW-CONFIGURATION-MANAGER",
+        });
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            CreateGenerationContext(),
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                RepresentativeManagementObservationCount = 1,
+                RepresentativeManagementHistoryObservationCount = 0,
+                ManagementObservationPopulationCoveragePercentage = 100,
+            });
+
+        Assert.Single(world.DeviceSoftwareInstallations, installation =>
+            installation.DeviceId == "DEV-1-001"
+            && installation.SoftwareId == "SW-INTUNE");
+        Assert.Single(world.ServerSoftwareInstallations, installation =>
+            installation.ServerId == "SRV-001"
+            && installation.SoftwareId == "SW-CONFIGURATION-MANAGER");
+    }
+
+    [Fact]
+    public void Apply_PopulationCoverageDoesNotInjectRareOutliersIntoSmallCohorts()
+    {
+        var world = new SyntheticEnterpriseWorld();
+        var company = new Company { Id = "CO-001", Name = "Small hosted cohort" };
+        world.Companies.Add(company);
+        for (var index = 1; index <= 49; index++)
+        {
+            world.Servers.Add(new ServerAsset
+            {
+                Id = $"SRV-{index:000}",
+                CompanyId = company.Id,
+                Hostname = $"hosted-{index:000}",
+                OperatingSystem = "Windows Server 2022",
+                HostingLocationType = "Cloud",
+                CloudProvider = "RepresentativeCloud",
+            });
+        }
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            CreateGenerationContext(),
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                RepresentativeManagementObservationCount = 1,
+                RepresentativeManagementHistoryObservationCount = 0,
+                ManagementObservationPopulationCoveragePercentage = 100,
+            });
+
+        Assert.Equal(49, world.ManagementObservations.Count);
+        Assert.All(world.ManagementObservations, observation =>
+        {
+            Assert.Equal("ConfigurationManager", observation.ManagementProvider);
+            Assert.Equal("Registered", observation.RegistrationState);
+            Assert.Equal("Unknown", observation.OutOfBandGuestDeploymentCapability);
+            Assert.Equal(TimeSpan.FromDays(2), observation.ObservedAtUtc - observation.LastCheckInAtUtc);
+        });
+    }
+
+    [Fact]
+    public void Apply_PopulationCoverageIntroducesHostedFallbackAtFiftySelectedHostedEndpoints()
+    {
+        var world = new SyntheticEnterpriseWorld();
+        var company = new Company { Id = "CO-001", Name = "Hosted fallback threshold" };
+        world.Companies.Add(company);
+        for (var index = 1; index <= 50; index++)
+        {
+            world.Servers.Add(new ServerAsset
+            {
+                Id = $"SRV-{index:000}",
+                CompanyId = company.Id,
+                Hostname = $"hosted-{index:000}",
+                OperatingSystem = "Windows Server 2022",
+                HostingLocationType = "Cloud",
+                CloudProvider = "RepresentativeCloud",
+            });
+        }
+
+        RepresentativeManagementObservationGenerator.Apply(
+            world,
+            company,
+            CreateGenerationContext(),
+            new TestIdFactory(),
+            new InfrastructureProfile
+            {
+                RepresentativeManagementObservationCount = 1,
+                RepresentativeManagementHistoryObservationCount = 0,
+                ManagementObservationPopulationCoveragePercentage = 100,
+            });
+
+        var fallback = Assert.Single(world.ManagementObservations, observation =>
+            observation.OutOfBandGuestDeploymentCapability == "Supported");
+        Assert.Equal("None", fallback.ManagementProvider);
+        Assert.Equal("NotRegistered", fallback.RegistrationState);
+    }
+
+    [Fact]
     public void RelationshipHistory_PreservesInstalledOnFacts_WhenNoTruthfulOwnerExists()
     {
         var world = new SyntheticEnterpriseWorld();
@@ -552,7 +813,8 @@ public sealed class RepresentativeManagementObservationTests
         var world = Generate(
             includeRepresentativeFacts: true,
             representativeObservationCount: 1,
-            representativeHistoryObservationCount: 1).World;
+            representativeHistoryObservationCount: 1,
+            managementObservationPopulationCoveragePercentage: 0).World;
 
         Assert.Equal(2, world.ManagementObservations.Count);
         Assert.Single(world.ManagementObservations, observation => observation.IsCurrent);
@@ -633,6 +895,7 @@ public sealed class RepresentativeManagementObservationTests
                 IncludeTelephony = false,
                 IncludeRepresentativeManagementObservations = true,
                 RepresentativeManagementObservationCount = 1,
+                ManagementObservationPopulationCoveragePercentage = 0,
             },
         };
         using var services = new ServiceCollection()
@@ -664,7 +927,8 @@ public sealed class RepresentativeManagementObservationTests
             includeRepresentativeFacts: true,
             representativeObservationCount: currentBudget,
             representativeHistoryObservationCount: historyBudget,
-            companyCount: companyCount).World;
+            companyCount: companyCount,
+            managementObservationPopulationCoveragePercentage: 0).World;
 
         Assert.Equal(companyCount * (currentBudget + historyBudget), world.ManagementObservations.Count);
         Assert.Equal(
@@ -738,7 +1002,8 @@ public sealed class RepresentativeManagementObservationTests
         int representativeObservationCount = 15,
         int representativeHistoryObservationCount = 1,
         int seed = 1130,
-        int companyCount = 1)
+        int companyCount = 1,
+        int managementObservationPopulationCoveragePercentage = 0)
     {
         using var services = new ServiceCollection()
             .AddSyntheticEnterpriseCore()
@@ -753,7 +1018,8 @@ public sealed class RepresentativeManagementObservationTests
                     includeRepresentativeFacts,
                     representativeObservationCount,
                     representativeHistoryObservationCount,
-                    companyCount),
+                    companyCount,
+                    managementObservationPopulationCoveragePercentage),
             },
             new CatalogSet());
     }
@@ -762,7 +1028,8 @@ public sealed class RepresentativeManagementObservationTests
         bool includeRepresentativeFacts,
         int representativeObservationCount,
         int representativeHistoryObservationCount,
-        int companyCount)
+        int companyCount,
+        int managementObservationPopulationCoveragePercentage = 0)
     {
         return new ScenarioDefinition
         {
@@ -777,6 +1044,7 @@ public sealed class RepresentativeManagementObservationTests
                 IncludeRepresentativeManagementObservations = includeRepresentativeFacts,
                 RepresentativeManagementObservationCount = representativeObservationCount,
                 RepresentativeManagementHistoryObservationCount = representativeHistoryObservationCount,
+                ManagementObservationPopulationCoveragePercentage = managementObservationPopulationCoveragePercentage,
             },
             Applications = new ApplicationProfile
             {
@@ -851,6 +1119,81 @@ public sealed class RepresentativeManagementObservationTests
             .Where(observation => observation.IsCurrent && observation.EndpointType == "Server")
             .OrderBy(observation => observation.EndpointId, StringComparer.Ordinal)
             .ToArray();
+
+    private static SyntheticEnterpriseWorld GeneratePopulationCoverage(
+        int percentage,
+        int companyCount,
+        int endpointsPerCompany)
+    {
+        var world = CreatePopulationWorld(companyCount, endpointsPerCompany);
+        var idFactory = new TestIdFactory();
+        foreach (var company in world.Companies.OrderBy(company => company.Id, StringComparer.Ordinal))
+        {
+            RepresentativeManagementObservationGenerator.Apply(
+                world,
+                company,
+                CreateGenerationContext(),
+                idFactory,
+                new InfrastructureProfile
+                {
+                    RepresentativeManagementObservationCount = 1,
+                    RepresentativeManagementHistoryObservationCount = 0,
+                    ManagementObservationPopulationCoveragePercentage = percentage,
+                });
+        }
+
+        return world;
+    }
+
+    private static SyntheticEnterpriseWorld CreatePopulationWorld(int companyCount, int endpointsPerCompany)
+    {
+        var world = new SyntheticEnterpriseWorld();
+        for (var companyIndex = 1; companyIndex <= companyCount; companyIndex++)
+        {
+            var company = new Company
+            {
+                Id = $"CO-{companyIndex:000}",
+                Name = $"Population company {companyIndex}",
+            };
+            world.Companies.Add(company);
+            for (var endpointIndex = 1; endpointIndex <= endpointsPerCompany; endpointIndex++)
+            {
+                world.Devices.Add(new ManagedDevice
+                {
+                    Id = $"DEV-{companyIndex}-{endpointIndex:000}",
+                    CompanyId = company.Id,
+                    Hostname = $"device-{companyIndex}-{endpointIndex:000}",
+                    OperatingSystem = "Windows 11",
+                    DomainJoined = true,
+                });
+            }
+        }
+
+        return world;
+    }
+
+    private static GenerationContext CreateGenerationContext() => new()
+    {
+        Scenario = new ScenarioDefinition { Name = "Population coverage contract" },
+        Seed = 1130,
+        GeneratedAt = DateTimeOffset.Parse("2026-07-22T00:00:00Z"),
+    };
+
+    private static string ProjectObservation(EndpointManagementObservation observation)
+        => $"{observation.Id}|{observation.CompanyId}|{observation.EndpointType}|{observation.EndpointId}|{observation.ManagementProvider}";
+
+    private static int CurrentProviderCount(
+        IReadOnlyCollection<EndpointManagementObservation> observations,
+        IEnumerable<(string EndpointType, string EndpointId)> endpoints,
+        string provider)
+    {
+        var keys = endpoints
+            .Select(endpoint => $"{endpoint.EndpointType}|{endpoint.EndpointId}")
+            .ToHashSet(StringComparer.Ordinal);
+        return observations.Count(observation =>
+            observation.ManagementProvider == provider
+            && keys.Contains($"{observation.EndpointType}|{observation.EndpointId}"));
+    }
 
     private static TemporalCorrectionProjection ProjectTemporalCorrections(SyntheticEnterpriseWorld world)
         => new(

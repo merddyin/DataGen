@@ -35,6 +35,14 @@ jobs:
         shell: pwsh
         run: .\scripts\validate-repo-portability.ps1
 
+      - name: Validate signed release attestation contract
+        shell: pwsh
+        run: .\tests\CleanCheckoutCatalogContract.Tests.ps1 -SourceRoot $PWD -OutputRoot (Join-Path $env:RUNNER_TEMP 'datagen-release-attestation-contract') -ReleaseWorkflowContractOnly
+
+      - name: Run portable release preflight
+        shell: pwsh
+        run: .\scripts\invoke-release-preflight.ps1 -OutputRoot (Join-Path $env:RUNNER_TEMP 'datagen-release-preflight')
+
       - name: Restore solution
         run: dotnet restore .\DataGen.slnx
 

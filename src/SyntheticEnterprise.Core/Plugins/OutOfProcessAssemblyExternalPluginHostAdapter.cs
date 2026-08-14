@@ -1,7 +1,6 @@
 namespace SyntheticEnterprise.Core.Plugins;
 
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
@@ -15,6 +14,46 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
     {
         PropertyNameCaseInsensitive = true
     };
+    private readonly IExternalPluginTemporaryDirectoryManager _temporaryDirectoryManager;
+    private readonly IExternalPluginAssemblyStager _assemblyStager;
+    private readonly IExternalPluginCatalogProvider _catalogProvider;
+
+    public OutOfProcessAssemblyExternalPluginHostAdapter()
+        : this(
+            new FileSystemExternalPluginTemporaryDirectoryManager(),
+            new FileSystemExternalPluginAssemblyStager(),
+            new AuthenticatedExternalPluginCatalogProvider())
+    {
+    }
+
+    internal OutOfProcessAssemblyExternalPluginHostAdapter(
+        IExternalPluginTemporaryDirectoryManager temporaryDirectoryManager)
+        : this(
+            temporaryDirectoryManager,
+            new FileSystemExternalPluginAssemblyStager(),
+            new AuthenticatedExternalPluginCatalogProvider())
+    {
+    }
+
+    internal OutOfProcessAssemblyExternalPluginHostAdapter(
+        IExternalPluginTemporaryDirectoryManager temporaryDirectoryManager,
+        IExternalPluginAssemblyStager assemblyStager)
+        : this(
+            temporaryDirectoryManager,
+            assemblyStager,
+            new AuthenticatedExternalPluginCatalogProvider())
+    {
+    }
+
+    internal OutOfProcessAssemblyExternalPluginHostAdapter(
+        IExternalPluginTemporaryDirectoryManager temporaryDirectoryManager,
+        IExternalPluginAssemblyStager assemblyStager,
+        IExternalPluginCatalogProvider catalogProvider)
+    {
+        _temporaryDirectoryManager = temporaryDirectoryManager;
+        _assemblyStager = assemblyStager;
+        _catalogProvider = catalogProvider;
+    }
 
     public bool CanExecute(GenerationPluginManifest manifest)
         => manifest.ExecutionMode == PluginExecutionMode.DotNetAssembly;
@@ -34,6 +73,7 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
             };
         }
 
+        var executionManifest = ExternalPluginExecutionManifest.Create(manifest, context.GeneratedAt);
         var hostLaunch = ResolveHostPath();
         if (hostLaunch is null)
         {
@@ -48,192 +88,292 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
             };
         }
 
-        var tempRoot = Path.Combine(Path.GetTempPath(), $"datagen-assembly-host-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(tempRoot);
-
+        string tempRoot;
         try
         {
-            var requestPath = Path.Combine(tempRoot, "request.json");
-            var responsePath = Path.Combine(tempRoot, "response.json");
-            var request = new ExternalPluginExecutionRequest
-            {
-                Manifest = manifest,
-                InputWorld = world,
-                Request = new ExternalPluginRequestMetadata
-                {
-                    Capability = manifest.Capability,
-                    ScenarioName = context.Scenario.Name,
-                    Seed = context.Seed,
-                    GeneratedAt = context.GeneratedAt,
-                    Metadata = new Dictionary<string, string?>(context.Metadata, StringComparer.OrdinalIgnoreCase),
-                    PluginSettings = ResolvePluginSettings(context.ExternalPlugins, manifest.Capability)
-                },
-                PluginCatalogs = ExternalPluginCatalogLoader.LoadPluginCatalogs(manifest)
-            };
-            var requestBytes = JsonSerializer.SerializeToUtf8Bytes(request, JsonOptions);
-            if (requestBytes.Length > Math.Max(1024, context.ExternalPlugins.MaxInputPayloadBytes))
-            {
-                return new ExternalPluginExecutionResult
-                {
-                    Manifest = manifest,
-                    Executed = false,
-                    Warnings = new()
-                    {
-                        $"Input payload exceeded the configured limit of {context.ExternalPlugins.MaxInputPayloadBytes} bytes."
-                    }
-                };
-            }
-
-            File.WriteAllBytes(requestPath, requestBytes);
-
-            var processStartInfo = hostLaunch.UseDotNetHost
-                ? new ProcessStartInfo("dotnet")
-                : new ProcessStartInfo(hostLaunch.HostPath);
-            processStartInfo.RedirectStandardOutput = true;
-            processStartInfo.RedirectStandardError = true;
-            processStartInfo.UseShellExecute = false;
-            processStartInfo.CreateNoWindow = true;
-            processStartInfo.WorkingDirectory = tempRoot;
-            if (hostLaunch.UseDotNetHost)
-            {
-                processStartInfo.ArgumentList.Add("exec");
-                processStartInfo.ArgumentList.Add(hostLaunch.HostPath);
-            }
-
-            processStartInfo.ArgumentList.Add("--request");
-            processStartInfo.ArgumentList.Add(requestPath);
-            processStartInfo.ArgumentList.Add("--response");
-            processStartInfo.ArgumentList.Add(responsePath);
-            processStartInfo.Environment["DOTNET_EnableDiagnostics"] = "0";
-            processStartInfo.Environment["COMPlus_EnableDiagnostics"] = "0";
-            processStartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
-
-            using var process = Process.Start(processStartInfo);
-            if (process is null)
-            {
-                return new ExternalPluginExecutionResult
-                {
-                    Manifest = manifest,
-                    Executed = false,
-                    Warnings = new()
-                    {
-                        "DotNetAssembly external plugin host could not be started."
-                    }
-                };
-            }
-
-            var stdOutTask = process.StandardOutput.ReadToEndAsync();
-            var stdErrTask = process.StandardError.ReadToEndAsync();
-            var timeout = TimeSpan.FromSeconds(Math.Max(1, context.ExternalPlugins.ExecutionTimeoutSeconds));
-            if (!process.WaitForExit((int)timeout.TotalMilliseconds))
-            {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                }
-
-                return new ExternalPluginExecutionResult
-                {
-                    Manifest = manifest,
-                    Executed = false,
-                    Warnings = new()
-                    {
-                        $"Assembly host timed out after {timeout.TotalSeconds:0} seconds."
-                    }
-                };
-            }
-
-            var stdOut = stdOutTask.GetAwaiter().GetResult();
-            var stdErr = stdErrTask.GetAwaiter().GetResult();
-            if (File.Exists(responsePath) && new FileInfo(responsePath).Length > Math.Max(1024, context.ExternalPlugins.MaxOutputPayloadBytes))
-            {
-                return new ExternalPluginExecutionResult
-                {
-                    Manifest = manifest,
-                    Executed = false,
-                    Warnings = new()
-                    {
-                        $"Plugin output exceeded the configured limit of {context.ExternalPlugins.MaxOutputPayloadBytes} bytes."
-                    }
-                };
-            }
-
-            var response = File.Exists(responsePath)
-                ? JsonSerializer.Deserialize<ExternalPluginExecutionResponse>(File.ReadAllText(responsePath), JsonOptions)
-                : null;
-
-            var warnings = response?.Warnings?.ToList() ?? new List<string>();
-            warnings = warnings
-                .Select(warning => LimitDiagnostic(warning, context.ExternalPlugins))
-                .ToList();
-
-            if (!string.IsNullOrWhiteSpace(stdOut))
-            {
-                warnings.Add(LimitDiagnostic($"[stdout] {stdOut.Trim()}", context.ExternalPlugins));
-            }
-
-            if (!string.IsNullOrWhiteSpace(stdErr))
-            {
-                warnings.Add(LimitDiagnostic($"[stderr] {stdErr.Trim()}", context.ExternalPlugins));
-            }
-
-            warnings = warnings
-                .Take(Math.Max(0, context.ExternalPlugins.MaxDiagnosticEntries))
-                .ToList();
-
-            if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(stdErr))
-            {
-                warnings.Add(LimitDiagnostic($"Assembly host exited with code {process.ExitCode}.", context.ExternalPlugins));
-            }
-
-            var boundedRecords = (response?.Records ?? new List<PluginGeneratedRecord>())
-                .Take(Math.Max(0, context.ExternalPlugins.MaxGeneratedRecords))
-                .ToList();
-            var boundedWarnings = warnings
-                .Take(Math.Max(0, context.ExternalPlugins.MaxWarningCount))
-                .ToList();
-
-            if ((response?.Records?.Count ?? 0) > boundedRecords.Count)
-            {
-                boundedWarnings.Add($"Generated records were truncated from {response!.Records.Count} to {boundedRecords.Count}.");
-            }
-
-            if (warnings.Count > boundedWarnings.Count)
-            {
-                boundedWarnings.Add($"Plugin warnings were truncated from {warnings.Count} to {boundedWarnings.Count}.");
-            }
-
-            return new ExternalPluginExecutionResult
-            {
-                Manifest = manifest,
-                Executed = response?.Executed == true,
-                Records = boundedRecords,
-                Warnings = boundedWarnings
-            };
+            tempRoot = _temporaryDirectoryManager.CreateDirectory();
         }
         catch (Exception ex)
         {
-            return new ExternalPluginExecutionResult
-            {
-                Manifest = manifest,
-                Executed = false,
-                Warnings = new()
-                {
-                    $"DotNetAssembly host execution failed: {ex.Message}"
-                }
-            };
+            return Failure(manifest, $"DotNetAssembly host execution failed: {ex.Message}");
         }
-        finally
+
+        var requestPath = Path.Combine(tempRoot, "request.json");
+        var responsePath = Path.Combine(tempRoot, "response.json");
+        ExternalPluginExecutionResult primaryResult;
+        try
         {
-            if (Directory.Exists(tempRoot))
+            primaryResult = ExecuteInTemporaryDirectoryAsync(
+                    manifest,
+                    executionManifest,
+                    world,
+                    context,
+                    hostLaunch,
+                    tempRoot,
+                    requestPath,
+                    responsePath)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (PluginInputPayloadLimitExceededException)
+        {
+            primaryResult = Failure(
+                manifest,
+                $"Input payload exceeded the configured limit of {context.ExternalPlugins.MaxInputPayloadBytes} bytes.");
+        }
+        catch (PluginPathSecurityException ex)
+        {
+            primaryResult = Failure(manifest, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            primaryResult = Failure(manifest, $"DotNetAssembly host execution failed: {ex.Message}");
+        }
+
+        ExternalPluginCleanupResult cleanup;
+        try
+        {
+            cleanup = _temporaryDirectoryManager.Cleanup(tempRoot, requestPath, responsePath);
+        }
+        catch (Exception ex)
+        {
+            cleanup = new ExternalPluginCleanupResult(false, ex.Message);
+        }
+        if (cleanup.Succeeded)
+        {
+            return primaryResult;
+        }
+
+        return new ExternalPluginExecutionResult
+        {
+            Manifest = manifest,
+            Executed = false,
+            Warnings = primaryResult.Warnings
+                .Concat(new[] { $"Assembly host cleanup failed: {cleanup.Error}" })
+                .ToList()
+        };
+    }
+
+    private async Task<ExternalPluginExecutionResult> ExecuteInTemporaryDirectoryAsync(
+        GenerationPluginManifest manifest,
+        GenerationPluginManifest executionManifest,
+        SyntheticEnterpriseWorld world,
+        GenerationContext context,
+        HostLaunchSpec hostLaunch,
+        string tempRoot,
+        string requestPath,
+        string responsePath)
+    {
+        var pluginCatalogs = _catalogProvider.Load(manifest, context.ExternalPlugins);
+        var stagedAssembly = _assemblyStager.Stage(manifest, tempRoot);
+        var stagedManifest = CopyManifestWithEntryPoint(executionManifest, stagedAssembly.EntryPoint);
+        var request = new ExternalPluginExecutionRequest
+        {
+            Manifest = stagedManifest,
+            InputWorld = world,
+            Request = new ExternalPluginRequestMetadata
             {
-                Directory.Delete(tempRoot, recursive: true);
+                Capability = manifest.Capability,
+                ScenarioName = context.Scenario.Name,
+                Seed = context.Seed,
+                GeneratedAt = context.GeneratedAt,
+                Metadata = new Dictionary<string, string?>(context.Metadata, StringComparer.OrdinalIgnoreCase),
+                PluginSettings = ResolvePluginSettings(context.ExternalPlugins, manifest.Capability)
+            },
+            PluginCatalogs = pluginCatalogs
+        };
+        using (var requestStream = new FileStream(requestPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        using (var payloadStream = new BoundedPluginPayloadStream(
+                   requestStream,
+                   Math.Max(1024, context.ExternalPlugins.MaxInputPayloadBytes)))
+        {
+            JsonSerializer.Serialize(payloadStream, request, JsonOptions);
+        }
+
+        var processStartInfo = CreateProcessStartInfo(hostLaunch, tempRoot, requestPath, responsePath);
+        using var process = Process.Start(processStartInfo);
+        if (process is null)
+        {
+            return Failure(manifest, "DotNetAssembly external plugin host could not be started.");
+        }
+
+        var outputLimit = Math.Max(1024, context.ExternalPlugins.MaxOutputPayloadBytes);
+        var outputBudget = new PluginOutputByteBudget(outputLimit);
+        var retainedBytes = (int)Math.Min(
+            outputLimit,
+            Math.Max(256L, ((long)Math.Max(32, context.ExternalPlugins.MaxDiagnosticCharacters) * 4) + 64));
+        var stdOutCapture = new BoundedProcessStreamCapture(process.StandardOutput.BaseStream, outputBudget, retainedBytes);
+        var stdErrCapture = new BoundedProcessStreamCapture(process.StandardError.BaseStream, outputBudget, retainedBytes);
+        using var captureCancellation = new CancellationTokenSource();
+        var stdOutTask = stdOutCapture.CaptureAsync(captureCancellation.Token);
+        var stdErrTask = stdErrCapture.CaptureAsync(captureCancellation.Token);
+        var exitTask = process.WaitForExitAsync();
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, context.ExternalPlugins.ExecutionTimeoutSeconds));
+        var timeoutTask = Task.Delay(timeout);
+        var completed = await Task.WhenAny(exitTask, outputBudget.LimitExceededTask, timeoutTask).ConfigureAwait(false);
+
+        if (completed == outputBudget.LimitExceededTask)
+        {
+            KillProcess(process);
+            captureCancellation.Cancel();
+        }
+        else if (completed == timeoutTask)
+        {
+            KillProcess(process);
+            captureCancellation.Cancel();
+        }
+
+        await Task.WhenAll(IgnorePipeClosure(stdOutTask), IgnorePipeClosure(stdErrTask)).ConfigureAwait(false);
+        if (outputBudget.LimitExceeded)
+        {
+            return Failure(
+                manifest,
+                $"Plugin output exceeded the configured limit of {context.ExternalPlugins.MaxOutputPayloadBytes} bytes.");
+        }
+
+        if (completed == timeoutTask)
+        {
+            return Failure(manifest, $"Assembly host timed out after {timeout.TotalSeconds:0} seconds.");
+        }
+
+        await exitTask.ConfigureAwait(false);
+        ExternalPluginExecutionResponse? response = null;
+        if (File.Exists(responsePath))
+        {
+            try
+            {
+                using var responseFile = new FileStream(
+                    responsePath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 64 * 1024,
+                    FileOptions.SequentialScan);
+                using var responseStream = new BoundedPluginOutputReadStream(responseFile, outputBudget);
+                response = JsonSerializer.Deserialize<ExternalPluginExecutionResponse>(responseStream, JsonOptions);
+            }
+            catch (PluginOutputPayloadLimitExceededException)
+            {
+                return Failure(
+                    manifest,
+                    $"Plugin output exceeded the configured limit of {context.ExternalPlugins.MaxOutputPayloadBytes} bytes.");
             }
         }
+
+        var stdOut = stdOutCapture.GetText();
+        var stdErr = stdErrCapture.GetText();
+        var warnings = response?.Warnings?
+            .Select(warning => LimitDiagnostic(warning, context.ExternalPlugins))
+            .ToList() ?? new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(stdOut))
+        {
+            warnings.Add(LimitDiagnostic($"[stdout] {stdOut.Trim()}", context.ExternalPlugins));
+        }
+
+        if (!string.IsNullOrWhiteSpace(stdErr))
+        {
+            warnings.Add(LimitDiagnostic($"[stderr] {stdErr.Trim()}", context.ExternalPlugins));
+        }
+
+        if (process.ExitCode != 0 && string.IsNullOrWhiteSpace(stdErr))
+        {
+            warnings.Add(LimitDiagnostic($"Assembly host exited with code {process.ExitCode}.", context.ExternalPlugins));
+        }
+        warnings = warnings
+            .Take(Math.Max(0, context.ExternalPlugins.MaxDiagnosticEntries))
+            .ToList();
+
+        var responseRecords = response?.Records ?? new List<PluginGeneratedRecord>();
+        var boundedRecords = responseRecords
+            .Take(Math.Max(0, context.ExternalPlugins.MaxGeneratedRecords))
+            .ToList();
+        var truncationNotices = new List<string>();
+        if (responseRecords.Count > boundedRecords.Count)
+        {
+            truncationNotices.Add($"Generated records were truncated from {responseRecords.Count} to {boundedRecords.Count}.");
+        }
+
+        var warningLimit = Math.Max(0, context.ExternalPlugins.MaxWarningCount);
+        if (warnings.Count > warningLimit)
+        {
+            truncationNotices.Add($"Plugin warnings were truncated from {warnings.Count} to {warningLimit}.");
+        }
+
+        var boundedWarnings = BuildBoundedAssemblyWarnings(
+            warnings,
+            truncationNotices,
+            warningLimit,
+            outputBudget);
+
+        return new ExternalPluginExecutionResult
+        {
+            Manifest = manifest,
+            Executed = response?.Executed == true,
+            Records = boundedRecords,
+            Warnings = boundedWarnings
+        };
     }
+
+    private static ProcessStartInfo CreateProcessStartInfo(
+        HostLaunchSpec hostLaunch,
+        string tempRoot,
+        string requestPath,
+        string responsePath)
+    {
+        var processStartInfo = hostLaunch.UseDotNetHost
+            ? new ProcessStartInfo("dotnet")
+            : new ProcessStartInfo(hostLaunch.HostPath);
+        processStartInfo.RedirectStandardOutput = true;
+        processStartInfo.RedirectStandardError = true;
+        processStartInfo.UseShellExecute = false;
+        processStartInfo.CreateNoWindow = true;
+        processStartInfo.WorkingDirectory = tempRoot;
+        if (hostLaunch.UseDotNetHost)
+        {
+            processStartInfo.ArgumentList.Add("exec");
+            processStartInfo.ArgumentList.Add(hostLaunch.HostPath);
+        }
+
+        processStartInfo.ArgumentList.Add("--request");
+        processStartInfo.ArgumentList.Add(requestPath);
+        processStartInfo.ArgumentList.Add("--response");
+        processStartInfo.ArgumentList.Add(responsePath);
+        processStartInfo.Environment["DOTNET_EnableDiagnostics"] = "0";
+        processStartInfo.Environment["COMPlus_EnableDiagnostics"] = "0";
+        processStartInfo.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        return processStartInfo;
+    }
+
+    private static void KillProcess(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch
+        {
+        }
+    }
+
+    private static async Task IgnorePipeClosure(Task captureTask)
+    {
+        try
+        {
+            await captureTask.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or ObjectDisposedException or OperationCanceledException)
+        {
+        }
+    }
+
+    private static ExternalPluginExecutionResult Failure(GenerationPluginManifest manifest, string warning)
+        => new()
+        {
+            Manifest = manifest,
+            Executed = false,
+            Warnings = new() { warning }
+        };
 
     private static HostLaunchSpec? ResolveHostPath()
     {
@@ -326,6 +466,11 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
 
     private static bool TryValidatePackageProvenance(GenerationPluginManifest manifest, out string? warning)
     {
+        if (!ExternalPluginPathSecurity.TryValidateManifestPaths(manifest, out warning))
+        {
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(manifest.EntryPoint) || !File.Exists(manifest.EntryPoint))
         {
             warning = "Assembly plugin entry point is unavailable at execution time.";
@@ -338,11 +483,13 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
             return false;
         }
 
-        var currentEntryPointHash = ComputeFileHash(manifest.EntryPoint);
-        if (!string.Equals(currentEntryPointHash, manifest.Provenance.EntryPointHash, StringComparison.OrdinalIgnoreCase))
+        using (var verifiedEntryPoint = ExternalPluginPathSecurity.OpenVerifiedEntryPoint(manifest, out var entryPointWarning))
         {
-            warning = "Assembly plugin entry point hash no longer matches discovered provenance.";
-            return false;
+            if (verifiedEntryPoint is null)
+            {
+                warning = entryPointWarning;
+                return false;
+            }
         }
 
         foreach (var localDataPath in manifest.LocalDataPaths)
@@ -359,7 +506,17 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
                 return false;
             }
 
-            var currentHash = ComputeFileHash(localDataPath);
+            var currentHash = ExternalPluginPathSecurity.ComputeVerifiedPackageFileHash(
+                manifest.SourcePath!,
+                localDataPath,
+                ExternalPluginCatalogLoader.MaximumCatalogFileBytes,
+                out var localDataWarning);
+            if (currentHash is null)
+            {
+                warning = localDataWarning;
+                return false;
+            }
+
             if (!string.Equals(currentHash, expectedHash, StringComparison.OrdinalIgnoreCase))
             {
                 warning = $"Assembly plugin local data hash no longer matches discovered provenance for '{localDataPath}'.";
@@ -371,19 +528,57 @@ public sealed class OutOfProcessAssemblyExternalPluginHostAdapter : IExternalPlu
         return true;
     }
 
-    private static string ComputeFileHash(string path)
-    {
-        using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
-        return Convert.ToHexString(sha.ComputeHash(stream));
-    }
-
     private static Dictionary<string, string?> ResolvePluginSettings(ExternalPluginExecutionSettings settings, string capability)
         => settings.CapabilityConfigurations
             .FirstOrDefault(configuration => string.Equals(configuration.Capability, capability, StringComparison.OrdinalIgnoreCase))
             ?.Settings is { } configurationSettings
             ? new Dictionary<string, string?>(configurationSettings, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+    private static List<string> BuildBoundedAssemblyWarnings(
+        IReadOnlyList<string> warnings,
+        IReadOnlyList<string> truncationNotices,
+        int warningLimit,
+        PluginOutputByteBudget outputBudget)
+    {
+        if (warningLimit == 0)
+        {
+            return new List<string>();
+        }
+
+        var reservedNoticeCount = Math.Min(truncationNotices.Count, warningLimit);
+        var bounded = warnings.Take(warningLimit - reservedNoticeCount).ToList();
+        foreach (var notice in truncationNotices.Take(reservedNoticeCount))
+        {
+            var serializedBytes = JsonSerializer.SerializeToUtf8Bytes(notice, JsonOptions).Length + 1;
+            if (serializedBytes <= outputBudget.RemainingBytes && outputBudget.TryConsume(serializedBytes))
+            {
+                bounded.Add(notice);
+            }
+        }
+
+        return bounded;
+    }
+
+    private static GenerationPluginManifest CopyManifestWithEntryPoint(
+        GenerationPluginManifest manifest,
+        string stagedEntryPoint)
+        => new()
+        {
+            Capability = manifest.Capability,
+            DisplayName = manifest.DisplayName,
+            Description = manifest.Description,
+            PluginKind = manifest.PluginKind,
+            ExecutionMode = manifest.ExecutionMode,
+            SourcePath = manifest.SourcePath,
+            EntryPoint = stagedEntryPoint,
+            LocalDataPaths = manifest.LocalDataPaths,
+            Dependencies = manifest.Dependencies,
+            Parameters = manifest.Parameters,
+            Security = manifest.Security,
+            Provenance = manifest.Provenance,
+            Metadata = manifest.Metadata
+        };
 
     private static string LimitDiagnostic(string message, ExternalPluginExecutionSettings settings)
     {

@@ -101,8 +101,18 @@ public record InfrastructureProfile
     public bool IncludeNetworkAssets { get; init; } = true;
     public bool IncludeTelephony { get; init; } = true;
     public bool IncludeRepresentativeManagementObservations { get; init; }
-    /// <summary>Maximum current management observations emitted per company.</summary>
+    /// <summary>
+    /// Enables management-observation generation when greater than zero and limits the
+    /// default representative sample per company. Explicit population coverage replaces
+    /// this limit while retaining it as the enablement switch.
+    /// </summary>
     public int RepresentativeManagementObservationCount { get; init; } = 15;
+    /// <summary>
+    /// Percentage of each endpoint cohort that receives a current management observation.
+    /// Set to a value from 1 through 100 to opt into deterministic population coverage.
+    /// Zero preserves the bounded representative-sample behavior.
+    /// </summary>
+    public int ManagementObservationPopulationCoveragePercentage { get; init; }
     /// <summary>
     /// Maximum historical management observations emitted per company in addition to
     /// <see cref="RepresentativeManagementObservationCount"/>. Zero disables history.

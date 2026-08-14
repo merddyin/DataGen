@@ -7,6 +7,27 @@ description: Recent release notes and highlights for the current DataGen platfor
 
 This page tracks the most recent product-level changes that matter to users of DataGen.
 
+## v0.11.0
+
+This release strengthens representative enterprise evidence and the release boundary around external generation plugins. It is intended for teams that use DataGen to exercise analysis, export, and integration workflows with datasets that remain repeatable and explicit about what they do and do not prove.
+
+### What changed
+
+- **Representative management paths without provider lock-in**
+  Opt-in management observations now model the common management surface for each endpoint cohort, with a bounded set of missing, stale, alternative-provider, and hosted-compute cases. Existing scenarios keep their legacy fixed per-company sample unless they opt in, so a routine upgrade does not quietly change their expected population.
+- **Policy-setting timestamps that travel with the data**
+  Policy settings now receive deterministic source timestamps when upstream fields are incomplete. DataGen derives a missing value from explicit neighboring bounds and the supplied generation time, then exports the completed `when_created`, `when_modified`, `observed_at`, and `retrieved_at` values. Consumers no longer need to fill those fields from their own clock.
+- **Windows publisher metadata with explicit release evidence**
+  Hosted Windows CI continuously verifies the portable publisher-metadata contract. Release publication separately requires a fresh signed attestation from the prepared workstation's real `D:` NTFS and `G:` ReFS regressions. Source-dependent checks run from a deterministic archive of the clean committed `main` object, rather than the mutable working tree, while each metadata probe resolves beneath a validated root on the volume it is claiming. The signer parses and checks the preflight evidence before producing a canonical payload that binds the commit, tree id, archive hash, complete snapshot-manifest hash, and passed D/G filesystem claims; GitHub verifies those claims against a repository-pinned public certificate before building or publishing. This prevents a transient working-tree edit from changing the tested source, but does not defend against compromise of the prepared account, Git object database, private key, or signing process memory. This is pinned-key verification, not CA-chain validation or operator identity proof. Current assertions cover owner, group, restrictive DACL, file attributes, and creation/access/write timestamps. SACL and mandatory integrity-label handling is best-effort implementation behavior when Windows privileges permit it and is outside the current regression evidence.
+- **A bounded external-plugin intake boundary**
+  Plugin manifests and catalogs are read from the authenticated bytes of validated file handles, with size, cumulative-size, parsed-row, and JSON-depth limits. PowerShell and assembly-host output is streamed through bounded capture, giving operators a clear failure instead of allowing an unbounded plugin payload to consume the host.
+- **Assembly packages proved as a complete unit**
+  An approved assembly plugin is staged from validated handles, including the dependencies it needs. Its deterministic package inventory must reproduce the approved content hash before execution. Required cleanup failures stop the operation rather than allowing a partially cleaned staging area to be treated as success.
+
+### Trust boundary
+
+The new controls authenticate and bound plugin inputs and prove the staged package content. They do not turn an approved plugin into an operating-system sandbox: in-process PowerShell remains trusted code, and an approved assembly plugin runs under the host operating-system identity. Use only reviewed plugins and run DataGen with an account appropriate for that trust decision.
+
 ## v0.10.1
 
 This patch corrects a correlation error in representative server-management observations. Earlier generation could label an arbitrary selected server as hosted even when that server's own hosting facts described it as on-premises. Consumers could therefore receive a plausible management row that contradicted the server it referenced.

@@ -22,10 +22,19 @@ param(
     [switch]$TimestampOffsetRegressionOnly,
 
     [Parameter()]
+    [switch]$WindowsPublisherMetadataRegressionOnly,
+
+    [Parameter()]
+    [switch]$WindowsPublisherMetadataPortableOnly,
+
+    [Parameter()]
     [switch]$ReleaseVersionContractOnly,
 
     [Parameter()]
     [switch]$ReleaseArtifactContractOnly,
+
+    [Parameter()]
+    [switch]$ReleaseWorkflowContractOnly,
 
     [Parameter()]
     [switch]$InternalRun,
@@ -62,11 +71,20 @@ if (-not $InternalRun.IsPresent) {
     if ($TimestampOffsetRegressionOnly.IsPresent) {
         $childArguments += '-TimestampOffsetRegressionOnly'
     }
+    if ($WindowsPublisherMetadataRegressionOnly.IsPresent) {
+        $childArguments += '-WindowsPublisherMetadataRegressionOnly'
+    }
+    if ($WindowsPublisherMetadataPortableOnly.IsPresent) {
+        $childArguments += '-WindowsPublisherMetadataPortableOnly'
+    }
     if ($ReleaseVersionContractOnly.IsPresent) {
         $childArguments += '-ReleaseVersionContractOnly'
     }
     if ($ReleaseArtifactContractOnly.IsPresent) {
         $childArguments += '-ReleaseArtifactContractOnly'
+    }
+    if ($ReleaseWorkflowContractOnly.IsPresent) {
+        $childArguments += '-ReleaseWorkflowContractOnly'
     }
     $childArguments += @('-DotNetPath', $DotNetPath)
 
@@ -165,7 +183,7 @@ function Assert-ReleaseWorkflowVersionContract {
     foreach ($expectedEnvironmentMapping in @(
         'RELEASE_EVENT_NAME: ${{ github.event_name }}',
         'RELEASE_INPUT_VERSION: ${{ inputs.version }}',
-        'RELEASE_REF_NAME: ${{ github.ref_name }}'
+        'RELEASE_REF: ${{ github.ref }}'
     )) {
         if (-not $resolveStep.Contains($expectedEnvironmentMapping, [StringComparison]::Ordinal)) {
             throw "Release workflow contract requires '$expectedEnvironmentMapping' in the version step environment."
@@ -179,7 +197,7 @@ function Assert-ReleaseWorkflowVersionContract {
     foreach ($expectedDataRead in @(
         '$env:RELEASE_EVENT_NAME',
         '$env:RELEASE_INPUT_VERSION',
-        '$env:RELEASE_REF_NAME'
+        '$env:RELEASE_REF'
     )) {
         if (-not $runSource.Contains($expectedDataRead, [StringComparison]::Ordinal)) {
             throw "Release workflow contract requires the version run block to read '$expectedDataRead' as data."
@@ -192,6 +210,15 @@ function Assert-ReleaseWorkflowVersionContract {
     if ($runSource -notmatch '\.\\scripts\\assert-release-version\.ps1\s+-Version\s+\$version') {
         throw 'Release workflow contract requires the shared release-version assertion after numeric validation.'
     }
+    if ($runSource -notmatch '\$env:RELEASE_EVENT_NAME\s+-ne\s+''workflow_dispatch''') {
+        throw 'Release workflow contract requires the version step to reject non-manual events.'
+    }
+    if ($runSource -notmatch '\$env:RELEASE_REF\s+-ne\s+''refs/heads/main''') {
+        throw 'Release workflow contract requires manual release dispatch from refs/heads/main.'
+    }
+    if ($runSource -notmatch '\$version\s*=\s*\[string\]\$env:RELEASE_INPUT_VERSION') {
+        throw 'Release workflow contract requires the version to come only from the manual input.'
+    }
 
     $probeRoot = Join-Path $ContractOutputRoot 'release-workflow-version-probes'
     New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
@@ -203,13 +230,19 @@ function Assert-ReleaseWorkflowVersionContract {
             Name = 'workflow-dispatch-quoted-semicolon-comment'
             EventName = 'workflow_dispatch'
             InputVersion = "0.10.0';`$version='0.10.0';#"
-            RefName = ''
+            Ref = 'refs/heads/main'
         },
         [pscustomobject]@{
-            Name = 'pushed-tag-quoted-semicolon-comment'
+            Name = 'automatic-tag-push'
             EventName = 'push'
-            InputVersion = ''
-            RefName = "v0.10.0';`$version='0.10.0';#"
+            InputVersion = '0.11.0'
+            Ref = 'refs/tags/v0.11.0'
+        },
+        [pscustomobject]@{
+            Name = 'manual-non-main-ref'
+            EventName = 'workflow_dispatch'
+            InputVersion = '0.11.0'
+            Ref = 'refs/heads/work/release-probe'
         }
     )
 
@@ -219,13 +252,13 @@ function Assert-ReleaseWorkflowVersionContract {
         $githubOutputPath = Join-Path $caseRoot 'github-output.txt'
         $previousEventName = [Environment]::GetEnvironmentVariable('RELEASE_EVENT_NAME', 'Process')
         $previousInputVersion = [Environment]::GetEnvironmentVariable('RELEASE_INPUT_VERSION', 'Process')
-        $previousRefName = [Environment]::GetEnvironmentVariable('RELEASE_REF_NAME', 'Process')
+        $previousRef = [Environment]::GetEnvironmentVariable('RELEASE_REF', 'Process')
         $previousGithubOutput = [Environment]::GetEnvironmentVariable('GITHUB_OUTPUT', 'Process')
 
         try {
             $env:RELEASE_EVENT_NAME = $case.EventName
             $env:RELEASE_INPUT_VERSION = $case.InputVersion
-            $env:RELEASE_REF_NAME = $case.RefName
+            $env:RELEASE_REF = $case.Ref
             $env:GITHUB_OUTPUT = $githubOutputPath
 
             Push-Location $RepositoryRoot
@@ -240,7 +273,7 @@ function Assert-ReleaseWorkflowVersionContract {
         finally {
             $env:RELEASE_EVENT_NAME = $previousEventName
             $env:RELEASE_INPUT_VERSION = $previousInputVersion
-            $env:RELEASE_REF_NAME = $previousRefName
+            $env:RELEASE_REF = $previousRef
             $env:GITHUB_OUTPUT = $previousGithubOutput
             $global:LASTEXITCODE = 0
         }
@@ -254,6 +287,445 @@ function Assert-ReleaseWorkflowVersionContract {
                 throw "Release workflow wrote a release output before rejecting malicious $($case.Name) payload: $githubOutput"
             }
         }
+    }
+}
+
+function Assert-ReleasePublicationAttestationContract {
+    param(
+        [Parameter(Mandatory)]
+        [string]$RepositoryRoot,
+
+        [Parameter(Mandatory)]
+        [string]$ContractOutputRoot
+    )
+
+    $attestationWriter = Join-Path $RepositoryRoot 'scripts\new-release-preflight-attestation.ps1'
+    $attestationValidator = Join-Path $RepositoryRoot 'scripts\assert-release-preflight-attestation.ps1'
+    $releasePreflight = Join-Path $RepositoryRoot 'scripts\invoke-release-preflight.ps1'
+    $releaseTrustModule = Join-Path $RepositoryRoot 'scripts\release-trust\DataGen.ReleasePreflightAttestation.psm1'
+    foreach ($requiredScript in @($attestationWriter, $attestationValidator, $releasePreflight, $releaseTrustModule)) {
+        if (-not (Test-Path -LiteralPath $requiredScript -PathType Leaf)) {
+            throw "Release publication attestation contract requires '$requiredScript'."
+        }
+    }
+
+    $releasePreflightSource = Get-Content -LiteralPath $releasePreflight -Raw
+    foreach ($requiredPreflightToken in @(
+        '[switch]$CreateReleaseAttestation',
+        "`$branch -cne 'main'",
+        "'status', '--porcelain=v1', '--untracked-files=all'",
+        "'windows-publisher-metadata-cross-filesystem'",
+        "'WindowsPublisherMetadataRegressionOnly'",
+        'new-release-preflight-attestation.ps1'
+    )) {
+        if (-not $releasePreflightSource.Contains($requiredPreflightToken, [StringComparison]::Ordinal)) {
+            throw "Release preflight attestation contract requires '$requiredPreflightToken'."
+        }
+    }
+    if ($releasePreflightSource -notmatch '\$RequireWindowsPublisherMetadataCrossFilesystemEvidence\.IsPresent\s+-or\s+\$CreateReleaseAttestation\.IsPresent') {
+        throw 'Release attestation creation must make the real cross-filesystem publisher regression mandatory.'
+    }
+    $catalogContractSource = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'tests\CleanCheckoutCatalogContract.Tests.ps1') -Raw
+    $forbiddenSnapshotProbeToken = "Join-Path `$sourceRoot " + "'artifacts'"
+    if ($catalogContractSource.Contains($forbiddenSnapshotProbeToken, [StringComparison]::Ordinal)) {
+        throw 'Cross-filesystem publisher probes must not derive a D: or G: operation root from the immutable source snapshot.'
+    }
+    foreach ($requiredProbeSafetyToken in @(
+        'function Resolve-WindowsPublisherMetadataProbeRoot',
+        'DataGenWindowsPublisherProof',
+        'Get-Volume -DriveLetter $driveLetter',
+        'Refusing to clean publisher metadata probe'
+    )) {
+        if (-not $catalogContractSource.Contains($requiredProbeSafetyToken, [StringComparison]::Ordinal)) {
+            throw "Cross-filesystem publisher probe contract requires '$requiredProbeSafetyToken'."
+        }
+    }
+
+    $probeRoot = Join-Path $ContractOutputRoot 'release-attestation-probes'
+    New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
+    $evidencePath = Join-Path $probeRoot 'release-preflight-evidence.json'
+    $sourceCommit = '0123456789abcdef0123456789abcdef01234567'
+    $sourceTreeId = '89abcdef0123456789abcdef0123456789abcdef'
+    $completedAt = '2026-08-14T12:00:00Z'
+    [ordered]@{
+        Schema = 'datagen-release-preflight-evidence-v2'
+        Version = '0.11.0'
+        SourceCommit = $sourceCommit
+        SourceTreeId = $sourceTreeId
+        SourceArchiveSha256 = 'a' * 64
+        SourceManifestSha256 = 'b' * 64
+        Branch = 'main'
+        CompletedAtUtc = $completedAt
+        Workstation = 'release-contract-test'
+        Volumes = [ordered]@{
+            D = [ordered]@{ FileSystem = 'NTFS'; DriveType = 'Fixed' }
+            G = [ordered]@{ FileSystem = 'ReFS'; DriveType = 'Fixed' }
+        }
+        Contracts = [ordered]@{
+            ReleaseVersion = 'passed'
+            WindowsPublisherMetadataPortable = 'passed'
+            WindowsPublisherMetadataCrossFilesystem = 'passed'
+        }
+    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $evidencePath -NoNewline
+    $trustedCertificate = $null
+    $wrongCertificate = $null
+    $trustedThumbprint = $null
+    $wrongThumbprint = $null
+    $windowsPowerShell = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
+    $publicCertificatePath = Join-Path $probeRoot 'trusted-release-attestation.cer'
+    try {
+        function New-EphemeralAttestationCertificate {
+            param([Parameter(Mandatory)][string]$Subject)
+
+            $creationScript = @"
+`$ErrorActionPreference = 'Stop'
+`$certificate = New-SelfSignedCertificate -Type Custom -Subject '$Subject' -CertStoreLocation 'Cert:\CurrentUser\My' -KeyAlgorithm RSA -KeyLength 2048 -KeyUsage DigitalSignature -KeyExportPolicy NonExportable -HashAlgorithm SHA256 -NotAfter ([DateTime]::UtcNow.AddHours(1))
+`$certificate.Thumbprint
+"@
+            $thumbprint = @(& $windowsPowerShell -NoLogo -NoProfile -NonInteractive -Command $creationScript 2>&1 | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^[0-9A-F]{40}$' } | Select-Object -Last 1)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($thumbprint)) {
+                throw "Could not create ephemeral test certificate '$Subject'."
+            }
+            return $thumbprint
+        }
+
+        $trustedThumbprint = New-EphemeralAttestationCertificate -Subject 'CN=DataGen Test Release Preflight Attestation Trusted'
+        $wrongThumbprint = New-EphemeralAttestationCertificate -Subject 'CN=DataGen Test Release Preflight Attestation Wrong'
+        $store = [System.Security.Cryptography.X509Certificates.X509Store]::new('My', 'CurrentUser')
+        $store.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadOnly)
+        try {
+            $trustedCertificate = @($store.Certificates.Find([System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint, $trustedThumbprint, $false)) | Select-Object -First 1
+            $wrongCertificate = @($store.Certificates.Find([System.Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint, $wrongThumbprint, $false)) | Select-Object -First 1
+        }
+        finally {
+            $store.Close()
+        }
+        if (-not $trustedCertificate -or -not $wrongCertificate) {
+            throw 'Ephemeral release-attestation certificates were not available from CurrentUser certificate storage.'
+        }
+        [IO.File]::WriteAllBytes($publicCertificatePath, $trustedCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+
+        $writerOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $attestationWriter `
+            -EvidencePath $evidencePath `
+            -Version '0.11.0' `
+            -SourceCommit $sourceCommit `
+            -CompletedAtUtc $completedAt `
+            -SigningCertificateThumbprint $trustedThumbprint `
+            -PublicCertificatePath $publicCertificatePath 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Release attestation writer failed: $($writerOutput | Out-String)"
+        }
+        $attestation = @($writerOutput | ForEach-Object { $_.ToString() } |
+            Where-Object { $_.StartsWith('datagen-release-preflight-v3|', [StringComparison]::Ordinal) }) | Select-Object -Last 1
+        if ([string]::IsNullOrWhiteSpace($attestation)) {
+            throw 'Release attestation writer did not emit a signed durable workflow input value.'
+        }
+
+        Import-Module $releaseTrustModule -Force
+        $parsedAttestation = ConvertFrom-ReleasePreflightAttestation -Attestation $attestation
+        if ($parsedAttestation.SourceTreeId -cne $sourceTreeId -or
+            $parsedAttestation.SourceArchiveSha256 -cne ('a' * 64) -or
+            $parsedAttestation.SourceManifestSha256 -cne ('b' * 64) -or
+            $parsedAttestation.DFileSystem -cne 'NTFS' -or
+            $parsedAttestation.DResult -cne 'passed' -or
+            $parsedAttestation.GFileSystem -cne 'ReFS' -or
+            $parsedAttestation.GResult -cne 'passed') {
+            throw 'Release attestation payload did not retain the required canonical source and D:/G: evidence claims.'
+        }
+
+        $malformedEvidencePath = Join-Path $probeRoot 'malformed-release-preflight-evidence.json'
+        Set-Content -LiteralPath $malformedEvidencePath -Value '{"Schema":"datagen-release-preflight-evidence-v2","Version":"0.11.0"}' -NoNewline
+        $malformedWriterOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $attestationWriter `
+            -EvidencePath $malformedEvidencePath `
+            -Version '0.11.0' `
+            -SourceCommit $sourceCommit `
+            -CompletedAtUtc $completedAt `
+            -SigningCertificateThumbprint $trustedThumbprint `
+            -PublicCertificatePath $publicCertificatePath 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0 -or $malformedWriterOutput -notmatch 'evidence') {
+            throw 'Release attestation writer accepted malformed release-preflight evidence.'
+        }
+        $mismatchedEvidencePath = Join-Path $probeRoot 'mismatched-release-preflight-evidence.json'
+        $mismatchedEvidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json -AsHashtable -Depth 8
+        $mismatchedEvidence['SourceCommit'] = ('f' * 40)
+        $mismatchedEvidence | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $mismatchedEvidencePath -NoNewline
+        $mismatchedWriterOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $attestationWriter `
+            -EvidencePath $mismatchedEvidencePath `
+            -Version '0.11.0' `
+            -SourceCommit $sourceCommit `
+            -CompletedAtUtc $completedAt `
+            -SigningCertificateThumbprint $trustedThumbprint `
+            -PublicCertificatePath $publicCertificatePath 2>&1 | Out-String
+        if ($LASTEXITCODE -eq 0 -or $mismatchedWriterOutput -notmatch 'evidence') {
+            throw 'Release attestation writer accepted evidence whose source commit disagreed with the signing request.'
+        }
+
+        function Assert-EvidenceWriterRejectsJson {
+            param(
+                [Parameter(Mandatory)][string]$Name,
+                [Parameter(Mandatory)][string]$Json
+            )
+
+            $invalidEvidencePath = Join-Path $probeRoot "$Name-release-preflight-evidence.json"
+            [IO.File]::WriteAllText($invalidEvidencePath, $Json, [Text.UTF8Encoding]::new($false))
+            $invalidWriterOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $attestationWriter `
+                -EvidencePath $invalidEvidencePath `
+                -Version '0.11.0' `
+                -SourceCommit $sourceCommit `
+                -CompletedAtUtc $completedAt `
+                -SigningCertificateThumbprint $trustedThumbprint `
+                -PublicCertificatePath $publicCertificatePath 2>&1 | Out-String
+            if ($LASTEXITCODE -eq 0 -or $invalidWriterOutput -notmatch 'evidence') {
+                throw "Release attestation writer accepted invalid evidence case '$Name'. Output: $invalidWriterOutput"
+            }
+        }
+
+        function Add-EvidenceJsonProperty {
+            param(
+                [Parameter(Mandatory)][string]$Json,
+                [string]$ObjectProperty,
+                [Parameter(Mandatory)][string]$PropertyJson
+            )
+
+            $objectStart = if ([string]::IsNullOrWhiteSpace($ObjectProperty)) {
+                0
+            }
+            else {
+                $marker = '"' + $ObjectProperty + '": {'
+                $markerIndex = $Json.IndexOf($marker, [StringComparison]::Ordinal)
+                if ($markerIndex -lt 0) {
+                    throw "Evidence fixture does not contain object '$ObjectProperty'."
+                }
+                $Json.IndexOf('{', $markerIndex)
+            }
+            return $Json.Insert($objectStart + 1, "`n    $PropertyJson,")
+        }
+
+        $validEvidenceJson = Get-Content -LiteralPath $evidencePath -Raw
+        $wrongTypeEvidence = $validEvidenceJson -replace '"Workstation"\s*:\s*"[^"]+"', '"Workstation": 7'
+        foreach ($invalidEvidence in @(
+                [pscustomobject]@{ Name = 'extra-top-level'; Json = (Add-EvidenceJsonProperty -Json $validEvidenceJson -PropertyJson '"UnexpectedTopLevel": "forbidden"') },
+                [pscustomobject]@{ Name = 'extra-volume-member'; Json = (Add-EvidenceJsonProperty -Json $validEvidenceJson -ObjectProperty 'D' -PropertyJson '"UnexpectedVolumeMember": "forbidden"') },
+                [pscustomobject]@{ Name = 'extra-contract-member'; Json = (Add-EvidenceJsonProperty -Json $validEvidenceJson -ObjectProperty 'Contracts' -PropertyJson '"UnexpectedContractMember": "forbidden"') },
+                [pscustomobject]@{ Name = 'duplicate-top-level'; Json = (Add-EvidenceJsonProperty -Json $validEvidenceJson -PropertyJson '"Schema": "datagen-release-preflight-evidence-v2"') },
+                [pscustomobject]@{ Name = 'case-colliding-top-level'; Json = (Add-EvidenceJsonProperty -Json $validEvidenceJson -PropertyJson '"schema": "datagen-release-preflight-evidence-v2"') },
+                [pscustomobject]@{ Name = 'wrong-top-level-type'; Json = $wrongTypeEvidence }
+            )) {
+            Assert-EvidenceWriterRejectsJson -Name $invalidEvidence.Name -Json $invalidEvidence.Json
+        }
+
+        $fourPartEvidencePath = Join-Path $probeRoot 'four-part-release-preflight-evidence.json'
+        $fourPartEvidence = Get-Content -LiteralPath $evidencePath -Raw | ConvertFrom-Json -AsHashtable -Depth 8
+        $fourPartEvidence['Version'] = '0.11.0.1'
+        $fourPartEvidence | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $fourPartEvidencePath -NoNewline
+        $fourPartWriterOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $attestationWriter `
+            -EvidencePath $fourPartEvidencePath `
+            -Version '0.11.0.1' `
+            -SourceCommit $sourceCommit `
+            -CompletedAtUtc $completedAt `
+            -SigningCertificateThumbprint $trustedThumbprint `
+            -PublicCertificatePath $publicCertificatePath 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "Four-part release attestation writer failed: $($fourPartWriterOutput | Out-String)"
+        }
+        $fourPartAttestation = @($fourPartWriterOutput | ForEach-Object { $_.ToString() } |
+            Where-Object { $_.StartsWith('datagen-release-preflight-v3|', [StringComparison]::Ordinal) }) | Select-Object -Last 1
+        if ([string]::IsNullOrWhiteSpace($fourPartAttestation)) {
+            throw 'Release attestation writer did not emit a signed four-part-version workflow input value.'
+        }
+
+        function New-EquivalentNonCanonicalBase64UrlValue {
+            param([Parameter(Mandatory)][string]$Value)
+
+            $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+            $unusedBitCount = switch ($Value.Length % 4) {
+                2 { 4 }
+                3 { 2 }
+                default { 0 }
+            }
+            if ($unusedBitCount -eq 0) {
+                throw "Fixture '$Value' has no unused base64url bits to mutate."
+            }
+            $lastIndex = $alphabet.IndexOf($Value[$Value.Length - 1])
+            $canonicalStride = 1 -shl $unusedBitCount
+            if ($lastIndex -lt 0 -or $lastIndex % $canonicalStride -ne 0) {
+                throw 'Fixture is not a canonical base64url value with the expected unused-bit shape.'
+            }
+            return $Value.Substring(0, $Value.Length - 1) + $alphabet[$lastIndex + 1]
+        }
+
+        $fourPartEnvelopeMatch = [regex]::Match(
+            $fourPartAttestation,
+            '^datagen-release-preflight-v3\|payload=(?<payload>[A-Za-z0-9_-]+)\|signature=(?<signature>[A-Za-z0-9_-]+)$')
+        if (-not $fourPartEnvelopeMatch.Success) {
+            throw 'Four-part release attestation fixture is malformed.'
+        }
+        $nonCanonicalFourPartPayload = New-EquivalentNonCanonicalBase64UrlValue -Value $fourPartEnvelopeMatch.Groups['payload'].Value
+        $nonCanonicalFourPartSignature = New-EquivalentNonCanonicalBase64UrlValue -Value $fourPartEnvelopeMatch.Groups['signature'].Value
+        $nonCanonicalPayloadAttestation = "datagen-release-preflight-v3|payload=$nonCanonicalFourPartPayload|signature=$($fourPartEnvelopeMatch.Groups['signature'].Value)"
+        $nonCanonicalSignatureAttestation = "datagen-release-preflight-v3|payload=$($fourPartEnvelopeMatch.Groups['payload'].Value)|signature=$nonCanonicalFourPartSignature"
+        $attestationClaimArguments = @{
+            SourceTreeId = $parsedAttestation.SourceTreeId
+            SourceArchiveSha256 = $parsedAttestation.SourceArchiveSha256
+            SourceManifestSha256 = $parsedAttestation.SourceManifestSha256
+            DFileSystem = $parsedAttestation.DFileSystem
+            DResult = $parsedAttestation.DResult
+            GFileSystem = $parsedAttestation.GFileSystem
+            GResult = $parsedAttestation.GResult
+        }
+        $wrongKeyPayload = New-ReleasePreflightAttestationPayload `
+            -Version '0.11.0' `
+            -SourceCommit $sourceCommit `
+            @attestationClaimArguments `
+            -CompletedAtUtc $completedAt `
+            -EvidenceHash $parsedAttestation.EvidenceHash `
+            -KeyId $parsedAttestation.KeyId
+        $wrongKeyRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($wrongCertificate)
+        if (-not $wrongKeyRsa) {
+            throw 'The ephemeral wrong-key certificate does not expose a private RSA key.'
+        }
+        try {
+            $wrongKeySignature = $wrongKeyRsa.SignData(
+                [Text.Encoding]::UTF8.GetBytes($wrongKeyPayload),
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        }
+        finally {
+            $wrongKeyRsa.Dispose()
+        }
+        $wrongKeyAttestation = New-ReleasePreflightAttestationEnvelope -Payload $wrongKeyPayload -Signature $wrongKeySignature
+        function New-TrustedAttestationEnvelope {
+            param([Parameter(Mandatory)][string]$Payload)
+
+            $trustedRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPrivateKey($trustedCertificate)
+            if (-not $trustedRsa) {
+                throw 'The ephemeral trusted certificate does not expose a private RSA key.'
+            }
+            try {
+                $signature = $trustedRsa.SignData(
+                    [Text.Encoding]::UTF8.GetBytes($Payload),
+                    [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                    [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+                return New-ReleasePreflightAttestationEnvelope -Payload $Payload -Signature $signature
+            }
+            finally {
+                $trustedRsa.Dispose()
+            }
+        }
+        $missingClaimAttestation = New-TrustedAttestationEnvelope -Payload ($parsedAttestation.Payload -replace "`ng_result=passed$", '')
+        $wrongClaimAttestation = New-TrustedAttestationEnvelope -Payload ($parsedAttestation.Payload -replace 'd_result=passed', 'd_result=failed')
+        $cases = @(
+            [pscustomobject]@{ Name = 'valid'; Attestation = $attestation; Version = '0.11.0'; Source = $sourceCommit; SourceTree = $sourceTreeId; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $true },
+            [pscustomobject]@{ Name = 'valid-four-part-version'; Attestation = $fourPartAttestation; Version = '0.11.0.1'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $true },
+            [pscustomobject]@{ Name = 'noncanonical-four-part-payload'; Attestation = $nonCanonicalPayloadAttestation; Version = '0.11.0.1'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'noncanonical-four-part-signature'; Attestation = $nonCanonicalSignatureAttestation; Version = '0.11.0.1'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'missing'; Attestation = ''; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'forged-evidence'; Attestation = (New-ReleasePreflightAttestationEnvelope -Payload (New-ReleasePreflightAttestationPayload -Version '0.11.0' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash ('0' * 64) -KeyId $parsedAttestation.KeyId) -Signature $parsedAttestation.Signature); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'modified-source'; Attestation = (New-ReleasePreflightAttestationEnvelope -Payload (New-ReleasePreflightAttestationPayload -Version '0.11.0' -SourceCommit ('f' * 40) @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId) -Signature $parsedAttestation.Signature); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'modified-version'; Attestation = (New-ReleasePreflightAttestationPayload -Version '0.11.1' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId | ForEach-Object { New-ReleasePreflightAttestationEnvelope -Payload $_ -Signature $parsedAttestation.Signature }); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'modified-completion'; Attestation = (New-ReleasePreflightAttestationPayload -Version '0.11.0' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc '2026-08-14T12:00:01Z' -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId | ForEach-Object { New-ReleasePreflightAttestationEnvelope -Payload $_ -Signature $parsedAttestation.Signature }); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'wrong-key'; Attestation = $wrongKeyAttestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'missing-g-result-claim'; Attestation = $missingClaimAttestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'failed-d-result-claim'; Attestation = $wrongClaimAttestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'missing-signature'; Attestation = 'datagen-release-preflight-v3|payload=missing-signature'; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'missing-public-key'; Attestation = $attestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = (Join-Path $probeRoot 'missing-public-key.cer'); ShouldPass = $false },
+            [pscustomobject]@{ Name = 'stale'; Attestation = $attestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-15T12:00:01Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false }
+        )
+        foreach ($case in $cases) {
+            $probeOutput = & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File $attestationValidator `
+                -Attestation $case.Attestation `
+                -ExpectedVersion $case.Version `
+                -ExpectedSourceCommit $case.Source `
+                -ExpectedSourceTreeId $sourceTreeId `
+                -NowUtc $case.Now `
+                -MaximumAgeHours 24 `
+                -PublicCertificatePath $case.PublicCertificatePath 2>&1 | Out-String
+            $probeExitCode = $LASTEXITCODE
+            if ($case.ShouldPass -and $probeExitCode -ne 0) {
+                throw "Release attestation validator rejected valid case '$($case.Name)': $probeOutput"
+            }
+            if (-not $case.ShouldPass -and $probeExitCode -eq 0) {
+                throw "Release attestation validator accepted invalid case '$($case.Name)'."
+            }
+        }
+    }
+    finally {
+        $cleanupThumbprints = @($trustedThumbprint, $wrongThumbprint) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        if ($cleanupThumbprints.Count -gt 0) {
+            $cleanupScript = "`$ErrorActionPreference = 'SilentlyContinue'; @('$($cleanupThumbprints -join "','")') | ForEach-Object { Remove-Item -LiteralPath ('Cert:\CurrentUser\My\\' + `$_) -Force }"
+            & $windowsPowerShell -NoLogo -NoProfile -NonInteractive -Command $cleanupScript | Out-Null
+        }
+        foreach ($certificate in @($trustedCertificate, $wrongCertificate)) {
+            if ($certificate) {
+                $certificate.Dispose()
+            }
+        }
+        Remove-Module DataGen.ReleasePreflightAttestation -Force -ErrorAction SilentlyContinue
+    }
+
+    $workflowPath = Join-Path $RepositoryRoot '.github\workflows\release-module.yml'
+    $workflow = Get-Content -LiteralPath $workflowPath -Raw
+    $pinnedPublicCertificatePath = Join-Path $RepositoryRoot 'release-trust\datagen-release-preflight-attestation.cer'
+    if (-not (Test-Path -LiteralPath $pinnedPublicCertificatePath -PathType Leaf)) {
+        throw 'Release publication attestation contract requires the pinned public certificate.'
+    }
+    $pinnedPublicCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pinnedPublicCertificatePath)
+    try {
+        $pinnedRsa = [System.Security.Cryptography.X509Certificates.RSACertificateExtensions]::GetRSAPublicKey($pinnedPublicCertificate)
+        if (-not $pinnedRsa -or $pinnedPublicCertificate.HasPrivateKey) {
+            throw 'Release publication attestation trust file must contain only an RSA public certificate.'
+        }
+        $pinnedRsa.Dispose()
+    }
+    finally {
+        $pinnedPublicCertificate.Dispose()
+    }
+    if ($workflow -match '(?m)^  push:\s*$') {
+        throw 'Release publication workflow must not run automatically for pushed tags.'
+    }
+    if ($workflow -notmatch '(?m)^  workflow_dispatch:\s*$') {
+        throw 'Release publication workflow must be manually dispatched.'
+    }
+    $attestationInput = [regex]::Match(
+        $workflow,
+        '(?ms)^      publisher_metadata_attestation:\r?\n(?<input>.*?)(?=^      [a-zA-Z0-9_]+:|^env:)')
+    if (-not $attestationInput.Success -or $attestationInput.Groups['input'].Value -notmatch '(?m)^        required:\s*true\s*$') {
+        throw 'Release publication workflow requires a mandatory publisher_metadata_attestation input.'
+    }
+    $validationStep = [regex]::Match(
+        $workflow,
+        '(?ms)^      - name: Validate required workstation attestation\r?\n(?<step>.*?)(?=^      - name: )')
+    if (-not $validationStep.Success) {
+        throw 'Release publication workflow requires a workstation-attestation validation step.'
+    }
+    foreach ($mapping in @(
+        'RELEASE_ATTESTATION: ${{ inputs.publisher_metadata_attestation }}',
+        'RELEASE_VERSION: ${{ steps.version.outputs.value }}',
+        'RELEASE_SOURCE_COMMIT: ${{ github.sha }}',
+        'RELEASE_SOURCE_TREE: ${{ steps.version.outputs.source_tree }}',
+        'RELEASE_TRUST_PUBLIC_CERTIFICATE: release-trust/datagen-release-preflight-attestation.cer'
+    )) {
+        if (-not $validationStep.Groups['step'].Value.Contains($mapping, [StringComparison]::Ordinal)) {
+            throw "Release attestation validation step requires '$mapping'."
+        }
+    }
+    if ($validationStep.Groups['step'].Value -notmatch '\.\\scripts\\assert-release-preflight-attestation\.ps1') {
+        throw 'Release attestation validation step must invoke the shared validator.'
+    }
+    if ($validationStep.Groups['step'].Value -notmatch '-PublicCertificatePath\s+\$env:RELEASE_TRUST_PUBLIC_CERTIFICATE') {
+        throw 'Release attestation validation step must verify against the tracked pinned public certificate.'
+    }
+    if ($validationStep.Groups['step'].Value -notmatch '-ExpectedSourceTreeId\s+\$env:RELEASE_SOURCE_TREE') {
+        throw 'Release attestation validation step must bind the signed source tree to the checked-out committed tree.'
+    }
+    $generateStepIndex = $workflow.IndexOf('      - name: Generate seeded catalog artifact', [StringComparison]::Ordinal)
+    $galleryStepIndex = $workflow.IndexOf('      - name: Create gallery package', [StringComparison]::Ordinal)
+    $releaseStepIndex = $workflow.IndexOf('      - name: Publish GitHub release assets', [StringComparison]::Ordinal)
+    if ($validationStep.Index -gt $generateStepIndex -or $validationStep.Index -gt $galleryStepIndex -or $validationStep.Index -gt $releaseStepIndex) {
+        throw 'Release attestation must be validated before release artifacts are generated or published.'
+    }
+    if ($workflow -match "github\.event_name\s*==\s*'push'") {
+        throw 'Release publication conditions must not retain an automatic push bypass.'
     }
 }
 
@@ -328,7 +800,7 @@ function Assert-CiWorkflowPackageVersionContract {
         throw 'CI workflow contract forbids a run-number source in the package step.'
     }
 
-    $packageScalarRunMatch = [regex]::Match($packageStep, '(?m)^        run:[ \t]+(?<run>[^|\r\n][^\r\n]*)$')
+    $packageScalarRunMatch = [regex]::Match($packageStep, '(?m)^        run:[ \t]+(?<run>[^|\r\n][^\r\n]*)\r?$')
     $packageBlockRunMatch = [regex]::Match($packageStep, '(?ms)^        run:[ \t]*\|[ \t]*\r?\n(?<run>.*)$')
     if ($packageScalarRunMatch.Success) {
         $packageRunSource = $packageScalarRunMatch.Groups['run'].Value
@@ -491,8 +963,8 @@ function Assert-ReleaseVersionContract {
         [string]$RepositoryRoot
     )
 
-    $expectedVersion = '0.10.1'
-    $expectedAssemblyVersion = '0.10.1.0'
+    $expectedVersion = '0.11.0'
+    $expectedAssemblyVersion = '0.11.0.0'
     $propsPath = Join-Path $RepositoryRoot 'Directory.Build.props'
     $packageScriptPath = Join-Path $RepositoryRoot 'scripts\package-module.ps1'
     $websitePackagePath = Join-Path $RepositoryRoot 'website\package.json'
@@ -527,6 +999,7 @@ function Assert-ReleaseVersionContract {
     }
 
     Assert-ReleaseWorkflowVersionContract -RepositoryRoot $RepositoryRoot -ContractOutputRoot $outputRoot
+    Assert-ReleasePublicationAttestationContract -RepositoryRoot $RepositoryRoot -ContractOutputRoot $outputRoot
     Assert-CiWorkflowPackageVersionContract -RepositoryRoot $RepositoryRoot
     Assert-CiWorkflowPackageVersionMutationContract -RepositoryRoot $RepositoryRoot -ContractOutputRoot $outputRoot
 }
@@ -729,6 +1202,13 @@ function Assert-ReleaseArtifactContract {
     Assert-NoAbsoluteLocalPathsInSyntheticEnterpriseAssemblies -PackageRoot $archiveModulePath -Label 'Release archive'
     $archiveManifest = Import-PowerShellDataFile -LiteralPath $archiveManifestPath
     Assert-ModuleManifestParity -ExpectedManifest $versionedManifest -ActualManifest $archiveManifest -Label 'Release archive'
+}
+
+if ($ReleaseWorkflowContractOnly.IsPresent) {
+    Assert-ReleaseWorkflowVersionContract -RepositoryRoot $sourceRoot -ContractOutputRoot $outputRoot
+    Assert-ReleasePublicationAttestationContract -RepositoryRoot $sourceRoot -ContractOutputRoot $outputRoot
+    Write-Host 'Release workflow and attestation contract passed.' -ForegroundColor Green
+    exit 0
 }
 
 Assert-ReleaseVersionContract -RepositoryRoot $sourceRoot
@@ -1191,6 +1671,477 @@ Adversarial Catalog,Security,Contoso,1.0
     }
 }
 
+function Invoke-WindowsPublisherMetadataRegressionForDrives {
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$DriveLetters,
+
+        [switch]$RequireCrossFilesystem
+    )
+
+    if ($env:OS -ne 'Windows_NT') {
+        throw 'Windows publisher metadata regression requires Windows.'
+    }
+
+    foreach ($driveLetter in $DriveLetters) {
+        $volume = Get-Volume -DriveLetter $driveLetter -ErrorAction Stop
+        if ($RequireCrossFilesystem.IsPresent) {
+            $expectedFileSystem = if ($driveLetter -eq 'G') { 'ReFS' } else { 'NTFS' }
+            if ($volume.FileSystem -ne $expectedFileSystem) {
+                throw "Windows publisher metadata regression requires $driveLetter`: to be $expectedFileSystem, found '$($volume.FileSystem)'."
+            }
+        }
+        elseif ($volume.FileSystem -notin @('NTFS', 'ReFS')) {
+            throw "Windows publisher metadata portable regression requires an NTFS or ReFS volume, found '$($volume.FileSystem)' on $driveLetter`: ."
+        }
+    }
+
+    $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+    $metadataAttributes = [IO.FileAttributes]::Hidden -bor [IO.FileAttributes]::Archive
+    Write-Host 'Windows SACL and mandatory-label note: this workstation gate independently attempts SACL_SECURITY_INFORMATION (0x8) and LABEL_SECURITY_INFORMATION (0x10), because Windows defines the mandatory integrity label as an SACL ACE but exposes it through a separate request flag. Without SeSecurityPrivilege the operating system need not expose either surface to an ordinary token. The publisher preserves each only when it can read and reapply it; an unavailable surface does not expand DACL-granted access, but leaves auditing or mandatory-integrity enforcement unverified.' -ForegroundColor Yellow
+
+    function Set-RestrictiveFileMetadata {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Path
+        )
+
+        $acl = Get-Acl -LiteralPath $Path
+        $acl.SetAccessRuleProtection($true, $false)
+        foreach ($rule in @($acl.Access)) {
+            [void]$acl.RemoveAccessRule($rule)
+        }
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($currentIdentity, 'FullControl', 'Allow'))
+        $daclIsRestrictive = $true
+        try {
+            Set-Acl -LiteralPath $Path -AclObject $acl
+        }
+        catch [UnauthorizedAccessException] {
+            $daclIsRestrictive = $false
+        }
+        [IO.File]::SetAttributes($Path, $metadataAttributes)
+        $timestamps = [pscustomobject]@{
+            CreationTimeUtc = [DateTime]::SpecifyKind([DateTime]'2020-01-02T03:04:05.0060000', [DateTimeKind]::Utc)
+            LastAccessTimeUtc = [DateTime]::SpecifyKind([DateTime]'2020-01-02T03:04:06.0070000', [DateTimeKind]::Utc)
+            LastWriteTimeUtc = [DateTime]::SpecifyKind([DateTime]'2020-01-02T03:04:07.0080000', [DateTimeKind]::Utc)
+        }
+        [IO.File]::SetCreationTimeUtc($Path, $timestamps.CreationTimeUtc)
+        [IO.File]::SetLastAccessTimeUtc($Path, $timestamps.LastAccessTimeUtc)
+        [IO.File]::SetLastWriteTimeUtc($Path, $timestamps.LastWriteTimeUtc)
+
+        $finalAcl = Get-Acl -LiteralPath $Path
+
+        return [pscustomobject]@{
+            Owner = $finalAcl.Owner
+            Group = $finalAcl.Group
+            Dacl = $finalAcl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
+            Attributes = [IO.File]::GetAttributes($Path)
+            CreationTimeUtc = [IO.File]::GetCreationTimeUtc($Path)
+            LastAccessTimeUtc = [IO.File]::GetLastAccessTimeUtc($Path)
+            LastWriteTimeUtc = [IO.File]::GetLastWriteTimeUtc($Path)
+            DaclIsRestrictive = $daclIsRestrictive
+        }
+    }
+
+    function Assert-PublisherMetadata {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Path,
+
+            [Parameter(Mandatory)]
+            [object]$Metadata,
+
+            [Parameter(Mandatory)]
+            [string]$Label,
+
+            [Parameter(Mandatory)]
+            [string]$DriveLetter
+        )
+
+        $actualItem = Get-Item -LiteralPath $Path -Force
+        # Snapshot timestamps before ACL inspection so an access-time-enabled filesystem cannot turn the assertion into its own mutation.
+        $actualTimestamps = [pscustomobject]@{
+            CreationTimeUtc = $actualItem.CreationTimeUtc
+            LastAccessTimeUtc = $actualItem.LastAccessTimeUtc
+            LastWriteTimeUtc = $actualItem.LastWriteTimeUtc
+        }
+        $actualAttributes = [IO.File]::GetAttributes($Path)
+        $actualAcl = Get-Acl -LiteralPath $Path
+        if ($actualAcl.Owner -ne $Metadata.Owner -or $actualAcl.Group -ne $Metadata.Group -or $actualAcl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access) -ne $Metadata.Dacl -or $actualAttributes -ne $Metadata.Attributes) {
+            throw "Windows publisher metadata regression did not preserve owner, group, restrictive DACL, and attributes for the $Label on $DriveLetter`:. Expected owner '$($Metadata.Owner)', group '$($Metadata.Group)', DACL '$($Metadata.Dacl)', and attributes '$($Metadata.Attributes)'; actual owner '$($actualAcl.Owner)', group '$($actualAcl.Group)', DACL '$($actualAcl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access))', and attributes '$actualAttributes'."
+        }
+
+        # ReFS and NTFS both retain 100-ns FILETIME values locally, but allow a small filesystem/provider rounding window.
+        $timestampTolerance = [TimeSpan]::FromSeconds(2)
+        foreach ($timestamp in @('CreationTimeUtc', 'LastAccessTimeUtc', 'LastWriteTimeUtc')) {
+            $actual = $actualTimestamps.$timestamp
+            $expected = $Metadata.$timestamp
+            if ([Math]::Abs(($actual - $expected).Ticks) -gt $timestampTolerance.Ticks) {
+                throw "Windows publisher metadata regression did not preserve $timestamp for the $Label on $DriveLetter`:. Expected '$expected'; actual '$actual'; tolerance '$timestampTolerance'."
+            }
+        }
+    }
+
+    function Assert-WindowsPublisherMetadataOriginalPathChain {
+        param(
+            [Parameter(Mandatory)]
+            [string]$Path,
+
+            [Parameter(Mandatory)]
+            [string]$DriveLetter,
+
+            [Parameter(Mandatory)]
+            [string]$ExpectedFileSystem
+        )
+
+        $driveRoot = [IO.Path]::GetFullPath("$DriveLetter`:\")
+        $fullPath = [IO.Path]::GetFullPath($Path)
+        if ([IO.Path]::GetPathRoot($fullPath) -ine $driveRoot -or
+            -not (Test-PathContains -ParentPath $driveRoot -ChildPath $fullPath)) {
+            throw "Publisher metadata path '$Path' must be contained by explicit drive root '$driveRoot'."
+        }
+
+        $volume = Get-Volume -DriveLetter $DriveLetter -ErrorAction Stop
+        if ($volume.FileSystem -cne $ExpectedFileSystem) {
+            throw "Publisher metadata path '$fullPath' requires $DriveLetter`: $ExpectedFileSystem, but Get-Volume reports '$($volume.FileSystem)'."
+        }
+
+        $currentPath = $fullPath.TrimEnd('\')
+        while ($true) {
+            $inspectionPath = if ($currentPath -ieq $driveRoot.TrimEnd('\')) { $driveRoot } else { $currentPath }
+            if (Test-Path -LiteralPath $inspectionPath) {
+                $item = Get-Item -LiteralPath $inspectionPath -Force -ErrorAction Stop
+                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                    throw "Publisher metadata path '$fullPath' is or is beneath original reparse point '$inspectionPath'."
+                }
+            }
+            if ($currentPath -ieq $driveRoot.TrimEnd('\')) {
+                break
+            }
+            $parent = [IO.Directory]::GetParent($currentPath)
+            if ($null -eq $parent -or -not (Test-PathContains -ParentPath $driveRoot -ChildPath $parent.FullName)) {
+                throw "Publisher metadata path '$fullPath' escaped explicit drive root '$driveRoot'."
+            }
+            $currentPath = $parent.FullName.TrimEnd('\')
+        }
+        return $fullPath
+    }
+
+    function Remove-PublisherMetadataProbe {
+        param(
+            [Parameter(Mandatory)]
+            [string]$ProbeRoot,
+
+            [Parameter(Mandatory)]
+            [string]$ProbeBasePath,
+
+            [Parameter(Mandatory)]
+            [string]$DriveLetter,
+
+            [Parameter(Mandatory)]
+            [string]$ExpectedFileSystem
+        )
+
+        if (-not (Test-Path -LiteralPath $ProbeRoot)) {
+            return
+        }
+
+        $validatedProbeRoot = Assert-WindowsPublisherMetadataProbePath `
+            -ProbeRoot $ProbeRoot `
+            -ProbeBasePath $ProbeBasePath `
+            -DriveLetter $DriveLetter `
+            -ExpectedFileSystem $ExpectedFileSystem
+        $resolvedProbeRoot = $validatedProbeRoot.ProbeRoot
+
+        $reparsePoint = Get-ChildItem -LiteralPath $resolvedProbeRoot -Recurse -Force | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } | Select-Object -First 1
+        if ($reparsePoint) {
+            throw "Refusing to clean publisher metadata probe '$resolvedProbeRoot' because it contains reparse point '$($reparsePoint.FullName)'."
+        }
+        Get-ChildItem -LiteralPath $resolvedProbeRoot -Recurse -Force | ForEach-Object { $_.Attributes = [IO.FileAttributes]::Normal }
+        Remove-Item -LiteralPath $resolvedProbeRoot -Recurse -Force
+        if (Test-Path -LiteralPath $resolvedProbeRoot) {
+            throw "Windows publisher metadata regression did not clean probe '$resolvedProbeRoot'."
+        }
+    }
+
+    function Assert-WindowsPublisherMetadataProbePath {
+        param(
+            [Parameter(Mandatory)]
+            [string]$ProbeRoot,
+
+            [Parameter(Mandatory)]
+            [string]$ProbeBasePath,
+
+            [Parameter(Mandatory)]
+            [string]$DriveLetter,
+
+            [Parameter(Mandatory)]
+            [string]$ExpectedFileSystem
+        )
+
+        $expectedProbeBasePath = [IO.Path]::GetFullPath((Join-Path "$DriveLetter`:\" 'DataGenWindowsPublisherProof'))
+        $originalProbeBasePath = Assert-WindowsPublisherMetadataOriginalPathChain `
+            -Path $ProbeBasePath `
+            -DriveLetter $DriveLetter `
+            -ExpectedFileSystem $ExpectedFileSystem
+        $originalProbeRoot = Assert-WindowsPublisherMetadataOriginalPathChain `
+            -Path $ProbeRoot `
+            -DriveLetter $DriveLetter `
+            -ExpectedFileSystem $ExpectedFileSystem
+        if ($originalProbeBasePath -ine $expectedProbeBasePath) {
+            throw "Publisher metadata probe base must be the explicit per-drive path '$expectedProbeBasePath', not '$originalProbeBasePath'."
+        }
+        if (-not (Test-PathContains -ParentPath $originalProbeBasePath -ChildPath $originalProbeRoot) -or $originalProbeRoot -ieq $originalProbeBasePath) {
+            throw "Refusing publisher metadata probe '$originalProbeRoot' outside its validated base '$originalProbeBasePath'."
+        }
+
+        $resolvedProbeBasePath = (Resolve-Path -LiteralPath $originalProbeBasePath -ErrorAction Stop).Path
+        $resolvedProbeRoot = (Resolve-Path -LiteralPath $originalProbeRoot -ErrorAction Stop).Path
+        if ($resolvedProbeBasePath -ine $originalProbeBasePath -or $resolvedProbeRoot -ine $originalProbeRoot) {
+            throw "Publisher metadata probe path changed while resolving '$originalProbeRoot'."
+        }
+        $resolvedBaseDrive = (Split-Path -Path $resolvedProbeBasePath -Qualifier).TrimEnd(':', '\')
+        $resolvedProbeDrive = (Split-Path -Path $resolvedProbeRoot -Qualifier).TrimEnd(':', '\')
+        if ($resolvedBaseDrive -ine $DriveLetter -or $resolvedProbeDrive -ine $DriveLetter) {
+            throw "Publisher metadata probe path must resolve on $DriveLetter`:, not '$resolvedProbeRoot'."
+        }
+        if (-not (Test-PathContains -ParentPath $resolvedProbeBasePath -ChildPath $resolvedProbeRoot) -or $resolvedProbeRoot -eq $resolvedProbeBasePath) {
+            throw "Refusing publisher metadata probe '$resolvedProbeRoot' outside its validated base '$resolvedProbeBasePath'."
+        }
+
+        [pscustomobject]@{
+            ProbeRoot = $resolvedProbeRoot
+            ProbeBasePath = $resolvedProbeBasePath
+        }
+    }
+
+    function Resolve-WindowsPublisherMetadataProbeRoot {
+        param(
+            [Parameter(Mandatory)]
+            [string]$DriveLetter,
+
+            [Parameter(Mandatory)]
+            [string]$ExpectedFileSystem
+        )
+
+        $driveRoot = [IO.Path]::GetFullPath("$DriveLetter`:\")
+        $probeBasePath = Join-Path $driveRoot 'DataGenWindowsPublisherProof'
+        $probeBasePath = Assert-WindowsPublisherMetadataOriginalPathChain `
+            -Path $probeBasePath `
+            -DriveLetter $DriveLetter `
+            -ExpectedFileSystem $ExpectedFileSystem
+        if (Test-Path -LiteralPath $probeBasePath) {
+            if (-not (Test-Path -LiteralPath $probeBasePath -PathType Container)) {
+                throw "Publisher metadata probe base '$probeBasePath' must be a directory."
+            }
+        }
+        else {
+            New-Item -ItemType Directory -Path $probeBasePath -ErrorAction Stop | Out-Null
+        }
+        $probeBasePath = Assert-WindowsPublisherMetadataOriginalPathChain `
+            -Path $probeBasePath `
+            -DriveLetter $DriveLetter `
+            -ExpectedFileSystem $ExpectedFileSystem
+        $probeRoot = Join-Path $probeBasePath ("probe-" + [Guid]::NewGuid().ToString('N'))
+        if (-not (Test-PathContains -ParentPath $probeBasePath -ChildPath $probeRoot)) {
+            throw "Publisher metadata probe child '$probeRoot' escaped validated base '$probeBasePath'."
+        }
+        New-Item -ItemType Directory -Path $probeRoot -Force | Out-Null
+        return Assert-WindowsPublisherMetadataProbePath `
+            -ProbeRoot $probeRoot `
+            -ProbeBasePath $probeBasePath `
+            -DriveLetter $DriveLetter `
+            -ExpectedFileSystem $ExpectedFileSystem
+    }
+
+    foreach ($driveLetter in $DriveLetters) {
+        $expectedFileSystem = if ($RequireCrossFilesystem.IsPresent) {
+            if ($driveLetter -eq 'G') { 'ReFS' } else { 'NTFS' }
+        }
+        else {
+            (Get-Volume -DriveLetter $driveLetter -ErrorAction Stop).FileSystem
+        }
+        $validatedProbe = Resolve-WindowsPublisherMetadataProbeRoot -DriveLetter $driveLetter -ExpectedFileSystem $expectedFileSystem
+        $probeBasePath = $validatedProbe.ProbeBasePath
+        $probeRoot = $validatedProbe.ProbeRoot
+        $artifactPath = Join-Path $probeRoot 'catalogs.sqlite'
+        $fingerprintPath = "$artifactPath.inputs.sha256"
+        $projectPath = Join-Path $probeRoot 'publisher-probe.proj'
+        $publisherWriterPath = Join-Path $probeRoot 'publisher-writer.cmd'
+        $buildRoot = Join-Path $probeRoot 'build'
+
+        try {
+            Set-Content -LiteralPath $artifactPath -Value 'obsolete artifact' -NoNewline
+            Set-Content -LiteralPath $fingerprintPath -Value 'obsolete receipt' -NoNewline
+            $expectedArtifactMetadata = Set-RestrictiveFileMetadata -Path $artifactPath
+            $expectedFingerprintMetadata = Set-RestrictiveFileMetadata -Path $fingerprintPath
+            if ($driveLetter -eq 'D' -and (-not $expectedArtifactMetadata.DaclIsRestrictive -or -not $expectedFingerprintMetadata.DaclIsRestrictive)) {
+                throw 'Windows publisher metadata regression could not establish the required restrictive NTFS DACL fixture.'
+            }
+            $escapedTargetsPath = [Security.SecurityElement]::Escape((Join-Path $sourceRoot 'Directory.Build.targets'))
+            $forceSecurityMetadataApplication = if (-not $RequireCrossFilesystem.IsPresent -or $driveLetter -eq 'D') { 'true' } else { 'false' }
+            @'
+@echo off
+setlocal EnableDelayedExpansion
+set "output="
+:next
+if "%~1"=="" goto write
+if /I "%~1"=="-OutputPath" (
+  set "output=%~2"
+  shift
+)
+shift
+goto next
+:write
+> "%output%" <nul set /p "=publisher metadata probe"
+exit /b 0
+'@ | Set-Content -LiteralPath $publisherWriterPath -NoNewline
+
+            @"
+<Project>
+  <Import Project="$escapedTargetsPath" />
+  <PropertyGroup>
+    <GenerateSeededCatalogDatabase>true</GenerateSeededCatalogDatabase>
+    <DataGenCatalogForceSecurityMetadataApplication>$forceSecurityMetadataApplication</DataGenCatalogForceSecurityMetadataApplication>
+    <DataGenCatalogArtifactPath>$artifactPath</DataGenCatalogArtifactPath>
+    <DataGenCatalogFingerprintPath>$fingerprintPath</DataGenCatalogFingerprintPath>
+    <DataGenPowerShellExecutable>$publisherWriterPath</DataGenPowerShellExecutable>
+  </PropertyGroup>
+</Project>
+"@ | Set-Content -LiteralPath $projectPath -NoNewline
+
+            $buildOutput = & $DotNetPath msbuild $projectPath -target:GenerateSeededCatalogDatabase -nologo -v:minimal "/p:BaseOutputPath=$buildRoot\\" 2>&1 | Out-String
+            $buildExitCode = $LASTEXITCODE
+            if ($buildExitCode -ne 0) {
+                throw "Windows publisher metadata regression failed on $driveLetter`: with exit code $buildExitCode. Output: $buildOutput"
+            }
+
+            foreach ($expected in @(
+                [pscustomobject]@{ Path = $artifactPath; Metadata = $expectedArtifactMetadata; Label = 'artifact' },
+                [pscustomobject]@{ Path = $fingerprintPath; Metadata = $expectedFingerprintMetadata; Label = 'receipt' }
+            )) {
+                Assert-PublisherMetadata -Path $expected.Path -Metadata $expected.Metadata -Label $expected.Label -DriveLetter $driveLetter
+            }
+
+            if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf) -or -not (Test-Path -LiteralPath $fingerprintPath -PathType Leaf)) {
+                throw "Windows publisher metadata regression did not retain both artifact and receipt on $driveLetter`: ."
+            }
+
+            $receipt = [xml](Get-Content -LiteralPath $fingerprintPath -Raw)
+            $artifactHash = (Get-FileHash -LiteralPath $artifactPath -Algorithm SHA256).Hash
+            if ($receipt.catalogIntegrity.artifactSha256 -ne $artifactHash -or [string]::IsNullOrWhiteSpace($receipt.catalogIntegrity.inputFingerprint)) {
+                throw "Windows publisher metadata regression did not retain an exact artifact/receipt integrity pair on $driveLetter`: ."
+            }
+        }
+        finally {
+            Remove-PublisherMetadataProbe -ProbeRoot $probeRoot -ProbeBasePath $probeBasePath -DriveLetter $driveLetter -ExpectedFileSystem $expectedFileSystem
+        }
+    }
+}
+
+function Invoke-WindowsPublisherMetadataPortableRegression {
+    if ($env:OS -ne 'Windows_NT') {
+        throw 'Windows publisher metadata regression requires Windows.'
+    }
+
+    $temporaryDrive = (Split-Path -Path ([IO.Path]::GetTempPath()) -Qualifier).TrimEnd(':', '\')
+    if ([string]::IsNullOrWhiteSpace($temporaryDrive)) {
+        throw 'Windows publisher metadata portable regression could not determine a writable temporary drive.'
+    }
+
+    Invoke-WindowsPublisherMetadataRegressionForDrives -DriveLetters @($temporaryDrive)
+}
+
+function Invoke-WindowsPublisherMetadataRegression {
+    Invoke-WindowsPublisherMetadataRegressionForDrives -DriveLetters @('D', 'G') -RequireCrossFilesystem
+}
+
+function Invoke-WindowsPublisherMetadataProbeBaseReparseRegression {
+    $driveRoot = 'D:\'
+    $probeBasePath = Join-Path $driveRoot 'DataGenWindowsPublisherProof'
+    $fixtureId = [Guid]::NewGuid().ToString('N')
+    $savedBasePath = Join-Path $driveRoot "DataGenWindowsPublisherProof-saved-$fixtureId"
+    $junctionTargetPath = Join-Path $driveRoot "DataGenWindowsPublisherProof-target-$fixtureId"
+    $sentinelPath = Join-Path $junctionTargetPath 'sentinel.txt'
+    $savedBase = $false
+    $junctionCreated = $false
+    $junctionSupported = $true
+
+    try {
+        if (Test-Path -LiteralPath $probeBasePath) {
+            $existingBase = Get-Item -LiteralPath $probeBasePath -Force
+            if (($existingBase.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Same-drive junction regression requires the existing probe base '$probeBasePath' not to be a reparse point."
+            }
+            if (@(Get-ChildItem -LiteralPath $probeBasePath -Force).Count -ne 0) {
+                throw "Same-drive junction regression requires the managed probe base '$probeBasePath' to be empty."
+            }
+            Move-Item -LiteralPath $probeBasePath -Destination $savedBasePath
+            $savedBase = $true
+        }
+
+        New-Item -ItemType Directory -Path $junctionTargetPath -Force | Out-Null
+        Set-Content -LiteralPath $sentinelPath -Value 'same-drive junction target must remain untouched' -NoNewline
+        $expectedTargetTimestamp = [DateTime]::SpecifyKind([DateTime]'2020-01-02T03:04:05', [DateTimeKind]::Utc)
+        [IO.Directory]::SetLastWriteTimeUtc($junctionTargetPath, $expectedTargetTimestamp)
+        try {
+            New-Item -ItemType Junction -Path $probeBasePath -Target $junctionTargetPath -ErrorAction Stop | Out-Null
+            $junctionCreated = $true
+        }
+        catch {
+            $junctionSupported = $false
+            Write-Warning "Same-drive junction regression skipped because junction creation is unavailable: $($_.Exception.Message)"
+        }
+        if (-not $junctionSupported) {
+            return
+        }
+
+        $junctionItem = Get-Item -LiteralPath $probeBasePath -Force
+        if (($junctionItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+            throw "Same-drive junction regression could not establish a reparse point at '$probeBasePath'."
+        }
+
+        $rejection = $null
+        try {
+            Invoke-WindowsPublisherMetadataRegressionForDrives -DriveLetters @('D') -RequireCrossFilesystem
+        }
+        catch {
+            $rejection = $_.Exception.Message
+        }
+        if ([string]::IsNullOrWhiteSpace($rejection) -or $rejection -notmatch 'reparse') {
+            throw "Publisher metadata regression did not reject the original same-drive junction probe base before traversal. Error: $rejection"
+        }
+        $targetChildren = @(Get-ChildItem -LiteralPath $junctionTargetPath -Force)
+        if ($targetChildren.Count -ne 1 -or $targetChildren[0].FullName -ine $sentinelPath -or
+            [IO.Directory]::GetLastWriteTimeUtc($junctionTargetPath) -ne $expectedTargetTimestamp) {
+            throw 'Publisher metadata regression wrote through or cleaned through the rejected same-drive junction.'
+        }
+    }
+    finally {
+        if ($junctionCreated -and (Test-Path -LiteralPath $probeBasePath)) {
+            $junctionItem = Get-Item -LiteralPath $probeBasePath -Force
+            if (($junctionItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+                throw "Refusing fixture cleanup because '$probeBasePath' is no longer the junction created by the regression."
+            }
+            Remove-Item -LiteralPath $probeBasePath -Force
+        }
+        if (Test-Path -LiteralPath $junctionTargetPath) {
+            $targetItem = Get-Item -LiteralPath $junctionTargetPath -Force
+            if (($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                [IO.Path]::GetPathRoot($targetItem.FullName) -ine $driveRoot) {
+                throw "Refusing fixture cleanup for unsafe junction target '$junctionTargetPath'."
+            }
+            Remove-Item -LiteralPath $junctionTargetPath -Recurse -Force
+        }
+        if ($savedBase) {
+            if (Test-Path -LiteralPath $probeBasePath) {
+                throw "Cannot restore saved probe base because '$probeBasePath' still exists."
+            }
+            Move-Item -LiteralPath $savedBasePath -Destination $probeBasePath
+        }
+    }
+}
+
 function Invoke-TimestampOffsetRegression {
     if (-not [IO.Path]::IsPathFullyQualified($DotNetPath) -or -not (Test-Path -LiteralPath $DotNetPath -PathType Leaf)) {
         throw "DotNetPath must identify an existing executable by full path: '$DotNetPath'."
@@ -1295,6 +2246,28 @@ Timestamp Fixture,Security,Contoso,1.0
     finally {
         [Environment]::SetEnvironmentVariable('SOURCE_DATE_EPOCH', $originalSourceDateEpoch)
     }
+}
+
+if ($WindowsPublisherMetadataRegressionOnly.IsPresent) {
+    try {
+        Invoke-WindowsPublisherMetadataProbeBaseReparseRegression
+        Invoke-WindowsPublisherMetadataRegression
+    }
+    finally {
+        if (Test-Path -LiteralPath $outputRoot) {
+            Remove-Item -LiteralPath $outputRoot -Recurse -Force
+        }
+    }
+    $global:LASTEXITCODE = 0
+    Write-Host 'Windows publisher metadata regression passed on ReFS and NTFS.' -ForegroundColor Green
+    return
+}
+
+if ($WindowsPublisherMetadataPortableOnly.IsPresent) {
+    Invoke-WindowsPublisherMetadataPortableRegression
+    $global:LASTEXITCODE = 0
+    Write-Host 'Windows publisher metadata portable regression passed.' -ForegroundColor Green
+    return
 }
 
 if ($AdversarialRegressionOnly.IsPresent) {
@@ -1411,7 +2384,7 @@ try {
         throw "The packaged module does not contain '$packagedCatalogPath'."
     }
 
-    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.10.1\SyntheticEnterprise.PowerShell.psd1'
+    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.11.0\SyntheticEnterprise.PowerShell.psd1'
     if (-not (Test-Path -LiteralPath $versionedManifestPath -PathType Leaf)) {
         throw "The default package version did not produce '$versionedManifestPath'."
     }

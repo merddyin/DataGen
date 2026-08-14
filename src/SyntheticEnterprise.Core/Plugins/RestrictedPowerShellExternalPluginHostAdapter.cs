@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.ObjectModel;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Text;
 using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
@@ -17,10 +18,19 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         PropertyNameCaseInsensitive = true
     };
     private readonly IIdFactory _idFactory;
+    private readonly IExternalPluginCatalogProvider _catalogProvider;
 
     public RestrictedPowerShellExternalPluginHostAdapter(IIdFactory idFactory)
+        : this(idFactory, new AuthenticatedExternalPluginCatalogProvider())
+    {
+    }
+
+    internal RestrictedPowerShellExternalPluginHostAdapter(
+        IIdFactory idFactory,
+        IExternalPluginCatalogProvider catalogProvider)
     {
         _idFactory = idFactory;
+        _catalogProvider = catalogProvider;
     }
 
     public bool CanExecute(GenerationPluginManifest manifest)
@@ -28,6 +38,12 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
 
     public ExternalPluginExecutionResult Execute(GenerationPluginManifest manifest, SyntheticEnterpriseWorld world, GenerationContext context, CatalogSet catalogs)
     {
+        if (!ExternalPluginPathSecurity.TryValidateManifestPaths(manifest, out var pathWarning))
+        {
+            return Failure(manifest, pathWarning!);
+        }
+
+        var executionManifest = ExternalPluginExecutionManifest.Create(manifest, context.GeneratedAt);
         var request = new ExternalPluginRequestMetadata
         {
             Capability = manifest.Capability,
@@ -37,11 +53,23 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
             Metadata = new Dictionary<string, string?>(context.Metadata, StringComparer.OrdinalIgnoreCase),
             PluginSettings = ResolvePluginSettings(context.ExternalPlugins, manifest.Capability)
         };
-        var scriptWorld = CloneForPlugin(world);
-        var scriptRequest = CloneForPlugin(request);
-        var pluginCatalogs = CloneForPlugin(ExternalPluginCatalogLoader.LoadPluginCatalogs(manifest));
+        CatalogSet pluginCatalogs;
+        try
+        {
+            pluginCatalogs = _catalogProvider.Load(manifest, context.ExternalPlugins);
+        }
+        catch (PluginInputPayloadLimitExceededException)
+        {
+            return Failure(
+                manifest,
+                $"Input payload exceeded the configured limit of {context.ExternalPlugins.MaxInputPayloadBytes} bytes.");
+        }
+        catch (PluginPathSecurityException ex)
+        {
+            return Failure(manifest, ex.Message);
+        }
 
-        if (!TryValidateInputPayload(scriptWorld, scriptRequest, pluginCatalogs, context.ExternalPlugins, out var payloadWarning))
+        if (!TryValidateInputPayload(world, request, pluginCatalogs, context.ExternalPlugins, out var payloadWarning))
         {
             return new ExternalPluginExecutionResult
             {
@@ -51,8 +79,12 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
             };
         }
 
+        var scriptWorld = CloneForPlugin(world);
+        var scriptRequest = CloneForPlugin(request);
+        pluginCatalogs = CloneForPlugin(pluginCatalogs);
+
         using var runspace = RunspaceFactory.CreateRunspace(CreateSessionState(
-            manifest,
+            executionManifest,
             scriptWorld,
             scriptRequest,
             pluginCatalogs));
@@ -60,12 +92,31 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
 
         using var powerShell = PowerShell.Create();
         powerShell.Runspace = runspace;
-        powerShell.AddScript(File.ReadAllText(manifest.EntryPoint!), useLocalScope: true);
+        using var verifiedEntryPoint = ExternalPluginPathSecurity.OpenVerifiedEntryPoint(manifest, out var entryPointWarning);
+        if (verifiedEntryPoint is null)
+        {
+            return Failure(manifest, entryPointWarning!);
+        }
 
-        List<PSObject> output;
+        string scriptText;
         try
         {
-            var asyncResult = powerShell.BeginInvoke();
+            scriptText = ExternalPluginPathSecurity.ReadVerifiedText(verifiedEntryPoint);
+        }
+        catch (PluginInputPayloadLimitExceededException)
+        {
+            return Failure(
+                manifest,
+                $"Plugin entry point exceeded the approved package-file limit of {ExternalPluginPathSecurity.MaximumEntryPointBytes} bytes.");
+        }
+
+        powerShell.AddScript(scriptText, useLocalScope: true);
+
+        using var output = new PSDataCollection<PSObject>();
+        using var streamCollector = new PowerShellStreamCollector(powerShell, output, context.ExternalPlugins);
+        try
+        {
+            var asyncResult = powerShell.BeginInvoke<PSObject, PSObject>(input: null, output);
             var timeout = TimeSpan.FromSeconds(Math.Max(1, context.ExternalPlugins.ExecutionTimeoutSeconds));
             if (!asyncResult.AsyncWaitHandle.WaitOne(timeout))
             {
@@ -77,53 +128,71 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
                 {
                 }
 
-                return new ExternalPluginExecutionResult
-                {
-                    Manifest = manifest,
-                    Executed = false,
-                    Warnings = new()
-                    {
-                        $"Execution timed out after {timeout.TotalSeconds:0} seconds."
-                    }
-                };
+                return Failure(manifest, $"Execution timed out after {timeout.TotalSeconds:0} seconds.");
             }
 
-            output = powerShell.EndInvoke(asyncResult).ToList();
+            powerShell.EndInvoke(asyncResult);
+        }
+        catch (PipelineStoppedException) when (streamCollector.LimitExceeded)
+        {
+            return Failure(
+                manifest,
+                $"Plugin output exceeded the configured limit of {context.ExternalPlugins.MaxOutputPayloadBytes} bytes.");
+        }
+        catch (RuntimeException) when (streamCollector.LimitExceeded)
+        {
+            return Failure(
+                manifest,
+                $"Plugin output exceeded the configured limit of {context.ExternalPlugins.MaxOutputPayloadBytes} bytes.");
         }
         catch (RuntimeException ex)
         {
-            return new ExternalPluginExecutionResult
-            {
-                Manifest = manifest,
-                Executed = false,
-                Warnings = new()
-                {
-                    LimitDiagnostic($"Execution failed in restricted host: {ex.Message}", context.ExternalPlugins)
-                }
-            };
+            return Failure(manifest, LimitDiagnostic($"Execution failed in restricted host: {ex.Message}", context.ExternalPlugins));
         }
 
-        var streamDiagnostics = CollectDiagnostics(powerShell, context.ExternalPlugins);
-        if (powerShell.Streams.Error.Count > 0)
+        if (streamCollector.LimitExceeded)
+        {
+            return Failure(
+                manifest,
+                $"Plugin output exceeded the configured limit of {context.ExternalPlugins.MaxOutputPayloadBytes} bytes.");
+        }
+
+        var streamDiagnostics = streamCollector.Diagnostics;
+        if (streamCollector.Errors.Count > 0)
         {
             return new ExternalPluginExecutionResult
             {
                 Manifest = manifest,
                 Executed = false,
-                Warnings = powerShell.Streams.Error.Select(error => LimitDiagnostic($"[error] {error}", context.ExternalPlugins))
+                Warnings = streamCollector.Errors
                     .Concat(streamDiagnostics)
                     .Take(Math.Max(0, context.ExternalPlugins.MaxWarningCount))
                     .ToList()
             };
         }
 
-        var parsed = ParseOutput(manifest, output);
-        var boundedRecords = parsed.Records.Take(Math.Max(0, context.ExternalPlugins.MaxGeneratedRecords)).ToList();
+        var parsed = ParseOutput(
+            manifest,
+            streamCollector.Output,
+            Math.Max(0, context.ExternalPlugins.MaxGeneratedRecords),
+            Math.Max(0, context.ExternalPlugins.MaxWarningCount));
+        parsed = parsed with
+        {
+            Warnings = parsed.Warnings
+                .Take(Math.Max(0, context.ExternalPlugins.MaxWarningCount))
+                .ToList(),
+            RecordCount = parsed.RecordCount + streamCollector.DroppedRecordCount,
+            WarningCount = parsed.WarningCount + streamCollector.DroppedWarningCount,
+            RecordCountIsLowerBound = parsed.RecordCountIsLowerBound || streamCollector.DroppedRecordCountIsLowerBound,
+            WarningCountIsLowerBound = parsed.WarningCountIsLowerBound || streamCollector.DroppedWarningCountIsLowerBound
+        };
+        var boundedRecords = parsed.Records.ToList();
         var boundedWarnings = parsed.Warnings
             .Select(warning => LimitDiagnostic(warning, context.ExternalPlugins))
             .Concat(streamDiagnostics)
             .Take(Math.Max(0, context.ExternalPlugins.MaxWarningCount))
             .ToList();
+        AddTruncationWarnings(parsed, boundedRecords.Count, boundedWarnings, context.ExternalPlugins);
 
         if (!TryFitOutputPayload(manifest, boundedRecords, boundedWarnings, context.ExternalPlugins, out var payloadBoundRecords, out var payloadBoundWarnings, out var outputWarning))
         {
@@ -138,16 +207,6 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         boundedRecords = payloadBoundRecords;
         boundedWarnings = payloadBoundWarnings;
 
-        if (parsed.Records.Count > boundedRecords.Count)
-        {
-            boundedWarnings.Add($"Generated records were truncated from {parsed.Records.Count} to {boundedRecords.Count}.");
-        }
-
-        if (parsed.Warnings.Count > boundedWarnings.Count)
-        {
-            boundedWarnings.Add($"Plugin warnings were truncated from {parsed.Warnings.Count} to {boundedWarnings.Count}.");
-        }
-
         return new ExternalPluginExecutionResult
         {
             Manifest = manifest,
@@ -155,6 +214,32 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
             Records = boundedRecords,
             Warnings = boundedWarnings
         };
+    }
+
+    private static void AddTruncationWarnings(
+        ParsedPluginOutput parsed,
+        int retainedRecordCount,
+        List<string> warnings,
+        ExternalPluginExecutionSettings settings)
+    {
+        var warningLimit = Math.Max(0, settings.MaxWarningCount);
+        if (parsed.RecordCount > retainedRecordCount && warningLimit > 0)
+        {
+            var qualifier = parsed.RecordCountIsLowerBound ? "at least " : string.Empty;
+            if (warnings.Count >= warningLimit)
+            {
+                warnings.RemoveAt(warnings.Count - 1);
+            }
+
+            warnings.Add($"Generated records were truncated from {qualifier}{parsed.RecordCount} to {retainedRecordCount}.");
+        }
+
+        var retainedPluginWarningCount = Math.Min(parsed.Warnings.Count, warningLimit);
+        if (parsed.WarningCount > retainedPluginWarningCount && warnings.Count < warningLimit)
+        {
+            var qualifier = parsed.WarningCountIsLowerBound ? "at least " : string.Empty;
+            warnings.Add($"Plugin warnings were truncated from {qualifier}{parsed.WarningCount} to {retainedPluginWarningCount}.");
+        }
     }
 
     private InitialSessionState CreateSessionState(GenerationPluginManifest manifest, SyntheticEnterpriseWorld world, object request, CatalogSet pluginCatalogs)
@@ -234,23 +319,52 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         state.Commands.Add(new SessionStateCmdletEntry(name, implementingType, string.Empty));
     }
 
-    private ParsedPluginOutput ParseOutput(GenerationPluginManifest manifest, IReadOnlyCollection<PSObject> output)
+    private ParsedPluginOutput ParseOutput(
+        GenerationPluginManifest manifest,
+        IReadOnlyCollection<PSObject> output,
+        int maxRecords,
+        int maxWarnings)
     {
         var records = new List<PluginGeneratedRecord>();
         var warnings = new List<string>();
+        var recordCount = 0;
+        var warningCount = 0;
+        var recordCountIsLowerBound = false;
+        var warningCountIsLowerBound = false;
 
         foreach (var item in output)
         {
             var baseObject = item.BaseObject;
             if (TryGetProperty(baseObject, "Warnings", out var warningValues))
             {
-                warnings.AddRange(ToStringList(warningValues));
+                foreach (var warning in EnumerateObjects(warningValues)
+                             .Select(value => value?.ToString() ?? string.Empty)
+                             .Where(value => !string.IsNullOrWhiteSpace(value)))
+                {
+                    warningCount++;
+                    if (warnings.Count < maxWarnings)
+                    {
+                        warnings.Add(warning);
+                    }
+                    else
+                    {
+                        warningCountIsLowerBound = true;
+                        break;
+                    }
+                }
             }
 
             if (TryGetProperty(baseObject, "Records", out var rawRecords))
             {
-                foreach (var record in ToObjectList(rawRecords))
+                foreach (var record in EnumerateObjects(rawRecords))
                 {
+                    recordCount++;
+                    if (records.Count >= maxRecords)
+                    {
+                        recordCountIsLowerBound = true;
+                        break;
+                    }
+
                     var parsed = ParseRecord(manifest, record);
                     if (parsed is not null)
                     {
@@ -264,11 +378,21 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
             var directRecord = ParseRecord(manifest, baseObject);
             if (directRecord is not null)
             {
-                records.Add(directRecord);
+                recordCount++;
+                if (records.Count < maxRecords)
+                {
+                    records.Add(directRecord);
+                }
             }
         }
 
-        return new ParsedPluginOutput(records, warnings);
+        return new ParsedPluginOutput(
+            records,
+            warnings,
+            recordCount,
+            warningCount,
+            recordCountIsLowerBound,
+            warningCountIsLowerBound);
     }
 
     private static T CloneForPlugin<T>(T value)
@@ -281,15 +405,13 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         return JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value, JsonOptions), JsonOptions)!;
     }
 
-    private static IEnumerable<string> CollectDiagnostics(PowerShell powerShell, ExternalPluginExecutionSettings settings)
-    {
-        var diagnostics = new List<string>();
-        diagnostics.AddRange(powerShell.Streams.Warning.Select(record => LimitDiagnostic($"[warning] {record.Message}", settings)));
-        diagnostics.AddRange(powerShell.Streams.Verbose.Select(record => LimitDiagnostic($"[verbose] {record.Message}", settings)));
-        diagnostics.AddRange(powerShell.Streams.Debug.Select(record => LimitDiagnostic($"[debug] {record.Message}", settings)));
-        diagnostics.AddRange(powerShell.Streams.Information.Select(record => LimitDiagnostic($"[info] {record.MessageData}", settings)));
-        return diagnostics.Take(Math.Max(0, settings.MaxDiagnosticEntries)).ToList();
-    }
+    private static ExternalPluginExecutionResult Failure(GenerationPluginManifest manifest, string warning)
+        => new()
+        {
+            Manifest = manifest,
+            Executed = false,
+            Warnings = new() { warning }
+        };
 
     private static string LimitDiagnostic(string message, ExternalPluginExecutionSettings settings)
     {
@@ -316,18 +438,21 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         ExternalPluginExecutionSettings settings,
         out string? warning)
     {
-        var inputPayloadBytes =
-            JsonSerializer.SerializeToUtf8Bytes(world, JsonOptions).Length +
-            JsonSerializer.SerializeToUtf8Bytes(request, JsonOptions).Length +
-            JsonSerializer.SerializeToUtf8Bytes(catalogs, JsonOptions).Length;
-        if (inputPayloadBytes <= Math.Max(1024, settings.MaxInputPayloadBytes))
+        try
         {
+            using var payloadStream = new BoundedPluginPayloadStream(Stream.Null, Math.Max(1024, settings.MaxInputPayloadBytes));
+            JsonSerializer.Serialize(payloadStream, world, JsonOptions);
+            JsonSerializer.Serialize(payloadStream, request, JsonOptions);
+            JsonSerializer.Serialize(payloadStream, catalogs, JsonOptions);
             warning = null;
             return true;
         }
+        catch (PluginInputPayloadLimitExceededException)
+        {
+            warning = $"Input payload exceeded the configured limit of {settings.MaxInputPayloadBytes} bytes.";
+            return false;
+        }
 
-        warning = $"Input payload exceeded the configured limit of {settings.MaxInputPayloadBytes} bytes.";
-        return false;
     }
 
     private static bool TryFitOutputPayload(
@@ -339,21 +464,51 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         out List<string> boundedWarnings,
         out string? failureWarning)
     {
-        boundedRecords = records.ToList();
-        boundedWarnings = warnings.ToList();
+        boundedRecords = records;
+        boundedWarnings = warnings;
         var maxBytes = Math.Max(1024, settings.MaxOutputPayloadBytes);
-
-        while (boundedWarnings.Count > 0 && SerializeResponse(manifest, boundedRecords, boundedWarnings).Length > maxBytes)
+        if (!TryGetSerializedSize(
+                new ExternalPluginExecutionResult
+                {
+                    Manifest = manifest,
+                    Executed = true,
+                    Records = new(),
+                    Warnings = new()
+                },
+                maxBytes,
+                out var totalBytes))
         {
-            boundedWarnings.RemoveAt(boundedWarnings.Count - 1);
+            failureWarning = $"Plugin output exceeded the configured limit of {settings.MaxOutputPayloadBytes} bytes.";
+            boundedRecords = new();
+            boundedWarnings = new();
+            return false;
         }
 
-        while (boundedRecords.Count > 0 && SerializeResponse(manifest, boundedRecords, boundedWarnings).Length > maxBytes)
+        var recordSizes = boundedRecords
+            .Select(record => GetSerializedSizeOrOverflow(record, maxBytes))
+            .ToList();
+        var warningSizes = boundedWarnings
+            .Select(warning => GetSerializedSizeOrOverflow(warning, maxBytes))
+            .ToList();
+        totalBytes += GetArrayContentSize(recordSizes) + GetArrayContentSize(warningSizes);
+
+        while (boundedWarnings.Count > 0 && totalBytes > maxBytes)
         {
-            boundedRecords.RemoveAt(boundedRecords.Count - 1);
+            var last = warningSizes.Count - 1;
+            totalBytes -= warningSizes[last] + (warningSizes.Count > 1 ? 1 : 0);
+            warningSizes.RemoveAt(last);
+            boundedWarnings.RemoveAt(last);
         }
 
-        if (SerializeResponse(manifest, boundedRecords, boundedWarnings).Length <= maxBytes)
+        while (boundedRecords.Count > 0 && totalBytes > maxBytes)
+        {
+            var last = recordSizes.Count - 1;
+            totalBytes -= recordSizes[last] + (recordSizes.Count > 1 ? 1 : 0);
+            recordSizes.RemoveAt(last);
+            boundedRecords.RemoveAt(last);
+        }
+
+        if (totalBytes <= maxBytes)
         {
             failureWarning = null;
             return true;
@@ -365,16 +520,27 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         return false;
     }
 
-    private static byte[] SerializeResponse(GenerationPluginManifest manifest, IReadOnlyList<PluginGeneratedRecord> records, IReadOnlyList<string> warnings)
-        => JsonSerializer.SerializeToUtf8Bytes(
-            new ExternalPluginExecutionResult
-            {
-                Manifest = manifest,
-                Executed = true,
-                Records = records.ToList(),
-                Warnings = warnings.ToList()
-            },
-            JsonOptions);
+    private static long GetArrayContentSize(IReadOnlyCollection<long> itemSizes)
+        => itemSizes.Sum() + Math.Max(0, itemSizes.Count - 1);
+
+    private static long GetSerializedSizeOrOverflow<T>(T value, long maxBytes)
+        => TryGetSerializedSize(value, maxBytes, out var bytes) ? bytes : maxBytes + 1;
+
+    private static bool TryGetSerializedSize<T>(T value, long maxBytes, out long bytes)
+    {
+        using var stream = new BoundedPluginPayloadStream(Stream.Null, maxBytes);
+        try
+        {
+            JsonSerializer.Serialize(stream, value, JsonOptions);
+            bytes = stream.BytesWritten;
+            return true;
+        }
+        catch (PluginInputPayloadLimitExceededException)
+        {
+            bytes = maxBytes + 1;
+            return false;
+        }
+    }
 
     private PluginGeneratedRecord? ParseRecord(GenerationPluginManifest manifest, object? candidate)
     {
@@ -448,33 +614,40 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
         return false;
     }
 
-    private static IReadOnlyList<object> ToObjectList(object? candidate)
+    private static IEnumerable<object> EnumerateObjects(object? candidate)
     {
         if (candidate is null)
         {
-            return Array.Empty<object>();
+            yield break;
         }
 
         if (candidate is string)
         {
-            return new[] { candidate };
+            yield return candidate;
+            yield break;
         }
 
         if (candidate is IDictionary)
         {
-            return new[] { candidate };
+            yield return candidate;
+            yield break;
         }
 
         if (candidate is IEnumerable enumerable)
         {
-            return enumerable.Cast<object>().ToList();
+            foreach (var item in enumerable)
+            {
+                if (item is not null)
+                {
+                    yield return item;
+                }
+            }
+
+            yield break;
         }
 
-        return new[] { candidate };
+        yield return candidate;
     }
-
-    private static IReadOnlyList<string> ToStringList(object? candidate)
-        => ToObjectList(candidate).Select(item => item?.ToString() ?? string.Empty).Where(item => !string.IsNullOrWhiteSpace(item)).ToList();
 
     private static IReadOnlyDictionary<string, string?> ToDictionary(object candidate)
     {
@@ -493,5 +666,392 @@ public sealed class RestrictedPowerShellExternalPluginHostAdapter : IExternalPlu
             .ToDictionary(property => property.Name, property => property.GetValue(candidate)?.ToString(), StringComparer.OrdinalIgnoreCase);
     }
 
-    private sealed record ParsedPluginOutput(IReadOnlyList<PluginGeneratedRecord> Records, IReadOnlyList<string> Warnings);
+    private sealed record ParsedPluginOutput(
+        IReadOnlyList<PluginGeneratedRecord> Records,
+        IReadOnlyList<string> Warnings,
+        int RecordCount,
+        int WarningCount,
+        bool RecordCountIsLowerBound,
+        bool WarningCountIsLowerBound);
+
+    private sealed class PowerShellStreamCollector : IDisposable
+    {
+        private readonly PowerShell _powerShell;
+        private readonly PSDataCollection<PSObject> _outputBuffer;
+        private readonly ExternalPluginExecutionSettings _settings;
+        private readonly long _maxBytes;
+        private readonly int _maxRetainedRecords;
+        private readonly object _sync = new();
+        private readonly List<PSObject> _output = new();
+        private readonly List<string> _diagnostics = new();
+        private readonly List<string> _errors = new();
+        private long _consumedBytes;
+        private int _stopQueued;
+
+        public PowerShellStreamCollector(
+            PowerShell powerShell,
+            PSDataCollection<PSObject> outputBuffer,
+            ExternalPluginExecutionSettings settings)
+        {
+            _powerShell = powerShell;
+            _outputBuffer = outputBuffer;
+            _settings = settings;
+            _maxBytes = Math.Max(1024, settings.MaxOutputPayloadBytes);
+            _maxRetainedRecords = Math.Max(0, settings.MaxGeneratedRecords);
+
+            outputBuffer.DataAdding += OnOutputAdding;
+            outputBuffer.DataAdded += OnOutputAdded;
+            powerShell.Streams.Error.DataAdding += OnErrorAdding;
+            powerShell.Streams.Error.DataAdded += OnErrorAdded;
+            powerShell.Streams.Warning.DataAdding += OnWarningAdding;
+            powerShell.Streams.Warning.DataAdded += OnWarningAdded;
+            powerShell.Streams.Verbose.DataAdding += OnVerboseAdding;
+            powerShell.Streams.Verbose.DataAdded += OnVerboseAdded;
+            powerShell.Streams.Debug.DataAdding += OnDebugAdding;
+            powerShell.Streams.Debug.DataAdded += OnDebugAdded;
+            powerShell.Streams.Information.DataAdding += OnInformationAdding;
+            powerShell.Streams.Information.DataAdded += OnInformationAdded;
+        }
+
+        public bool LimitExceeded { get; private set; }
+        public IReadOnlyList<PSObject> Output => _output;
+        public IReadOnlyList<string> Diagnostics => _diagnostics;
+        public IReadOnlyList<string> Errors => _errors;
+        public int DroppedRecordCount { get; private set; }
+        public int DroppedWarningCount { get; private set; }
+        public bool DroppedRecordCountIsLowerBound { get; private set; }
+        public bool DroppedWarningCountIsLowerBound { get; private set; }
+        private int RetainedRecordCount { get; set; }
+        private int RetainedOutputWarningCount { get; set; }
+
+        private void OnOutputAdding(object? sender, DataAddingEventArgs eventArgs)
+        {
+            if (eventArgs.ItemAdded is not PSObject item)
+            {
+                return;
+            }
+
+            lock (_sync)
+            {
+                var candidate = item.BaseObject;
+                if (TryGetProperty(candidate, "Records", out var rawRecords))
+                {
+                    CaptureBoundedEnvelope(rawRecords, candidate);
+                }
+                else if (TryGetProperty(candidate, "RecordType", out _))
+                {
+                    CaptureDirectRecord(item);
+                }
+                else
+                {
+                    TryConsume(candidate);
+                }
+            }
+        }
+
+        private void CaptureDirectRecord(PSObject item)
+        {
+            if (!TryConsume(item.BaseObject))
+            {
+                return;
+            }
+
+            if (RetainedRecordCount < _maxRetainedRecords)
+            {
+                RetainedRecordCount++;
+                _output.Add(item);
+                return;
+            }
+
+            DroppedRecordCount++;
+        }
+
+        private void CaptureBoundedEnvelope(object? rawRecords, object candidate)
+        {
+            var retainedRecords = new List<object>();
+            foreach (var record in EnumerateObjects(rawRecords))
+            {
+                if (RetainedRecordCount >= _maxRetainedRecords)
+                {
+                    DroppedRecordCount++;
+                    DroppedRecordCountIsLowerBound = true;
+                    break;
+                }
+
+                if (!TryConsume(record))
+                {
+                    return;
+                }
+
+                retainedRecords.Add(record);
+                RetainedRecordCount++;
+            }
+
+            var retainedWarnings = new List<string>();
+            if (TryGetProperty(candidate, "Warnings", out var rawWarnings))
+            {
+                var maxWarnings = Math.Max(0, _settings.MaxWarningCount);
+                foreach (var warning in EnumerateObjects(rawWarnings)
+                             .Select(value => value?.ToString() ?? string.Empty)
+                             .Where(value => !string.IsNullOrWhiteSpace(value)))
+                {
+                    if (RetainedOutputWarningCount >= maxWarnings)
+                    {
+                        DroppedWarningCount++;
+                        DroppedWarningCountIsLowerBound = true;
+                        break;
+                    }
+
+                    if (!TryConsume(warning))
+                    {
+                        return;
+                    }
+
+                    retainedWarnings.Add(warning);
+                    RetainedOutputWarningCount++;
+                }
+            }
+
+            if (retainedRecords.Count > 0 || retainedWarnings.Count > 0)
+            {
+                _output.Add(PSObject.AsPSObject(new Hashtable
+                {
+                    ["Records"] = retainedRecords,
+                    ["Warnings"] = retainedWarnings
+                }));
+            }
+        }
+
+        private void OnOutputAdded(object? sender, DataAddedEventArgs eventArgs)
+            => DrainOne(_outputBuffer);
+
+        private void OnErrorAdding(object? sender, DataAddingEventArgs eventArgs)
+            => AddDiagnostic($"[error] {eventArgs.ItemAdded}", _errors, Math.Max(0, _settings.MaxWarningCount));
+
+        private void OnErrorAdded(object? sender, DataAddedEventArgs eventArgs)
+            => DrainOne(_powerShell.Streams.Error);
+
+        private void OnWarningAdding(object? sender, DataAddingEventArgs eventArgs)
+            => AddDiagnostic($"[warning] {((WarningRecord)eventArgs.ItemAdded).Message}", _diagnostics, Math.Max(0, _settings.MaxDiagnosticEntries));
+
+        private void OnWarningAdded(object? sender, DataAddedEventArgs eventArgs)
+            => DrainOne(_powerShell.Streams.Warning);
+
+        private void OnVerboseAdding(object? sender, DataAddingEventArgs eventArgs)
+            => AddDiagnostic($"[verbose] {((VerboseRecord)eventArgs.ItemAdded).Message}", _diagnostics, Math.Max(0, _settings.MaxDiagnosticEntries));
+
+        private void OnVerboseAdded(object? sender, DataAddedEventArgs eventArgs)
+            => DrainOne(_powerShell.Streams.Verbose);
+
+        private void OnDebugAdding(object? sender, DataAddingEventArgs eventArgs)
+            => AddDiagnostic($"[debug] {((DebugRecord)eventArgs.ItemAdded).Message}", _diagnostics, Math.Max(0, _settings.MaxDiagnosticEntries));
+
+        private void OnDebugAdded(object? sender, DataAddedEventArgs eventArgs)
+            => DrainOne(_powerShell.Streams.Debug);
+
+        private void OnInformationAdding(object? sender, DataAddingEventArgs eventArgs)
+            => AddDiagnostic($"[info] {((InformationRecord)eventArgs.ItemAdded).MessageData}", _diagnostics, Math.Max(0, _settings.MaxDiagnosticEntries));
+
+        private void OnInformationAdded(object? sender, DataAddedEventArgs eventArgs)
+            => DrainOne(_powerShell.Streams.Information);
+
+        private void AddDiagnostic(string message, List<string> target, int maxEntries)
+        {
+            if (!TryConsume(message))
+            {
+                return;
+            }
+
+            lock (_sync)
+            {
+                if (target.Count < maxEntries)
+                {
+                    target.Add(LimitDiagnostic(message, _settings));
+                }
+            }
+        }
+
+        private bool TryConsume<T>(T value)
+        {
+            lock (_sync)
+            {
+                if (LimitExceeded)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    var estimator = new PowerShellObjectSizeEstimator(_maxBytes - _consumedBytes);
+                    if (!estimator.TryMeasure(value))
+                    {
+                        LimitExceeded = true;
+                        QueueStop();
+                        return false;
+                    }
+
+                    _consumedBytes += estimator.Bytes;
+                    return true;
+                }
+                catch
+                {
+                    LimitExceeded = true;
+                    QueueStop();
+                    return false;
+                }
+            }
+        }
+
+        private void QueueStop()
+        {
+            if (Interlocked.Exchange(ref _stopQueued, 1) != 0)
+            {
+                return;
+            }
+
+            // The script runs in-process and may allocate internally before emitting. This collector
+            // bounds only the host-side buffering of objects and diagnostic records as they arrive.
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    _powerShell.Stop();
+                }
+                catch
+                {
+                }
+            });
+        }
+
+        private static void DrainOne<T>(PSDataCollection<T> collection)
+        {
+            if (collection.Count > 0)
+            {
+                collection.ReadAll();
+            }
+        }
+
+        public void Dispose()
+        {
+            _outputBuffer.DataAdding -= OnOutputAdding;
+            _outputBuffer.DataAdded -= OnOutputAdded;
+            _powerShell.Streams.Error.DataAdding -= OnErrorAdding;
+            _powerShell.Streams.Error.DataAdded -= OnErrorAdded;
+            _powerShell.Streams.Warning.DataAdding -= OnWarningAdding;
+            _powerShell.Streams.Warning.DataAdded -= OnWarningAdded;
+            _powerShell.Streams.Verbose.DataAdding -= OnVerboseAdding;
+            _powerShell.Streams.Verbose.DataAdded -= OnVerboseAdded;
+            _powerShell.Streams.Debug.DataAdding -= OnDebugAdding;
+            _powerShell.Streams.Debug.DataAdded -= OnDebugAdded;
+            _powerShell.Streams.Information.DataAdding -= OnInformationAdding;
+            _powerShell.Streams.Information.DataAdded -= OnInformationAdded;
+        }
+
+        private sealed class PowerShellObjectSizeEstimator
+        {
+            private readonly long _maxBytes;
+            private readonly HashSet<object> _visited = new(ReferenceEqualityComparer.Instance);
+
+            public PowerShellObjectSizeEstimator(long maxBytes)
+            {
+                _maxBytes = Math.Max(0, maxBytes);
+            }
+
+            public long Bytes { get; private set; }
+
+            public bool TryMeasure(object? value)
+            {
+                if (value is null)
+                {
+                    return TryAdd(4);
+                }
+
+                var type = value.GetType();
+                if (!type.IsValueType && !_visited.Add(value))
+                {
+                    return TryAdd(16);
+                }
+
+                if (value is string text)
+                {
+                    return TryAdd(Encoding.UTF8.GetByteCount(text) + 2L);
+                }
+
+                if (value is PSObject psObject)
+                {
+                    var baseObject = psObject.BaseObject;
+                    if (baseObject is not null
+                        && !ReferenceEquals(baseObject, psObject)
+                        && baseObject is not PSCustomObject)
+                    {
+                        return TryMeasure(baseObject);
+                    }
+
+                    if (!TryAdd(2))
+                    {
+                        return false;
+                    }
+
+                    foreach (var property in psObject.Properties)
+                    {
+                        if (!TryMeasure(property.Name) || !TryMeasure(property.Value) || !TryAdd(1))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                if (value is IDictionary dictionary)
+                {
+                    if (!TryAdd(2))
+                    {
+                        return false;
+                    }
+
+                    foreach (DictionaryEntry entry in dictionary)
+                    {
+                        if (!TryMeasure(entry.Key?.ToString()) || !TryMeasure(entry.Value) || !TryAdd(1))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                if (value is IEnumerable enumerable)
+                {
+                    if (!TryAdd(2))
+                    {
+                        return false;
+                    }
+
+                    foreach (var item in enumerable)
+                    {
+                        if (!TryMeasure(item) || !TryAdd(1))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                return TryAdd(Encoding.UTF8.GetByteCount(value.ToString() ?? string.Empty));
+            }
+
+            private bool TryAdd(long bytes)
+            {
+                if (bytes < 0 || bytes > _maxBytes - Bytes)
+                {
+                    return false;
+                }
+
+                Bytes += bytes;
+                return true;
+            }
+        }
+    }
 }

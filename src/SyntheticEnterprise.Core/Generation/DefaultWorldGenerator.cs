@@ -64,6 +64,7 @@ public sealed class DefaultWorldGenerator : IWorldGenerator
         }
 
         var warnings = new List<string>();
+        PolicySettingTimestampNormalizer.Apply(world, context);
         var externalPluginResult = _externalPluginOrchestrator.Apply(world, context, catalogs);
         appliedPlugins.AddRange(externalPluginResult.AppliedCapabilities);
         warnings.AddRange(externalPluginResult.Warnings);

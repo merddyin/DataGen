@@ -1,13 +1,14 @@
 name: Release PowerShell Module
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
         description: Numeric module version to package (for example 1.2.3)
+        required: true
+        type: string
+      publisher_metadata_attestation:
+        description: Fresh signed prepared-workstation preflight attestation for this version, committed source tree, and passed D NTFS/G ReFS publisher metadata claims
         required: true
         type: string
       publish_to_psgallery:
@@ -77,6 +78,54 @@ jobs:
             ((Get-Command Publish-PSResource -ErrorAction SilentlyContinue | Format-List * | Out-String))
           ) | Set-Content $summaryPath
 
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        env:
+          RELEASE_EVENT_NAME: ${{ github.event_name }}
+          RELEASE_INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          if ($env:RELEASE_EVENT_NAME -ne 'workflow_dispatch') {
+            throw "Release publication only accepts a governed manual workflow dispatch."
+          }
+          if ($env:RELEASE_REF -ne 'refs/heads/main') {
+            throw "Release publication must be dispatched from refs/heads/main."
+          }
+
+          $version = [string]$env:RELEASE_INPUT_VERSION
+          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+            throw "Version '$version' must be numeric and match x.y.z or x.y.z.w."
+          }
+
+          .\scripts\assert-release-version.ps1 -Version $version
+
+          $sourceTreeId = (git rev-parse "$($env:RELEASE_SOURCE_COMMIT)^{tree}").Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $sourceTreeId -notmatch '^[0-9a-f]{40}$') {
+            throw "Could not resolve the committed release source tree for '$env:RELEASE_SOURCE_COMMIT'."
+          }
+
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "source_tree=$sourceTreeId" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Validate required workstation attestation
+        shell: pwsh
+        env:
+          RELEASE_ATTESTATION: ${{ inputs.publisher_metadata_attestation }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+          RELEASE_SOURCE_COMMIT: ${{ github.sha }}
+          RELEASE_SOURCE_TREE: ${{ steps.version.outputs.source_tree }}
+          RELEASE_TRUST_PUBLIC_CERTIFICATE: release-trust/datagen-release-preflight-attestation.cer
+        run: |
+          .\scripts\assert-release-preflight-attestation.ps1 `
+            -Attestation $env:RELEASE_ATTESTATION `
+            -ExpectedVersion $env:RELEASE_VERSION `
+            -ExpectedSourceCommit $env:RELEASE_SOURCE_COMMIT `
+            -ExpectedSourceTreeId $env:RELEASE_SOURCE_TREE `
+            -PublicCertificatePath $env:RELEASE_TRUST_PUBLIC_CERTIFICATE `
+            -MaximumAgeHours 24
+
       - name: Generate seeded catalog artifact
         shell: pwsh
         run: |
@@ -85,35 +134,20 @@ jobs:
             throw "Catalog artifact generation failed."
           }
 
-      - name: Resolve release version
-        id: version
-        shell: pwsh
-        env:
-          RELEASE_EVENT_NAME: ${{ github.event_name }}
-          RELEASE_INPUT_VERSION: ${{ inputs.version }}
-          RELEASE_REF_NAME: ${{ github.ref_name }}
-        run: |
-          if ($env:RELEASE_EVENT_NAME -eq 'workflow_dispatch') {
-            $version = [string]$env:RELEASE_INPUT_VERSION
-          }
-          else {
-            $version = ([string]$env:RELEASE_REF_NAME) -replace '^v', ''
-          }
-
-          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
-            throw "Version '$version' must be numeric and match x.y.z or x.y.z.w."
-          }
-
-          .\scripts\assert-release-version.ps1 -Version $version
-
-          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-
       - name: Restore solution
         shell: pwsh
         run: |
           dotnet restore .\DataGen.slnx *>&1 | Tee-Object -FilePath $env:RESTORE_LOG
           if ($LASTEXITCODE -ne 0) {
             throw "dotnet restore failed."
+          }
+
+      - name: Run portable release preflight
+        shell: pwsh
+        run: |
+          .\scripts\invoke-release-preflight.ps1 -OutputRoot (Join-Path $env:RUNNER_TEMP 'datagen-release-preflight') *>&1 | Tee-Object -FilePath (Join-Path $env:DIAGNOSTICS_DIR 'release-preflight.log')
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release preflight failed."
           }
 
       - name: Run solution tests
@@ -164,7 +198,7 @@ jobs:
         run: |
           $publishPath = Join-Path $PWD 'artifacts\module\publish\SyntheticEnterprise.PowerShell'
           $nupkgOutput = Join-Path $PWD 'artifacts\psgallery'
-          $shouldPublish = '${{ github.event_name }}' -eq 'push' -or '${{ inputs.publish_to_psgallery }}' -eq 'true'
+          $shouldPublish = '${{ inputs.publish_to_psgallery }}' -eq 'true'
 
           New-Item -ItemType Directory -Path $nupkgOutput -Force | Out-Null
 
@@ -233,7 +267,7 @@ jobs:
           path: artifacts/diagnostics/**
 
       - name: Publish GitHub release assets
-        if: github.event_name == 'push' || inputs.create_github_release
+        if: inputs.create_github_release
         uses: softprops/action-gh-release@v2
         with:
           name: DataGen v${{ steps.version.outputs.value }}

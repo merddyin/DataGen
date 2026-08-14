@@ -42,7 +42,7 @@ Treat these artifacts as the source for your downstream bridge, not as something
 
 ## Management observation history
 
-The `endpoint_management_observations` artifact contains provider-neutral management facts for scenarios that opt into representative management observations. In v0.10.0, the table can include both a current observation and a bounded historical predecessor for the same endpoint and provider context. This is lifecycle evidence, not a downstream vendor integration contract.
+The `endpoint_management_observations` artifact contains provider-neutral management facts for scenarios that opt into management observations. When population coverage is enabled, generation selects ordinary endpoints by operating-system and endpoint cohort, using a dominant management surface plus bounded stale, missing, alternate-provider, and hosted-compute fallback cases. This is lifecycle evidence, not a downstream vendor integration contract.
 
 ### Fields for lifecycle processing
 
@@ -55,9 +55,21 @@ Use these normalized fields together:
 
 Do not classify a row as historical just because it is unreachable or has an old check-in. Those fields describe the observation's operating condition; lifecycle, currentness, and supersession are explicit.
 
-### Scenario budget and chronology
+### Population coverage and chronology
 
-`infrastructure.representativeManagementObservationCount` limits current observations per company. `infrastructure.representativeManagementHistoryObservationCount` is a separate, additional limit for historical observations; set it to `0` to suppress history. With a fixed scenario, seed, and generated timestamp, the selection and timestamps are deterministic. Build an ordered timeline from `observed_at_utc`, then `id` as a tie breaker, rather than trusting file row order.
+`infrastructure.representativeManagementObservationCount` remains the explicit enablement switch: `0` suppresses management observations. `infrastructure.managementObservationPopulationCoveragePercentage` defaults to `0`, preserving the legacy per-company representative count. Set coverage to `1` through `100` to opt into deterministic, per-company selection within operating-system and endpoint cohorts. Coverage rounds each non-empty cohort up, so a nonzero percentage always selects at least one endpoint; `100` emits one current observation for every generated device and server.
+
+Rare cases use floor-based limits so small cohorts are not distorted: missing management is at most `1%` and first appears at 100 selected endpoints; stale check-in and alternate-provider cases are each at most `2%` and first appear at 50 selected endpoints; hosted-compute fallback is at most `2%` of selected hosted endpoints and likewise first appears at 50. A lone hosted server therefore keeps its cohort's dominant management provider.
+
+`infrastructure.representativeManagementHistoryObservationCount` is a separate, additional per-company history limit; set it to `0` to suppress history. With a fixed scenario, seed, and generated timestamp, selection and timestamps are deterministic. Build an ordered timeline from `observed_at_utc`, then `id` as a tie breaker, rather than trusting file row order.
+
+## Policy-setting source timestamps
+
+The `policy_settings` artifact includes `when_created`, `when_modified`, `observed_at`, and `retrieved_at`. DataGen completes missing values during generation from the supplied `GenerationContext.GeneratedAt` and stable record inputs, preserving any timestamp a source generator already supplied. The chronology is always `when_created <= when_modified <= observed_at <= retrieved_at`.
+
+The additive columns advance the normalized export schema from `2.0.0` to `2.1.0`. Missing timestamps are projected within neighboring explicit bounds before external plugin execution. Inconsistent explicit chronology rejects generation transactionally, leaving the complete policy-setting collection unchanged.
+
+These are source-side facts. A downstream bridge should preserve or reject them according to its provenance policy; it must not substitute its own runtime clock for a missing source timestamp.
 
 ### Consumer compatibility
 

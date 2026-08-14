@@ -1,6 +1,8 @@
 namespace SyntheticEnterprise.Core.Plugins;
 
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using SyntheticEnterprise.Contracts.Plugins;
 
@@ -35,7 +37,14 @@ public interface IGenerationPluginRegistry
 
 public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerationPluginCatalog
 {
+    internal const int MaximumManifestFileBytes = 256 * 1024;
+    internal const int MaximumManifestJsonDepth = 64;
     private static readonly Regex QuotedValuePattern = new(@"'(?<value>[^']*)'", RegexOptions.Compiled);
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true,
+        MaxDepth = MaximumManifestJsonDepth
+    };
     private readonly IGenerationPluginManifestValidator _validator;
     private readonly IGenerationPluginSecurityPolicy _securityPolicy;
     private readonly IExternalPluginTrustPolicy _trustPolicy;
@@ -60,12 +69,13 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
 
         foreach (var rootPath in rootPaths.Where(path => !string.IsNullOrWhiteSpace(path)).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (!Directory.Exists(rootPath))
+            if (!Directory.Exists(rootPath)
+                || !ExternalPluginPathSecurity.TryValidateNoReparsePoints(rootPath, out _))
             {
                 continue;
             }
 
-            foreach (var jsonFile in Directory.EnumerateFiles(rootPath, "*.generator.json", SearchOption.AllDirectories))
+            foreach (var jsonFile in EnumerateManifestFiles(rootPath, ".generator.json"))
             {
                 var manifest = TryReadJsonManifest(jsonFile);
                 if (manifest is not null && _validator.Validate(manifest).IsValid && seen.Add($"{manifest.Capability}|{manifest.SourcePath}"))
@@ -74,7 +84,7 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
                 }
             }
 
-            foreach (var psd1File in Directory.EnumerateFiles(rootPath, "*.Generator.psd1", SearchOption.AllDirectories))
+            foreach (var psd1File in EnumerateManifestFiles(rootPath, ".Generator.psd1"))
             {
                 var manifest = TryReadLegacyManifest(psd1File);
                 if (manifest is not null && _validator.Validate(manifest).IsValid && seen.Add($"{manifest.Capability}|{manifest.SourcePath}"))
@@ -97,24 +107,27 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
 
         foreach (var rootPath in rootPaths.Where(path => !string.IsNullOrWhiteSpace(path)).Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (!Directory.Exists(rootPath))
+            if (!Directory.Exists(rootPath)
+                || !ExternalPluginPathSecurity.TryValidateNoReparsePoints(rootPath, out _))
             {
                 continue;
             }
 
-            foreach (var jsonFile in Directory.EnumerateFiles(rootPath, "*.generator.json", SearchOption.AllDirectories))
+            foreach (var jsonFile in EnumerateManifestFiles(rootPath, ".generator.json"))
             {
                 if (seen.Add(jsonFile))
                 {
-                    results.Add(InspectManifestFile(jsonFile, "JsonManifest", TryReadJsonManifest(jsonFile), settings));
+                    var manifest = TryReadJsonManifest(jsonFile, out var rejection);
+                    results.Add(InspectManifestFile(jsonFile, "JsonManifest", manifest, rejection, settings));
                 }
             }
 
-            foreach (var psd1File in Directory.EnumerateFiles(rootPath, "*.Generator.psd1", SearchOption.AllDirectories))
+            foreach (var psd1File in EnumerateManifestFiles(rootPath, ".Generator.psd1"))
             {
                 if (seen.Add(psd1File))
                 {
-                    results.Add(InspectManifestFile(psd1File, "LegacyManifest", TryReadLegacyManifest(psd1File), settings));
+                    var manifest = TryReadLegacyManifest(psd1File, out var rejection);
+                    results.Add(InspectManifestFile(psd1File, "LegacyManifest", manifest, rejection, settings));
                 }
             }
         }
@@ -129,6 +142,7 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
         string sourcePath,
         string sourceType,
         GenerationPluginManifest? manifest,
+        string? parseRejection,
         ExternalPluginExecutionSettings settings)
     {
         if (manifest is null)
@@ -147,7 +161,7 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
                 EligibleForActivation = false,
                 ValidationMessages = new()
                 {
-                    "Plugin manifest could not be parsed."
+                    parseRejection ?? "Plugin manifest could not be parsed."
                 }
             };
         }
@@ -198,22 +212,25 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
     }
 
     private static GenerationPluginManifest? TryReadJsonManifest(string path)
+        => TryReadJsonManifest(path, out _);
+
+    private static GenerationPluginManifest? TryReadJsonManifest(string path, out string? rejection)
     {
         try
         {
-            var json = File.ReadAllText(path);
-            var manifest = System.Text.Json.JsonSerializer.Deserialize<GenerationPluginManifest>(json, new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
-            var hasExplicitPluginKind = json.Contains("\"pluginKind\"", StringComparison.OrdinalIgnoreCase);
+            var boundedManifest = ReadBoundedManifestText(path);
+            var manifest = JsonSerializer.Deserialize<GenerationPluginManifest>(boundedManifest.Text, ManifestJsonOptions);
+            var hasExplicitPluginKind = boundedManifest.Text.Contains("\"pluginKind\"", StringComparison.OrdinalIgnoreCase);
 
             if (manifest is null || string.IsNullOrWhiteSpace(manifest.Capability))
             {
+                rejection = "Plugin JSON manifest did not contain a capability.";
                 return null;
             }
 
-            return new GenerationPluginManifest
+            var resolvedEntryPoint = ResolveJsonEntryPoint(path, manifest);
+            var resolvedLocalDataPaths = ResolveLocalDataPaths(path, manifest.LocalDataPaths);
+            var resolvedManifest = new GenerationPluginManifest
             {
                 Capability = manifest.Capability,
                 DisplayName = manifest.DisplayName,
@@ -221,26 +238,88 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
                 PluginKind = hasExplicitPluginKind && !string.IsNullOrWhiteSpace(manifest.PluginKind) ? manifest.PluginKind : "Manifest",
                 ExecutionMode = ResolveJsonExecutionMode(manifest),
                 SourcePath = path,
-                EntryPoint = ResolveJsonEntryPoint(path, manifest),
-                LocalDataPaths = ResolveLocalDataPaths(path, manifest.LocalDataPaths),
+                EntryPoint = resolvedEntryPoint,
+                LocalDataPaths = resolvedLocalDataPaths,
                 Dependencies = manifest.Dependencies,
                 Parameters = manifest.Parameters,
                 Security = ResolveSecurity(manifest),
-                Provenance = BuildProvenance(path, ResolveJsonEntryPoint(path, manifest), ResolveLocalDataPaths(path, manifest.LocalDataPaths)),
+                Provenance = new PluginProvenance(),
                 Metadata = manifest.Metadata
             };
+            if (!ExternalPluginPathSecurity.TryValidateManifestPaths(resolvedManifest, out _))
+            {
+                rejection = "Plugin JSON manifest paths failed security validation.";
+                return null;
+            }
+
+            rejection = null;
+            return new GenerationPluginManifest
+            {
+                Capability = resolvedManifest.Capability,
+                DisplayName = resolvedManifest.DisplayName,
+                Description = resolvedManifest.Description,
+                PluginKind = resolvedManifest.PluginKind,
+                ExecutionMode = resolvedManifest.ExecutionMode,
+                SourcePath = resolvedManifest.SourcePath,
+                EntryPoint = resolvedManifest.EntryPoint,
+                LocalDataPaths = resolvedManifest.LocalDataPaths,
+                Dependencies = resolvedManifest.Dependencies,
+                Parameters = resolvedManifest.Parameters,
+                Security = resolvedManifest.Security,
+                Provenance = BuildProvenance(
+                    path,
+                    resolvedEntryPoint,
+                    resolvedLocalDataPaths,
+                    resolvedManifest.ExecutionMode,
+                    boundedManifest.Hash),
+                Metadata = resolvedManifest.Metadata
+            };
         }
-        catch
+        catch (PluginManifestReadException ex)
         {
+            rejection = ex.Message;
+            return null;
+        }
+        catch (JsonException ex) when (IsManifestJsonDepthExceeded(ex))
+        {
+            rejection = $"Plugin JSON manifest exceeded the maximum JSON depth of {MaximumManifestJsonDepth}: {ex.Message}";
+            return null;
+        }
+        catch (JsonException ex)
+        {
+            rejection = $"Plugin JSON manifest could not be parsed: {ex.Message}";
+            return null;
+        }
+        catch (PluginPathSecurityException ex)
+        {
+            rejection = ex.Message;
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            rejection = $"Plugin JSON manifest could not be read: {ex.Message}";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            rejection = $"Plugin JSON manifest could not be parsed: {ex.Message}";
             return null;
         }
     }
 
+    private static bool IsManifestJsonDepthExceeded(JsonException exception)
+        => exception.Message.Contains("maximum configured depth", StringComparison.OrdinalIgnoreCase)
+           || exception.Message.Contains("maximum depth", StringComparison.OrdinalIgnoreCase);
+
     private static GenerationPluginManifest? TryReadLegacyManifest(string path)
+        => TryReadLegacyManifest(path, out _);
+
+    private static GenerationPluginManifest? TryReadLegacyManifest(string path, out string? rejection)
     {
         try
         {
-            var text = File.ReadAllText(path);
+            var boundedManifest = ReadBoundedManifestText(path);
+            var text = boundedManifest.Text;
             var sourceDirectory = Path.GetDirectoryName(path) ?? string.Empty;
             var capability = FirstNonEmpty(
                 ReadSingleQuotedAssignment(text, "FriendlyName"),
@@ -249,6 +328,7 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
 
             if (string.IsNullOrWhiteSpace(capability))
             {
+                rejection = "Legacy plugin manifest did not contain a capability.";
                 return null;
             }
 
@@ -266,7 +346,8 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
                 .Select(value => Path.GetFullPath(Path.Combine(sourceDirectory, value.Replace('/', Path.DirectorySeparatorChar))))
                 .ToList();
 
-            return new GenerationPluginManifest
+            var entryPoint = string.IsNullOrWhiteSpace(rootModule) ? null : Path.GetFullPath(Path.Combine(sourceDirectory, rootModule));
+            var resolvedManifest = new GenerationPluginManifest
             {
                 Capability = capability,
                 DisplayName = capability,
@@ -274,23 +355,129 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
                 PluginKind = "LegacyManifest",
                 ExecutionMode = PluginExecutionMode.PowerShellScript,
                 SourcePath = path,
-                EntryPoint = string.IsNullOrWhiteSpace(rootModule) ? null : Path.GetFullPath(Path.Combine(sourceDirectory, rootModule)),
+                EntryPoint = entryPoint,
                 Dependencies = dependencies,
                 LocalDataPaths = localData,
                 Security = BuildDefaultSecurity(localData.Count > 0),
-                Provenance = BuildProvenance(path, string.IsNullOrWhiteSpace(rootModule) ? null : Path.GetFullPath(Path.Combine(sourceDirectory, rootModule)), localData),
+                Provenance = new PluginProvenance(),
                 Metadata = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["GeneratorType"] = generatorType,
                     ["ManifestFormat"] = "PowerShellModuleManifest"
                 }
             };
+            if (!ExternalPluginPathSecurity.TryValidateManifestPaths(resolvedManifest, out _))
+            {
+                rejection = "Legacy plugin manifest paths failed security validation.";
+                return null;
+            }
+
+            rejection = null;
+            return new GenerationPluginManifest
+            {
+                Capability = resolvedManifest.Capability,
+                DisplayName = resolvedManifest.DisplayName,
+                Description = resolvedManifest.Description,
+                PluginKind = resolvedManifest.PluginKind,
+                ExecutionMode = resolvedManifest.ExecutionMode,
+                SourcePath = resolvedManifest.SourcePath,
+                EntryPoint = resolvedManifest.EntryPoint,
+                LocalDataPaths = resolvedManifest.LocalDataPaths,
+                Dependencies = resolvedManifest.Dependencies,
+                Parameters = resolvedManifest.Parameters,
+                Security = resolvedManifest.Security,
+                Provenance = BuildProvenance(
+                    path,
+                    entryPoint,
+                    localData,
+                    resolvedManifest.ExecutionMode,
+                    boundedManifest.Hash),
+                Metadata = resolvedManifest.Metadata
+            };
         }
-        catch
+        catch (PluginManifestReadException ex)
         {
+            rejection = ex.Message;
+            return null;
+        }
+        catch (PluginPathSecurityException ex)
+        {
+            rejection = ex.Message;
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            rejection = $"Legacy plugin manifest could not be read: {ex.Message}";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            rejection = $"Legacy plugin manifest could not be parsed: {ex.Message}";
             return null;
         }
     }
+
+    private static BoundedManifestText ReadBoundedManifestText(string path)
+    {
+        using var source = ExternalPluginPathSecurity.OpenVerifiedPackageFile(path, path, out var warning)
+            ?? throw new PluginManifestReadException(
+                $"Plugin manifest failed handle-based path validation: {warning}");
+        if (source.Length > MaximumManifestFileBytes)
+        {
+            throw new PluginManifestReadException(
+                $"Plugin manifest exceeded the defensive manifest limit of {MaximumManifestFileBytes} bytes.");
+        }
+
+        try
+        {
+            var budget = new PluginInputByteBudget(MaximumManifestFileBytes);
+            using var bounded = new BoundedPluginCatalogReadStream(
+                source,
+                budget,
+                MaximumManifestFileBytes,
+                leaveOpen: true);
+            using var payload = new MemoryStream();
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var buffer = new byte[64 * 1024];
+            while (true)
+            {
+                var bytesRead = bounded.Read(buffer, 0, buffer.Length);
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+
+                hash.AppendData(buffer, 0, bytesRead);
+                payload.Write(buffer, 0, bytesRead);
+            }
+
+            payload.Position = 0;
+            using var reader = new StreamReader(
+                payload,
+                Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: true,
+                bufferSize: 4096,
+                leaveOpen: true);
+            return new BoundedManifestText(
+                reader.ReadToEnd(),
+                Convert.ToHexString(hash.GetHashAndReset()));
+        }
+        catch (PluginInputPayloadLimitExceededException)
+        {
+            throw new PluginManifestReadException(
+                $"Plugin manifest exceeded the defensive manifest limit of {MaximumManifestFileBytes} bytes.");
+        }
+    }
+
+    private sealed class PluginManifestReadException : Exception
+    {
+        public PluginManifestReadException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    private sealed record BoundedManifestText(string Text, string Hash);
 
     private static string? ReadSingleQuotedAssignment(string text, string key)
     {
@@ -396,41 +583,76 @@ public sealed class FileSystemExternalGenerationPluginCatalog : IExternalGenerat
         };
     }
 
-    private static PluginProvenance BuildProvenance(string manifestPath, string? entryPointPath, IReadOnlyList<string> localDataPaths)
+    private static PluginProvenance BuildProvenance(
+        string manifestPath,
+        string? entryPointPath,
+        IReadOnlyList<string> localDataPaths,
+        PluginExecutionMode executionMode,
+        string manifestHash)
     {
         var localHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in localDataPaths.Where(File.Exists).OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
-            localHashes[path] = ComputeFileHash(path);
+            localHashes[path] = ExternalPluginPathSecurity.ComputeVerifiedPackageFileHash(
+                                    manifestPath,
+                                    path,
+                                    ExternalPluginCatalogLoader.MaximumCatalogFileBytes,
+                                    out var localDataWarning)
+                                ?? throw new PluginPathSecurityException(localDataWarning!);
         }
 
-        var combinedMaterial = string.Join("|", new[]
-        {
-            File.Exists(manifestPath) ? ComputeFileHash(manifestPath) : string.Empty,
-            !string.IsNullOrWhiteSpace(entryPointPath) && File.Exists(entryPointPath) ? ComputeFileHash(entryPointPath) : string.Empty,
-            string.Join("|", localHashes.OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase).Select(entry => $"{entry.Key}:{entry.Value}"))
-        });
+        var entryPointHash = !string.IsNullOrWhiteSpace(entryPointPath) && File.Exists(entryPointPath)
+            ? ExternalPluginPathSecurity.ComputeVerifiedPackageFileHash(
+                manifestPath,
+                entryPointPath,
+                ExternalPluginPathSecurity.MaximumEntryPointBytes,
+                out var entryPointWarning) ?? throw new PluginPathSecurityException(entryPointWarning!)
+            : null;
+
+        var packageHash = executionMode == PluginExecutionMode.DotNetAssembly
+                          && !string.IsNullOrWhiteSpace(entryPointPath)
+            ? FileSystemExternalPluginAssemblyStager.ComputeDiscoveredPackageHash(manifestPath, entryPointPath)
+            : null;
+        var contentHash = FileSystemExternalPluginAssemblyStager.ComputeApprovedContentHash(
+            manifestHash,
+            entryPointHash ?? string.Empty,
+            localHashes,
+            packageHash);
 
         return new PluginProvenance
         {
-            ContentHash = ComputeStringHash(combinedMaterial),
-            EntryPointHash = !string.IsNullOrWhiteSpace(entryPointPath) && File.Exists(entryPointPath) ? ComputeFileHash(entryPointPath) : null,
+            ContentHash = contentHash,
+            EntryPointHash = entryPointHash,
             LocalDataHashes = localHashes,
             DiscoveredAtUtc = DateTimeOffset.UtcNow.ToString("O")
         };
     }
 
-    private static string ComputeFileHash(string path)
+    private static IEnumerable<string> EnumerateManifestFiles(string rootPath, string fileNameSuffix)
     {
-        using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
-        return Convert.ToHexString(sha.ComputeHash(stream));
-    }
+        var pending = new Stack<string>();
+        pending.Push(rootPath);
 
-    private static string ComputeStringHash(string value)
-    {
-        using var sha = SHA256.Create();
-        return Convert.ToHexString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(value)));
+        while (pending.Count > 0)
+        {
+            var current = pending.Pop();
+            foreach (var file in Directory.EnumerateFiles(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (file.EndsWith(fileNameSuffix, StringComparison.OrdinalIgnoreCase)
+                    && ExternalPluginPathSecurity.TryValidateNoReparsePoints(file, out _))
+                {
+                    yield return file;
+                }
+            }
+
+            foreach (var directory in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                if (ExternalPluginPathSecurity.TryValidateNoReparsePoints(directory, out _))
+                {
+                    pending.Push(directory);
+                }
+            }
+        }
     }
 }
 
@@ -455,6 +677,15 @@ public sealed class GenerationPluginManifestValidator : IGenerationPluginManifes
             result.Messages.Add(new PluginManifestValidationMessage
             {
                 Message = "Capability is required.",
+                IsError = true
+            });
+        }
+
+        if (!ExternalPluginPathSecurity.TryValidateManifestPaths(manifest, out var pathWarning))
+        {
+            result.Messages.Add(new PluginManifestValidationMessage
+            {
+                Message = pathWarning!,
                 IsError = true
             });
         }

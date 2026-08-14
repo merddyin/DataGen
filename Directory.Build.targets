@@ -18,6 +18,7 @@
       <FingerprintPath ParameterType="System.String" Required="true" />
       <CatalogScript ParameterType="System.String" Required="true" />
       <PowerShellExecutable ParameterType="System.String" Required="true" />
+      <ForceSecurityMetadataApplication ParameterType="System.Boolean" Required="false" />
     </ParameterGroup>
     <Task>
       <Using Namespace="System" />
@@ -32,10 +33,12 @@
       <Using Namespace="Microsoft.Build.Utilities" />
       <Code Type="Class" Language="cs"><![CDATA[
 using System;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -49,6 +52,7 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
     public string FingerprintPath { get; set; } = string.Empty;
     public string CatalogScript { get; set; } = string.Empty;
     public string PowerShellExecutable { get; set; } = string.Empty;
+    public bool ForceSecurityMetadataApplication { get; set; }
 
     public override bool Execute()
     {
@@ -76,6 +80,8 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
                 return false;
             }
 
+            var originalArtifactMetadata = CaptureExistingWindowsDestinationMetadata(artifactPath);
+            var originalFingerprintMetadata = CaptureExistingWindowsDestinationMetadata(fingerprintPath);
             var fingerprint = ComputeFingerprint(repositoryRoot, catalogRoot, artifactPath, fingerprintPath);
             if (File.Exists(artifactPath)
                 && TryReadIntegrityRecord(fingerprintPath, out var integrityRecord)
@@ -146,16 +152,22 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
                     return false;
                 }
 
-                PublishAtomically(temporaryArtifactPath, artifactPath);
+                var artifactMetadata = PublishAtomically(temporaryArtifactPath, artifactPath, ForceSecurityMetadataApplication, originalArtifactMetadata);
                 WriteIntegrityRecordAtomically(
                     temporaryFingerprintPath,
                     fingerprintPath,
+                    ForceSecurityMetadataApplication,
+                    originalFingerprintMetadata,
                     new CatalogIntegrityRecord
                     {
                         FormatVersion = 1,
                         InputFingerprint = fingerprint,
                         ArtifactSha256 = ComputeFileHash(artifactPath)
                     });
+                if (artifactMetadata != null)
+                {
+                    ApplyFileMetadata(artifactPath, artifactMetadata);
+                }
                 Log.LogMessage(Microsoft.Build.Framework.MessageImportance.Normal, "Seeded catalog database generated at '{0}'.", artifactPath);
                 return true;
             }
@@ -349,7 +361,7 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
         }
     }
 
-    private static void WriteIntegrityRecordAtomically(string temporaryPath, string destinationPath, CatalogIntegrityRecord integrityRecord)
+    private static void WriteIntegrityRecordAtomically(string temporaryPath, string destinationPath, bool forceSecurityMetadataApplication, DestinationMetadata destinationMetadata, CatalogIntegrityRecord integrityRecord)
     {
         var document = new XmlDocument();
         var root = document.CreateElement("catalogIntegrity");
@@ -367,19 +379,187 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
             document.Save(writer);
         }
 
-        PublishAtomically(temporaryPath, destinationPath);
+        PublishAtomically(temporaryPath, destinationPath, forceSecurityMetadataApplication, destinationMetadata);
     }
 
-    private static void PublishAtomically(string temporaryPath, string destinationPath)
+    private static DestinationMetadata PublishAtomically(string temporaryPath, string destinationPath, bool forceSecurityMetadataApplication, DestinationMetadata destinationMetadata)
     {
         if (File.Exists(destinationPath))
         {
+            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            {
+                var metadata = destinationMetadata ?? CaptureDestinationMetadata(destinationPath);
+                if (IsReFsVolume(destinationPath))
+                {
+                    return PublishWithReFsFallback(temporaryPath, destinationPath, forceSecurityMetadataApplication, metadata);
+                }
+
+                return PublishWithWindowsReplace(temporaryPath, destinationPath, forceSecurityMetadataApplication, metadata);
+            }
+
             File.Replace(temporaryPath, destinationPath, null);
-            return;
+            return null;
         }
 
         File.Move(temporaryPath, destinationPath);
+        return null;
     }
+
+    private static DestinationMetadata PublishWithReFsFallback(string temporaryPath, string destinationPath, bool forceSecurityMetadataApplication, DestinationMetadata metadata)
+    {
+        ApplyDestinationMetadata(temporaryPath, metadata, forceSecurityMetadataApplication);
+        if (!MoveFileEx(temporaryPath, destinationPath, MoveFileReplaceExisting | MoveFileWriteThrough))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to publish catalog artifact to '" + destinationPath + "'.");
+        }
+        return metadata;
+    }
+
+    private static DestinationMetadata PublishWithWindowsReplace(string temporaryPath, string destinationPath, bool forceSecurityMetadataApplication, DestinationMetadata metadata)
+    {
+        ApplyDestinationMetadata(temporaryPath, metadata, forceSecurityMetadataApplication);
+        File.Replace(temporaryPath, destinationPath, null);
+        ApplyFileMetadata(destinationPath, metadata);
+        return metadata;
+    }
+
+    private static void ApplyDestinationMetadata(string path, DestinationMetadata metadata, bool forceSecurityMetadataApplication)
+    {
+        ApplySecurityDescriptor(path, DaclSecurityInformation, metadata.Dacl, "DACL", forceSecurityMetadataApplication);
+        ApplySecurityDescriptor(path, GroupSecurityInformation, metadata.Group, "group", forceSecurityMetadataApplication);
+        ApplySecurityDescriptor(path, OwnerSecurityInformation, metadata.Owner, "owner", forceSecurityMetadataApplication);
+        if (metadata.Sacl != null)
+        {
+            ApplySecurityDescriptor(path, SaclSecurityInformation, metadata.Sacl, "SACL", forceSecurityMetadataApplication);
+        }
+        if (metadata.Label != null)
+        {
+            ApplySecurityDescriptor(path, LabelSecurityInformation, metadata.Label, "mandatory integrity label", forceSecurityMetadataApplication);
+        }
+        ApplyFileMetadata(path, metadata);
+    }
+
+    private static void ApplyFileMetadata(string path, DestinationMetadata metadata)
+    {
+        File.SetAttributes(path, metadata.Attributes);
+        File.SetCreationTimeUtc(path, metadata.CreationTimeUtc);
+        File.SetLastAccessTimeUtc(path, metadata.LastAccessTimeUtc);
+        File.SetLastWriteTimeUtc(path, metadata.LastWriteTimeUtc);
+    }
+
+    private static void ApplySecurityDescriptor(string path, int securityInformation, byte[] expectedDescriptor, string description, bool forceApplication)
+    {
+        if (forceApplication || !ReadFileSecurity(path, securityInformation).SequenceEqual(expectedDescriptor))
+        {
+            if (!SetFileSecurity(path, securityInformation, expectedDescriptor))
+            {
+                var error = Marshal.GetLastWin32Error();
+                throw new Win32Exception(error, "Unable to apply destination " + description + " to temporary catalog artifact '" + path + "' (Win32 error " + error + ").");
+            }
+        }
+    }
+
+    private static DestinationMetadata CaptureDestinationMetadata(string destinationPath)
+    {
+        return new DestinationMetadata
+        {
+            Attributes = File.GetAttributes(destinationPath),
+            CreationTimeUtc = File.GetCreationTimeUtc(destinationPath),
+            LastAccessTimeUtc = File.GetLastAccessTimeUtc(destinationPath),
+            LastWriteTimeUtc = File.GetLastWriteTimeUtc(destinationPath),
+            Owner = ReadFileSecurity(destinationPath, OwnerSecurityInformation),
+            Group = ReadFileSecurity(destinationPath, GroupSecurityInformation),
+            Dacl = ReadFileSecurity(destinationPath, DaclSecurityInformation),
+            Sacl = TryReadFileSecurity(destinationPath, SaclSecurityInformation),
+            Label = TryReadFileSecurity(destinationPath, LabelSecurityInformation)
+        };
+    }
+
+    private static DestinationMetadata CaptureExistingWindowsDestinationMetadata(string path)
+    {
+        return Environment.OSVersion.Platform == PlatformID.Win32NT && File.Exists(path)
+            ? CaptureDestinationMetadata(path)
+            : null;
+    }
+
+    private static byte[] TryReadFileSecurity(string path, int securityInformation)
+    {
+        try
+        {
+            return ReadFileSecurity(path, securityInformation);
+        }
+        catch (Win32Exception exception) when (exception.NativeErrorCode == ErrorAccessDenied
+            || exception.NativeErrorCode == ErrorPrivilegeNotHeld
+            || exception.NativeErrorCode == ErrorNotSupported
+            || exception.NativeErrorCode == ErrorInvalidParameter)
+        {
+            return null;
+        }
+    }
+
+    private static byte[] ReadFileSecurity(string path, int securityInformation)
+    {
+        uint requiredLength;
+        if (GetFileSecurity(path, securityInformation, null, 0, out requiredLength))
+        {
+            throw new InvalidOperationException("Catalog security query unexpectedly completed without a descriptor for '" + path + "'.");
+        }
+
+        var error = Marshal.GetLastWin32Error();
+        if (error != ErrorInsufficientBuffer || requiredLength == 0)
+        {
+            throw new Win32Exception(error, "Unable to read catalog security metadata for '" + path + "'.");
+        }
+
+        var descriptor = new byte[requiredLength];
+        if (!GetFileSecurity(path, securityInformation, descriptor, requiredLength, out requiredLength))
+        {
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to read catalog security metadata for '" + path + "'.");
+        }
+
+        return descriptor;
+    }
+
+    private static bool IsReFsVolume(string path)
+    {
+        var volumePath = new StringBuilder(32768);
+        if (!GetVolumePathName(path, volumePath, volumePath.Capacity))
+        {
+            return false;
+        }
+
+        var fileSystemName = new StringBuilder(32);
+        return GetVolumeInformation(volumePath.ToString(), null, 0, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, fileSystemName, fileSystemName.Capacity)
+            && string.Equals(fileSystemName.ToString(), "ReFS", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private const int MoveFileReplaceExisting = 0x1;
+    private const int MoveFileWriteThrough = 0x8;
+    private const int OwnerSecurityInformation = 0x1;
+    private const int GroupSecurityInformation = 0x2;
+    private const int DaclSecurityInformation = 0x4;
+    private const int SaclSecurityInformation = 0x8;
+    private const int LabelSecurityInformation = 0x10;
+    private const int ErrorAccessDenied = 5;
+    private const int ErrorNotSupported = 50;
+    private const int ErrorInvalidParameter = 87;
+    private const int ErrorInsufficientBuffer = 122;
+    private const int ErrorPrivilegeNotHeld = 1314;
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool MoveFileEx(string existingFileName, string newFileName, int flags);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool GetVolumePathName(string fileName, StringBuilder volumePathName, int bufferLength);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool GetVolumeInformation(string rootPathName, StringBuilder volumeNameBuffer, int volumeNameSize, IntPtr volumeSerialNumber, IntPtr maximumComponentLength, IntPtr fileSystemFlags, StringBuilder fileSystemNameBuffer, int fileSystemNameSize);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool GetFileSecurity(string fileName, int requestedInformation, byte[] securityDescriptor, uint length, out uint lengthNeeded);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool SetFileSecurity(string fileName, int securityInformation, byte[] securityDescriptor);
 
     private static string ComputeFileHash(string path)
     {
@@ -419,6 +599,19 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
         public string InputFingerprint { get; set; } = string.Empty;
         public string ArtifactSha256 { get; set; } = string.Empty;
     }
+
+    private sealed class DestinationMetadata
+    {
+        public FileAttributes Attributes { get; set; }
+        public DateTime CreationTimeUtc { get; set; }
+        public DateTime LastAccessTimeUtc { get; set; }
+        public DateTime LastWriteTimeUtc { get; set; }
+        public byte[] Owner { get; set; } = Array.Empty<byte>();
+        public byte[] Group { get; set; } = Array.Empty<byte>();
+        public byte[] Dacl { get; set; } = Array.Empty<byte>();
+        public byte[] Sacl { get; set; }
+        public byte[] Label { get; set; }
+    }
 }
       ]]></Code>
     </Task>
@@ -432,7 +625,8 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
                                   ArtifactPath="$(DataGenCatalogArtifactPath)"
                                   FingerprintPath="$(DataGenCatalogFingerprintPath)"
                                   CatalogScript="$(MSBuildThisFileDirectory)scripts\build-catalog-artifact.ps1"
-                                  PowerShellExecutable="$(DataGenPowerShellExecutable)" />
+                                  PowerShellExecutable="$(DataGenPowerShellExecutable)"
+                                  ForceSecurityMetadataApplication="$(DataGenCatalogForceSecurityMetadataApplication)" />
     <Error Condition="!Exists('$(DataGenCatalogArtifactPath)')" Text="Seeded catalog database was not generated at '$(DataGenCatalogArtifactPath)'." />
     <Error Condition="!Exists('$(DataGenCatalogFingerprintPath)')" Text="Seeded catalog fingerprint was not generated at '$(DataGenCatalogFingerprintPath)'." />
   </Target>

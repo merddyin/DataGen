@@ -527,7 +527,11 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "environment_role",
                     "is_legacy",
                     "is_conflicting",
-                    "source_reference"
+                    "source_reference",
+                    "when_created",
+                    "when_modified",
+                    "observed_at",
+                    "retrieved_at"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.PolicySettings,
                 RowProjector = setting => new Dictionary<string, object?>
@@ -546,7 +550,11 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["environment_role"] = setting.EnvironmentRole,
                     ["is_legacy"] = setting.IsLegacy,
                     ["is_conflicting"] = setting.IsConflicting,
-                    ["source_reference"] = setting.SourceReference
+                    ["source_reference"] = setting.SourceReference,
+                    ["when_created"] = setting.WhenCreated,
+                    ["when_modified"] = setting.WhenModified,
+                    ["observed_at"] = setting.ObservedAtUtc,
+                    ["retrieved_at"] = setting.RetrievedAtUtc
                 },
                 SortKeySelector = setting => setting.Id
             },

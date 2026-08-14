@@ -15,7 +15,7 @@ public sealed class ExportManifestBuilder : IExportManifestBuilder
         return new ExportManifestV2
         {
             ExportId = CreateDeterministicExportId(request, artifacts),
-            SchemaVersion = "2.0.0",
+            SchemaVersion = NormalizedExportSchema.CurrentVersion,
             Format = request.Format,
             Profile = request.Profile,
             ExportedAtUtc = request.ExportedAtUtc,
@@ -28,7 +28,7 @@ public sealed class ExportManifestBuilder : IExportManifestBuilder
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         AppendString(hash, "SyntheticEnterprise.ExportManifestV2.ExportId/v1");
-        AppendString(hash, "2.0.0");
+        AppendString(hash, NormalizedExportSchema.CurrentVersion);
         AppendString(hash, request.Format.ToString());
         AppendString(hash, request.Profile.ToString());
         AppendString(hash, request.ExportedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));

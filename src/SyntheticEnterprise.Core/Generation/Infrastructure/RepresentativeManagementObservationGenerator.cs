@@ -18,6 +18,17 @@ internal static class RepresentativeManagementObservationGenerator
         new("Ansible", "Ansible Automation Platform", "Registered", "Supported", 5, 0.91m),
     ];
 
+    private static readonly ManagementProfile WindowsWorkstationProfile =
+        new("MicrosoftIntune", "Microsoft Intune Management Extension", "Registered", "Supported", 1, 0.97m);
+    private static readonly ManagementProfile MacWorkstationProfile =
+        new("Jamf", "Jamf Pro Management Agent", "Registered", "Supported", 1, 0.96m);
+    private static readonly ManagementProfile WindowsServerProfile =
+        new("ConfigurationManager", "Configuration Manager Client", "Registered", "Supported", 2, 0.94m);
+    private static readonly ManagementProfile LinuxEndpointProfile =
+        new("Ansible", "Ansible Automation Platform", "Registered", "Supported", 2, 0.92m);
+    private static readonly ManagementProfile UnmanagedProfile =
+        new("None", null, "NotRegistered", "Unsupported", null, 0.35m);
+
     public static void Apply(
         SyntheticEnterpriseWorld world,
         Company company,
@@ -30,6 +41,22 @@ internal static class RepresentativeManagementObservationGenerator
         var historyBudget = Math.Max(0, configuration.RepresentativeManagementHistoryObservationCount);
         if (requestedCount == 0)
         {
+            return;
+        }
+
+        var populationCoveragePercentage = Math.Clamp(
+            configuration.ManagementObservationPopulationCoveragePercentage,
+            0,
+            100);
+        if (populationCoveragePercentage > 0)
+        {
+            ApplyPopulationCoverage(
+                world,
+                company,
+                context,
+                idFactory,
+                populationCoveragePercentage);
+            AddStaleManagementHistory(world, company.Id, context, idFactory, historyBudget);
             return;
         }
 
@@ -53,7 +80,10 @@ internal static class RepresentativeManagementObservationGenerator
                 1,
                 serverTarget);
 
-        var software = EnsureManagementSoftware(world, idFactory);
+        var software = EnsureManagementSoftware(
+            world,
+            idFactory,
+            includePopulationCoverageSoftware: false);
         for (var index = 0; index < deviceTarget; index++)
         {
             var device = companyDevices[index];
@@ -110,6 +140,181 @@ internal static class RepresentativeManagementObservationGenerator
         }
 
         AddStaleManagementHistory(world, company.Id, context, idFactory, historyBudget);
+    }
+
+    private static void ApplyPopulationCoverage(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        GenerationContext context,
+        IIdFactory idFactory,
+        int coveragePercentage)
+    {
+        var software = EnsureManagementSoftware(
+            world,
+            idFactory,
+            includePopulationCoverageSoftware: true);
+        var seed = (context.Seed ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var endpoints = new List<PopulationEndpoint>();
+        endpoints.AddRange(world.Devices
+            .Where(device => device.CompanyId == company.Id)
+            .Select(device => new PopulationEndpoint(
+                "Device",
+                device.Id,
+                device.DirectoryAccountId ?? device.OnPremDirectoryAccountId ?? device.CloudDirectoryAccountId,
+                device.OperatingSystem,
+                device.DomainJoined,
+                device.CloudDirectoryAccountId,
+                false,
+                null)));
+        endpoints.AddRange(world.Servers
+            .Where(server => server.CompanyId == company.Id)
+            .Select(server => new PopulationEndpoint(
+                "Server",
+                server.Id,
+                server.DirectoryAccountId ?? server.OnPremDirectoryAccountId ?? server.CloudDirectoryAccountId,
+                server.OperatingSystem,
+                server.DomainJoined,
+                server.CloudDirectoryAccountId,
+                IsHostedServer(server),
+                IsHostedServer(server) ? server.CloudProvider : null)));
+
+        foreach (var cohort in endpoints
+                     .GroupBy(ResolveCohort, StringComparer.Ordinal)
+                     .OrderBy(group => group.Key, StringComparer.Ordinal))
+        {
+            var ranked = cohort
+                .OrderBy(endpoint => StableHash.GetIndex(
+                    "endpoint-management-population-coverage",
+                    int.MaxValue,
+                    seed,
+                    company.Id,
+                    cohort.Key,
+                    endpoint.EndpointType,
+                    endpoint.EndpointId))
+                .ThenBy(endpoint => endpoint.EndpointType, StringComparer.Ordinal)
+                .ThenBy(endpoint => endpoint.EndpointId, StringComparer.Ordinal)
+                .ToArray();
+            var selectedCount = coveragePercentage == 100
+                ? ranked.Length
+                : Math.Clamp(
+                    (int)Math.Ceiling(ranked.Length * coveragePercentage / 100m),
+                    1,
+                    ranked.Length);
+            var selected = ranked.Take(selectedCount).ToArray();
+            var hostedFallbackIds = selected
+                .Where(endpoint => endpoint.IsHosted)
+                .OrderBy(endpoint => StableHash.GetIndex(
+                    "endpoint-management-hosted-fallback",
+                    int.MaxValue,
+                    seed,
+                    company.Id,
+                    endpoint.EndpointType,
+                    endpoint.EndpointId))
+                .ThenBy(endpoint => endpoint.EndpointId, StringComparer.Ordinal)
+                .Take(OutlierCount(selected.Count(endpoint => endpoint.IsHosted), 2))
+                .Select(endpoint => endpoint.Key)
+                .ToHashSet(StringComparer.Ordinal);
+            var missingCount = OutlierCount(selected.Length, 1);
+            var staleCount = OutlierCount(selected.Length, 2);
+            var alternateCount = OutlierCount(selected.Length, 2);
+
+            for (var index = 0; index < selected.Length; index++)
+            {
+                var endpoint = selected[index];
+                var hostedFallback = hostedFallbackIds.Contains(endpoint.Key);
+                var profile = ResolvePopulationProfile(
+                    cohort.Key,
+                    index,
+                    missingCount,
+                    staleCount,
+                    alternateCount,
+                    hostedFallback);
+                var joinStateIndex = StableHash.GetIndex(
+                    "endpoint-management-join-state",
+                    4,
+                    seed,
+                    company.Id,
+                    endpoint.EndpointType,
+                    endpoint.EndpointId);
+                AddObservation(
+                    world,
+                    idFactory,
+                    company.Id,
+                    endpoint.EndpointType,
+                    endpoint.EndpointId,
+                    endpoint.DeviceAccountId,
+                    endpoint.OperatingSystem,
+                    ResolveJoinState(endpoint.DomainJoined, endpoint.CloudDirectoryAccountId, joinStateIndex),
+                    cohort.Key,
+                    endpoint.IsHosted ? "HostedCompute" : "NonHosted",
+                    endpoint.HostingProvider,
+                    hostedFallback ? "Supported" : endpoint.IsHosted ? "Unknown" : "Unavailable",
+                    profile,
+                    context.GeneratedAt,
+                    software);
+            }
+        }
+    }
+
+    private static ManagementProfile ResolvePopulationProfile(
+        string cohort,
+        int rank,
+        int missingCount,
+        int staleCount,
+        int alternateCount,
+        bool hostedFallback)
+    {
+        if (hostedFallback || rank < missingCount)
+        {
+            return UnmanagedProfile;
+        }
+
+        var dominant = ResolveDominantProfile(cohort);
+        if (rank < missingCount + staleCount)
+        {
+            return dominant with { CheckInAgeDays = 35, Confidence = 0.70m };
+        }
+
+        if (rank < missingCount + staleCount + alternateCount)
+        {
+            return ResolveAlternateProfile(cohort);
+        }
+
+        return dominant;
+    }
+
+    private static ManagementProfile ResolveDominantProfile(string cohort) => cohort switch
+    {
+        "WindowsWorkstation" => WindowsWorkstationProfile,
+        "MacWorkstation" => MacWorkstationProfile,
+        "WindowsServer" => WindowsServerProfile,
+        _ => LinuxEndpointProfile,
+    };
+
+    private static ManagementProfile ResolveAlternateProfile(string cohort) => cohort switch
+    {
+        "WindowsWorkstation" => new("ConfigurationManager", "Configuration Manager Client", "Registered", "Supported", 2, 0.90m),
+        "MacWorkstation" => new("Rmm", "Remote Monitoring Agent", "Registered", "Supported", 3, 0.88m),
+        "WindowsServer" => new("BigFix", "BigFix Client", "Registered", "Supported", 3, 0.87m),
+        _ => new("Puppet", "Puppet Agent", "Registered", "Supported", 3, 0.88m),
+    };
+
+    private static string ResolveCohort(PopulationEndpoint endpoint)
+    {
+        var family = OperatingSystemFamily(endpoint.OperatingSystem);
+        return endpoint.EndpointType == "Server"
+            ? family == "Windows" ? "WindowsServer" : "LinuxServer"
+            : family == "Windows" ? "WindowsWorkstation" : family == "macOS" ? "MacWorkstation" : "LinuxWorkstation";
+    }
+
+    private static int OutlierCount(int population, int percentage)
+    {
+        if (population <= 0 || percentage <= 0)
+        {
+            return 0;
+        }
+
+        return (int)Math.Floor(population * percentage / 100m);
     }
 
     private static ServerAsset[] SelectRepresentativeServers(
@@ -317,9 +522,10 @@ internal static class RepresentativeManagementObservationGenerator
 
     private static Dictionary<string, string> EnsureManagementSoftware(
         SyntheticEnterpriseWorld world,
-        IIdFactory idFactory)
+        IIdFactory idFactory,
+        bool includePopulationCoverageSoftware)
     {
-        var definitions = new[]
+        var definitions = new List<(string Name, string Category, string Vendor, string Version)>
         {
             ("Microsoft Intune Management Extension", "Management", "Microsoft", "1.82"),
             ("Configuration Manager Client", "Management", "Microsoft", "5.00"),
@@ -327,6 +533,12 @@ internal static class RepresentativeManagementObservationGenerator
             ("Remote Monitoring Agent", "Management", "Representative Vendor", "4.8"),
             ("Ansible Automation Platform", "Automation", "Red Hat", "2.5"),
         };
+        if (includePopulationCoverageSoftware)
+        {
+            definitions.Add(("Jamf Pro Management Agent", "Management", "Jamf", "11.8"));
+            definitions.Add(("Puppet Agent", "ConfigurationManagement", "Perforce", "8.7"));
+        }
+
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var definition in definitions)
         {
@@ -463,12 +675,26 @@ internal static class RepresentativeManagementObservationGenerator
     {
         if (endpointType == "Server")
         {
+            if (world.ServerSoftwareInstallations.Any(installation =>
+                    installation.ServerId == endpointId
+                    && installation.SoftwareId == softwareId))
+            {
+                return;
+            }
+
             world.ServerSoftwareInstallations.Add(new ServerSoftwareInstallation
             {
                 Id = idFactory.Next("SSI"),
                 ServerId = endpointId,
                 SoftwareId = softwareId,
             });
+            return;
+        }
+
+        if (world.DeviceSoftwareInstallations.Any(installation =>
+                installation.DeviceId == endpointId
+                && installation.SoftwareId == softwareId))
+        {
             return;
         }
 
@@ -487,4 +713,17 @@ internal static class RepresentativeManagementObservationGenerator
         string Capability,
         int? CheckInAgeDays,
         decimal Confidence);
+
+    private sealed record PopulationEndpoint(
+        string EndpointType,
+        string EndpointId,
+        string? DeviceAccountId,
+        string OperatingSystem,
+        bool DomainJoined,
+        string? CloudDirectoryAccountId,
+        bool IsHosted,
+        string? HostingProvider)
+    {
+        public string Key => $"{EndpointType}|{EndpointId}";
+    }
 }

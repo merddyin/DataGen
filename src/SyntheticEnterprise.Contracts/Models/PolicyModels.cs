@@ -36,6 +36,14 @@ public record PolicySettingRecord
     public bool IsLegacy { get; init; }
     public bool IsConflicting { get; init; }
     public string? SourceReference { get; init; }
+    /// <summary>Source creation time for the policy-setting record.</summary>
+    public DateTimeOffset? WhenCreated { get; init; }
+    /// <summary>Most recent source modification time for the policy-setting record.</summary>
+    public DateTimeOffset? WhenModified { get; init; }
+    /// <summary>Time at which the setting was observed by the source collector.</summary>
+    public DateTimeOffset? ObservedAtUtc { get; init; }
+    /// <summary>Time at which the source collector retrieved the setting.</summary>
+    public DateTimeOffset? RetrievedAtUtc { get; init; }
 }
 
 public record PolicyTargetLink

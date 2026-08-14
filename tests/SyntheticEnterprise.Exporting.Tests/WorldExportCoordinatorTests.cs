@@ -1072,6 +1072,10 @@ public sealed class WorldExportCoordinatorTests
             Assert.Contains("11111111-2222-5333-8444-555555555555", policiesJson);
             Assert.Contains("MinimumPasswordLength", policySettingsJson);
             Assert.Contains("policy_path", policySettingsJson);
+            Assert.Contains("when_created", policySettingsJson);
+            Assert.Contains("when_modified", policySettingsJson);
+            Assert.Contains("observed_at", policySettingsJson);
+            Assert.Contains("retrieved_at", policySettingsJson);
             Assert.Contains(@"Computer Configuration\\Windows Settings\\Account Policies\\Password Policy", policySettingsJson);
             Assert.Contains("Linked", policyTargetsJson);
             Assert.Contains("WmiQuery", policyTargetsJson);
@@ -2067,7 +2071,7 @@ public sealed class WorldExportCoordinatorTests
             return new ExportManifestV2
             {
                 ExportId = $"stateful-{CallCount}",
-                SchemaVersion = "2.0.0",
+                SchemaVersion = NormalizedExportSchema.CurrentVersion,
                 Format = request.Format,
                 Profile = request.Profile,
                 ExportedAtUtc = request.ExportedAtUtc,

@@ -4,6 +4,15 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.11.0
+
+- added opt-in representative multi-management observations by operating-system and endpoint cohort, while retaining the legacy fixed per-company sample when the feature is not requested
+- normalized missing policy-setting source timestamps from explicit neighboring bounds and the supplied generation time; normalized exports carry the completed values without consulting a consumer runtime clock
+- continuously gated portable Windows publisher-metadata preservation, with mandatory NTFS/ReFS cross-filesystem release evidence from the prepared workstation; current assertions cover owner, group, restrictive DACL, file attributes, and creation/access/write timestamps, while SACL and mandatory integrity-label handling remains best-effort implementation behavior outside that evidence
+- hardened external plugin boundaries with bounded, authenticated manifest and catalog reads, bounded host output, and clear rejection diagnostics for malformed or excessive input
+- stage approved assembly-plugin packages from validated handles, prove dependency-inclusive package provenance, and fail closed when required cleanup cannot be completed
+- retained the existing trust model: in-process PowerShell remains trusted code and approved assembly plugins run under the host operating-system identity; these controls validate inputs and artifact provenance but are not an operating-system sandbox
+
 ### v0.10.1
 
 - corrected representative server-management observations so hosted-compute evidence is attached only to servers whose generated hosting facts identify them as cloud-hosted
@@ -255,8 +264,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.10.1 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.10.1\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.11.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
@@ -412,5 +421,33 @@ Repository validation and module packaging are also automated through GitHub Act
 - `.github/workflows/release-module.yml`
 
 The release workflow creates both the versioned module bundle and a PowerShell Gallery `.nupkg`, then publishes to PSGallery by using the `PSGAL` repository secret.
+
+Release publication is manual and requires fresh evidence from the prepared Windows workstation. Hosted CI continuously gates the portable publisher-metadata contract; it cannot exercise the real cross-filesystem path because GitHub-hosted runners do not provide the prepared `D:` NTFS and `G:` ReFS volumes. From a clean, committed `main` checkout on that workstation, use a fresh empty output directory and retain its evidence files:
+
+```powershell
+$evidenceRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('DataGenReleaseEvidence-v0.11.0-' + [Guid]::NewGuid().ToString('N'))))
+.\scripts\invoke-release-preflight.ps1 `
+  -OutputRoot $evidenceRoot `
+  -CreateReleaseAttestation
+```
+
+The preflight resolves the full `HEAD` commit and tree, creates a deterministic `git archive` from that committed object, and extracts it beneath the requested output directory. Source-dependent contracts run from this isolated snapshot. The required publisher-metadata operations do not: their D: probe resolves beneath a validated D: root and their G: probe resolves beneath a validated G: root, each checked for reparse points, containment, drive identity, and the expected NTFS or ReFS filesystem before use and cleanup. The archive and a path/length/SHA-256 source manifest are re-hashed after contract execution and again after signing. The live branch, commit, tree, version, and clean state must also remain unchanged through completion.
+
+The output includes `source-archive.tar`, `source-snapshot`, `source-manifest.json`, `release-preflight-evidence.json`, `release-preflight-summary.txt`, and `release-preflight-attestation.txt`. Before signing, the signer parses the exact evidence schema and verifies its requested version, source commit, completion time, committed tree, archive hash, manifest hash, and passed D: NTFS/G: ReFS contract facts. The canonical signed payload carries those same claims alongside the evidence SHA-256. A transient edit to the live working tree therefore cannot change the committed snapshot under test, even if that edit is restored before the final clean-state check. Dispatch the release from the same source commit within 24 hours:
+
+```powershell
+$attestation = (Get-Content "$evidenceRoot\release-preflight-attestation.txt" -Raw).Trim()
+gh workflow run release-module.yml --ref main `
+  -f version=0.11.0 `
+  -f "publisher_metadata_attestation=$attestation" `
+  -f publish_to_psgallery=true `
+  -f create_github_release=true
+```
+
+The prepared-workstation release regression at `tests/ReleasePreflightAttestation.Integration.Tests.ps1` builds a temporary clean `main` candidate with an ephemeral non-exportable signing key, performs a transient live-checkout mutation while preflight runs, and requires signed output bound to the unchanged committed snapshot. Run it with a fresh output directory when changing release-attestation or source-snapshot behavior; it intentionally exercises the real `D:` NTFS and `G:` ReFS host contract and is therefore not run on GitHub-hosted workers.
+
+The workflow rejects automatic/tag-triggered publication, non-`main` dispatches, noncanonical base64url, and missing, malformed, stale, wrong-version, wrong-source, or wrong-tree attestations before producing release artifacts. It also requires the signed D: NTFS `passed` and G: ReFS `passed` claims before any catalog build, package, or publication step. The attestation is a canonical payload signed with the non-exportable RSA private key in the prepared workstation's `Cert:\CurrentUser\My` store. GitHub Actions verifies the signature with the exact public certificate tracked at `release-trust/datagen-release-preflight-attestation.cer`; changing any signed field or inventing a new evidence hash invalidates the signature.
+
+This is pinned-key verification, not CA-chain validation and not a claim that the certificate identifies an operator. The committed snapshot closes the transient-working-tree race; it does not defend against compromise of the prepared release account, private key, Git object database, or the preflight process in memory. Those remain inside the trusted workstation boundary. The private key must never be exported to a PFX, PEM, repository, build path, artifact, log, or ticket attachment. See [release-trust/README.md](release-trust/README.md) for the public identity, planned rotation procedure, and compromise or key-loss recovery steps.
 
 The repository also ignores generated docs-site artifacts and local scratch inspection scripts so the publishable tree stays clean.

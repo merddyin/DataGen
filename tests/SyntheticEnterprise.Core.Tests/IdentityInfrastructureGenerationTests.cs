@@ -406,6 +406,16 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.PolicySettings, setting => setting.SettingName == "OfficeEnableAutomaticUpdates" && setting.PolicyPath.Contains(@"Microsoft Office 2016\Updates", StringComparison.Ordinal));
         Assert.DoesNotContain(result.World.PolicySettings, setting => string.IsNullOrWhiteSpace(setting.PolicyPath));
         Assert.True(result.World.PolicySettings.Count >= 800);
+        Assert.All(result.World.PolicySettings, setting =>
+        {
+            Assert.NotNull(setting.WhenCreated);
+            Assert.NotNull(setting.WhenModified);
+            Assert.NotNull(setting.ObservedAtUtc);
+            Assert.NotNull(setting.RetrievedAtUtc);
+            Assert.True(setting.WhenCreated <= setting.WhenModified);
+            Assert.True(setting.WhenModified <= setting.ObservedAtUtc);
+            Assert.True(setting.ObservedAtUtc <= setting.RetrievedAtUtc);
+        });
         Assert.DoesNotContain(result.World.Policies.Where(policy =>
                 policy.PolicyType == "GroupPolicyObject"
                 && !string.Equals(policy.Status, "Disabled", StringComparison.OrdinalIgnoreCase)), policy =>
