@@ -4,10 +4,20 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
-### v0.11.1
+### v0.13.0
 
+- Adds two Windows policy objects per company — `Windows Security Template Baseline` and `Windows Advanced Audit Policy Template` — carrying canonical `UserRight:`, `Audit:`, `FileACL:`, and `RegistryACL:` policy settings: 38 privilege-rights assignments (5 deny, 33 grant), 34 advanced audit subcategories, and three file and two registry security descriptors.
+- Adds an opt-in per-endpoint side: each selected Windows endpoint receives a `LocalSecurityPolicy` object carrying the same canonical keys, with each value built from the template's own value for that key so the relationship between a machine and the template assigned to it is exact rather than incidental.
+- Emits every value in the shape the collection method that produces it emits: audit coverage uses the `Success and Failure` form that `auditpol` and a Group Policy audit backup's `audit.csv` write, and principals use the display names a collection resolves them to rather than raw SIDs.
+- Adds the `infrastructure.effectiveSecurityConfigurationEndpointCount` scenario option, bounded between 0 and 250 and defaulting to 0, with range and population-feasibility validation; the shipped example scenarios enable it so demo datasets carry these families.
+- Emits effective configuration only for Windows endpoints, because a local security policy is a Windows object; a company holding fewer Windows endpoints than requested reports on every endpoint it has rather than inventing endpoints.
+- Leaves the pre-existing friendly-named Windows baselines exactly as they were; the new policy objects are separate and additive, and nothing previously emitted has moved.
+- Preserves the normalized export schema at `2.1.0`: endpoint policies travel through the existing `source_entity_type` and `source_entity_id` columns on `policies`, and canonical keys travel through the existing `policy_path` column on `policy_settings`.
+- Carries endpoint policy attachment through layer regeneration, so regenerating the infrastructure layer leaves each endpoint policy pointing at the endpoint it describes.
+- Removes an access-control evidence record that named `BlockInheritance` as a right; block inheritance is a container property already carried on `EnvironmentContainer.BlocksPolicyInheritance`, and no collection method produces an access-control entry with that right name.
+- Retires the `identity.legacyDirectoryIdentifierVariantCount` scenario option, which existed only in unreleased work and was never published, so no released version is affected.
 - Repairs the portable release preflight so Git, tar, and .NET are resolved to validated full executable paths on the current host instead of assuming Windows installation paths.
-- Retains the v0.11.0 management-intelligence contract and prepares deterministic multi-company output for Cartograph's governed Duckburg regeneration.
+- Retains the v0.11.0 management-intelligence contract and its deterministic multi-company output.
 
 ### v0.11.0
 

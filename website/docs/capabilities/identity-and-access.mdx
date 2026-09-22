@@ -27,6 +27,15 @@ Examples include:
 - AD and GPO-style configured policies
 - Entra and Intune-style policy records
 - Azure-policy-style governance records
+- Windows security-template and advanced-audit policy objects
+
+### Windows security policy families
+
+Every company carries a `Windows Security Template Baseline` and a `Windows Advanced Audit Policy Template`, holding privilege-rights assignments, advanced audit subcategories, and file and registry security descriptors in the vocabulary a security template export and a Group Policy audit backup actually carry.
+
+Scenarios can additionally opt into the endpoint side. `infrastructure.effectiveSecurityConfigurationEndpointCount`, bounded between 0 and 250 and defaulting to 0, gives that many Windows endpoints per company a `LocalSecurityPolicy` object describing the configuration that machine carries, built from the template's own value for each setting. Only Windows endpoints receive one, because a local security policy is a Windows object.
+
+These are separate policy objects from the friendly-named baselines DataGen already emitted, which are unchanged. See [Normalized Export](/integrations/normalized-export) for the canonical key forms, the value shapes, and how an endpoint policy joins back to its endpoint.
 
 ## Access evidence
 

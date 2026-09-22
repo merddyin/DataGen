@@ -74,3 +74,76 @@ These are source-side facts. A downstream bridge should preserve or reject them 
 ### Consumer compatibility
 
 Existing adapters that need only a current state can filter `is_current = true` and otherwise keep their current mapping. Adapters that need history should retain both rows, relate historical rows through `superseded_by_observation_id`, and keep provider-specific interpretation outside DataGen. The lifecycle columns are additive; when consuming an export produced before v0.10.0, treat absent lifecycle metadata as a current-only dataset rather than fabricating history.
+
+## Windows security policy families
+
+The `policies` and `policy_settings` artifacts carry three Windows policy families — privilege-rights assignments, advanced audit subcategories, and file and registry security descriptors — on two sides of the same estate.
+
+The directory side is two `GroupPolicyObject` records per company, linked to the workstation and server containers:
+
+- `Windows Security Template Baseline`, category `SecurityTemplate`, carrying privilege rights and object security descriptors
+- `Windows Advanced Audit Policy Template`, category `AuditPolicy`, carrying advanced audit subcategories
+
+The endpoint side is one `LocalSecurityPolicy` record per selected Windows endpoint, category `EffectiveConfiguration` and platform `Windows`, named for the endpoint's hostname. Join it back to its endpoint through the columns `policies` already exports:
+
+- `source_entity_type`: `ManagedDevice` for a workstation, `ServerAsset` for a server
+- `source_entity_id`: the identifier of that endpoint record
+
+Only Windows endpoints carry one. A local security policy is a Windows object, so a Linux or macOS endpoint has no such record rather than an empty one.
+
+### Canonical setting keys
+
+`policy_settings.policy_path` carries a canonical prefixed key for every row in these families, on both sides. The same key identifies the same setting on a template and on an endpoint, which is what makes the two joinable:
+
+| Family | `policy_path` form | Example |
+| --- | --- | --- |
+| Privilege rights | `UserRight:<PrivilegeConstant>` | `UserRight:SeBackupPrivilege` |
+| Advanced audit | `Audit:<SubcategoryDisplayName>` | `Audit:Audit Credential Validation` |
+| File security | `FileACL:<path>` | `FileACL:%SystemRoot%\System32\config` |
+| Registry security | `RegistryACL:<key>` | `RegistryACL:MACHINE\SYSTEM\CurrentControlSet\Services` |
+
+The leading word `Audit` is part of the subcategory display name itself, so an audit key reads as doubled — `Audit:Audit Logon`. That is the real subcategory name as a Group Policy audit backup spells it.
+
+Key off `policy_path`, not `setting_category`. `setting_category` describes the family — `UserRightsAssignment`, `AuditPolicy`, `FileSecurity`, `RegistryKeys` — and is not a setting identifier.
+
+### Values follow the collection method
+
+Every value in these families is written in the shape produced by the tool that collects it, not in a normalized form:
+
+- **Audit inclusion settings** use the `auditpol` and `audit.csv` vocabulary: `No Auditing`, `Success`, `Failure`, and the combined form `Success and Failure`. A Group Policy audit backup writes the combined value with the word `and`, not a comma, and that is what these rows carry. A consumer parsing this family has to match that form.
+- **Principals** are the display names a collection resolves them to. Well-known identities use curated names — `BUILTIN\Administrators`, `BUILTIN\Users`, `Authenticated Users`, `Local System`, `Local Service`, `Network Service`, `Creator Owner`, `Everyone`, `Anonymous`. Identities outside that set use the live Windows translation, so the deny-logon rights carry forms such as `NT AUTHORITY\Local account` and `NT AUTHORITY\Local account and member of Administrators group`, upper-case and sentence-case inconsistencies included. Generated domain principals use the `NETBIOS\SamAccountName` form and resolve to real groups and accounts in the same company. Bare SIDs are never emitted, because a collection on a Windows host does not produce them.
+- **Multiple principals** on one right are joined with a comma and no space. A right granted to nobody carries an empty value, matching `secedit` output.
+- **Security descriptors** are ordinary SDDL strings in the usual owner, group, and DACL container, with inherited, explicit, and deny entries present.
+
+These forms are a deliberate mirror of what a real collection returns. If the collection method's resolution behavior changes upstream, the emitted values change with it as a documented breaking change; they are not an independent DataGen vocabulary.
+
+### Configuration profiles
+
+On the endpoint side, `policy_settings.source_reference` names the profile that endpoint's value was built from. Each value is derived from the template's own value for the same key, so the relationship is exact rather than incidental:
+
+| `source_reference` | Shape of the emitted value |
+| --- | --- |
+| `Aligned` | Identical token set or audit value to the template |
+| `ExpandedPrincipals` | Strict superset of the template's principals on a grant right |
+| `ReducedPrincipals` | Strict, non-empty subset on a grant right |
+| `DivergentPrincipals` | Overlapping on a grant right, neither superset nor subset |
+| `ExpandedDenyPrincipals` | Strict superset on a deny-logon right |
+| `ReducedAuditCoverage` | One outcome where the template covers both |
+| `ExpandedAuditCoverage` | Both outcomes where the template covers one |
+| `DivergentAcl` | A different security descriptor for the same object, alongside identical descriptors elsewhere |
+
+A profile describes the shape of the data emitted for that endpoint. It is not a rating of the machine, and DataGen draws no conclusion from it. On the directory side, `source_reference` carries the originating section instead, such as `Security template [Privilege Rights]` or `Group Policy audit backup audit.csv`.
+
+### Enabling the endpoint side
+
+`infrastructure.effectiveSecurityConfigurationEndpointCount` is the explicit enablement switch. It defaults to `0`, which emits no `LocalSecurityPolicy` records, and is bounded at `250`. Scenario validation rejects a value outside that range, and rejects a nonzero value when the scenario includes neither workstations nor servers, or when the largest company's employee count cannot supply that many endpoints.
+
+The shipped example scenarios set it, so a dataset generated from one of them carries both sides of these families. A company with fewer Windows endpoints than requested reports on every endpoint it has; endpoints are never invented to reach the count, and fewer profiles are covered as a result.
+
+The directory-side templates need no option. They are ordinary facts of a Windows estate and are emitted for every company.
+
+### Consumer compatibility
+
+No column and no schema version changed for this family. The normalized export schema remains `2.1.0`. Endpoint linkage reuses `source_entity_type` and `source_entity_id`, which `policies` already exported, and the canonical keys reuse `policy_path`, which `policy_settings` already exported. An adapter written against an earlier export continues to read these artifacts without modification.
+
+The new records are additive. The friendly-named Windows baselines emitted before this release are unchanged and still present, so an adapter reading them keeps working; the canonical-key rows live in separate policy objects rather than inside those baselines. An adapter that wants only the directory side can filter on a `policy_type` of `GroupPolicyObject`, and one that wants only endpoint configuration can filter on `LocalSecurityPolicy`. An export produced before v0.13.0 contains no `LocalSecurityPolicy` rows at all; treat their absence as a dataset without an endpoint side rather than as endpoints reported to have no configuration.
