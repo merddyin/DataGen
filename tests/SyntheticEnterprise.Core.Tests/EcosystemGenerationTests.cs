@@ -173,6 +173,16 @@ public sealed class EcosystemGenerationTests
     }
 
     [Fact]
+    public void VendorReferenceCatalog_Contains_Exactly_One_Deloitte_And_No_Accenture()
+    {
+        var catalogs = new FileSystemCatalogLoader().LoadFromPath(TestEnvironmentPaths.GetCatalogRoot());
+        var vendorRows = catalogs.CsvCatalogs["vendor_reference"];
+
+        Assert.Single(vendorRows, row => string.Equals(row["Name"], "Deloitte", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(vendorRows, row => string.Equals(row["Name"], "Accenture", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void WorldGenerator_Produces_Stable_External_Organization_Names_For_Same_Seed()
     {
         var services = new ServiceCollection()

@@ -4,6 +4,12 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.11.1
+
+- Repairs the portable release preflight so Git, tar, and .NET are resolved to validated full executable paths on the current host instead of assuming Windows installation paths.
+- Retains the v0.11.0 management-intelligence contract and prepares deterministic multi-company output for Cartograph's governed Duckburg regeneration.
+- Adds `identity.legacyDirectoryIdentifierVariantCount` for generic legacy-directory test data. The opt-in setting defaults to `0`, accepts a bounded world-level count from `0` through `100`, and applies it only to the company with the largest eligible person population, using ordinal company ID as a deterministic tie-break. Selected directory accounts receive a legacy-prefixed identifier derived from a different person in that company while preserving the account's actual owner. It emits enterprise evidence only; DataGen does not encode Cartograph review or reconciliation workflow concepts.
+
 ### v0.11.0
 
 - added opt-in representative multi-management observations by operating-system and endpoint cohort, while retaining the legacy fixed per-company sample when the feature is not requested
@@ -264,8 +270,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.11.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.11.1 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.1\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

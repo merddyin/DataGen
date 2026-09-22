@@ -20,17 +20,43 @@ param(
     [string]$PublicCertificatePath = (Join-Path $PSScriptRoot '..\release-trust\datagen-release-preflight-attestation.cer'),
 
     [Parameter()]
-    [string]$GitPath = 'C:\Program Files\Git\cmd\git.exe',
+    [string]$GitPath,
 
     [Parameter()]
-    [string]$TarPath = 'C:\Windows\System32\tar.exe',
+    [string]$TarPath,
 
     [Parameter()]
-    [string]$DotNetPath = 'C:\Program Files\dotnet\dotnet.exe'
+    [string]$DotNetPath
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Resolve-ExecutablePath {
+    param(
+        [Parameter()][string]$ProvidedPath,
+        [Parameter(Mandatory)][string]$CommandName,
+        [Parameter(Mandatory)][string]$Label
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($ProvidedPath)) {
+        if (-not [IO.Path]::IsPathFullyQualified($ProvidedPath) -or
+            -not (Test-Path -LiteralPath $ProvidedPath -PathType Leaf)) {
+            throw "$Label must identify an existing executable by full path: '$ProvidedPath'."
+        }
+        return (Resolve-Path -LiteralPath $ProvidedPath).Path
+    }
+
+    $command = Get-Command $CommandName -CommandType Application -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+    if ($null -eq $command -or
+        [string]::IsNullOrWhiteSpace($command.Source) -or
+        -not [IO.Path]::IsPathFullyQualified($command.Source) -or
+        -not (Test-Path -LiteralPath $command.Source -PathType Leaf)) {
+        throw "$Label executable '$CommandName' could not be resolved to a full file path."
+    }
+    return (Resolve-Path -LiteralPath $command.Source).Path
+}
 
 function Test-PathContains {
     param(
@@ -216,12 +242,9 @@ function Assert-LiveSourceStateUnchanged {
 $repositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $outputRoot = [IO.Path]::GetFullPath($OutputRoot)
 Assert-SafeOutputRoot -SourceRootPath $repositoryRoot -OutputRootPath $outputRoot
-if (-not (Test-Path -LiteralPath $GitPath -PathType Leaf)) {
-    throw "Git executable was not found at '$GitPath'."
-}
-if (-not (Test-Path -LiteralPath $TarPath -PathType Leaf)) {
-    throw "Tar executable was not found at '$TarPath'."
-}
+$GitPath = Resolve-ExecutablePath -ProvidedPath $GitPath -CommandName 'git' -Label 'Git'
+$TarPath = Resolve-ExecutablePath -ProvidedPath $TarPath -CommandName 'tar' -Label 'Tar'
+$DotNetPath = Resolve-ExecutablePath -ProvidedPath $DotNetPath -CommandName 'dotnet' -Label '.NET'
 if (Test-Path -LiteralPath $outputRoot) {
     $existingItems = @(Get-ChildItem -LiteralPath $outputRoot -Force)
     if ($existingItems.Count -gt 0) {

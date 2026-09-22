@@ -172,6 +172,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             var department = companyContext.DepartmentsById.GetValueOrDefault(application.OwnerDepartmentId);
             var ciClass = ResolveApplicationCiClass(application);
             var criticality = ResolveApplicationCiCriticality(application, ciClass);
+            var hasCurrentOwnershipEvidence = !string.IsNullOrWhiteSpace(application.OwnerDepartmentId);
             AddConfigurationItem(
                 world,
                 ciBySourceKey,
@@ -193,11 +194,17 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                     Environment = application.Environment,
                     OperationalStatus = "Active",
                     LifecycleStatus = ResolveLifecycleStatus(application.Environment),
-                    BusinessOwnerPersonId = ResolveBusinessOwnerPersonId(companyContext, department),
-                    TechnicalOwnerPersonId = ResolveTechnicalOwnerPersonId(companyContext, department, null),
-                    SupportTeamId = ResolveSupportTeamId(companyContext, department, null),
-                    OwningDepartmentId = department?.Id,
-                    OwningLobId = department?.BusinessUnitId,
+                    BusinessOwnerPersonId = hasCurrentOwnershipEvidence
+                        ? ResolveBusinessOwnerPersonId(companyContext, department)
+                        : null,
+                    TechnicalOwnerPersonId = hasCurrentOwnershipEvidence
+                        ? ResolveTechnicalOwnerPersonId(companyContext, department, null)
+                        : null,
+                    SupportTeamId = hasCurrentOwnershipEvidence
+                        ? ResolveSupportTeamId(companyContext, department, null)
+                        : null,
+                    OwningDepartmentId = hasCurrentOwnershipEvidence ? department?.Id : null,
+                    OwningLobId = hasCurrentOwnershipEvidence ? department?.BusinessUnitId : null,
                     ServiceTier = ResolveServiceTier(criticality, ciClass == "PlatformService" ? "Platform" : "Application"),
                     ServiceClassification = ResolveApplicationServiceClassification(application),
                     BusinessCriticality = criticality,

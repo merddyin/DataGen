@@ -10,6 +10,190 @@ namespace SyntheticEnterprise.Core.Tests;
 public sealed class IdentityInfrastructureGenerationTests
 {
     [Fact]
+    public void WorldGenerator_Creates_Deterministic_Legacy_Directory_Identifier_Collisions()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var scenario = new ScenarioDefinition
+        {
+            Name = "Legacy Directory Identifier Test",
+            Identity = new IdentityProfile
+            {
+                IncludeExternalWorkforce = false,
+                IncludeB2BGuests = false,
+                LegacyDirectoryIdentifierVariantCount = 3
+            },
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Legacy Directory Co",
+                    Industry = "Manufacturing",
+                    EmployeeCount = 12,
+                    BusinessUnitCount = 2,
+                    DepartmentCountPerBusinessUnit = 2,
+                    TeamCountPerDepartment = 2,
+                    OfficeCount = 2,
+                    ServerCount = 4,
+                    IncludePrivilegedAccounts = false,
+                    Countries = new() { "United States" }
+                }
+            }
+        };
+
+        var first = generator.Generate(
+            new GenerationContext { Scenario = scenario, Seed = 731 },
+            new CatalogSet());
+        var second = generator.Generate(
+            new GenerationContext { Scenario = scenario, Seed = 731 },
+            new CatalogSet());
+
+        var legacyAccounts = first.World.Accounts
+            .Where(account => account.AccountType == "User"
+                              && account.EmployeeId?.StartsWith("OLD", StringComparison.Ordinal) == true)
+            .OrderBy(account => account.Id, StringComparer.Ordinal)
+            .ToArray();
+        var repeatedLegacyAccounts = second.World.Accounts
+            .Where(account => account.AccountType == "User"
+                              && account.EmployeeId?.StartsWith("OLD", StringComparison.Ordinal) == true)
+            .OrderBy(account => account.Id, StringComparer.Ordinal)
+            .ToArray();
+        var peopleById = first.World.People.ToDictionary(person => person.Id, StringComparer.OrdinalIgnoreCase);
+        var peopleByEmployeeId = first.World.People.ToDictionary(person => person.EmployeeId, StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(3, legacyAccounts.Length);
+        Assert.Equal(
+            legacyAccounts.Select(AccountIdentitySignature),
+            repeatedLegacyAccounts.Select(AccountIdentitySignature));
+        Assert.All(legacyAccounts, account =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(account.PersonId));
+            var owner = peopleById[account.PersonId!];
+            var candidateEmployeeId = account.EmployeeId![3..];
+            var candidate = peopleByEmployeeId[candidateEmployeeId];
+
+            Assert.Equal(owner.CompanyId, account.CompanyId);
+            Assert.Equal(candidate.CompanyId, account.CompanyId);
+            Assert.NotEqual(owner.Id, candidate.Id);
+            Assert.Equal(owner.UserPrincipalName, account.UserPrincipalName, ignoreCase: true);
+            Assert.Equal(owner.UserPrincipalName, account.Mail, ignoreCase: true);
+            Assert.False(string.Equals(candidate.EmployeeId, account.EmployeeId, StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.Equals(candidate.UserPrincipalName, account.UserPrincipalName, StringComparison.OrdinalIgnoreCase));
+            Assert.False(string.Equals(candidate.UserPrincipalName, account.Mail, StringComparison.OrdinalIgnoreCase));
+        });
+
+        static string AccountIdentitySignature(DirectoryAccount account)
+            => $"{account.EmployeeId}|{account.UserPrincipalName}|{account.Mail}";
+    }
+
+    [Fact]
+    public void WorldGenerator_Applies_Legacy_Directory_Identifiers_Only_To_Largest_Company()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 732,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Multi-Company Legacy Directory Identifier Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false,
+                        LegacyDirectoryIdentifierVariantCount = 4
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Small Company",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 6,
+                            Countries = new() { "United States" }
+                        },
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Primary Company",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 12,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        var primaryCompany = Assert.Single(result.World.Companies, company => company.Name == "Primary Company");
+        var legacyAccounts = result.World.Accounts
+            .Where(account => account.AccountType == "User"
+                              && account.EmployeeId?.StartsWith("OLD", StringComparison.Ordinal) == true)
+            .ToArray();
+
+        Assert.Equal(4, legacyAccounts.Length);
+        Assert.All(legacyAccounts, account => Assert.Equal(primaryCompany.Id, account.CompanyId));
+    }
+
+    [Fact]
+    public void WorldGenerator_Uses_Ordinal_Company_Id_To_Break_Primary_Company_Ties()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Seed = 733,
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "Legacy Directory Identifier Tie Test",
+                    Identity = new IdentityProfile
+                    {
+                        IncludeExternalWorkforce = false,
+                        IncludeB2BGuests = false,
+                        LegacyDirectoryIdentifierVariantCount = 2
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Tie Company One",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 8,
+                            Countries = new() { "United States" }
+                        },
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Tie Company Two",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 8,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet());
+
+        var expectedCompanyId = result.World.Companies
+            .Select(company => company.Id)
+            .OrderBy(id => id, StringComparer.Ordinal)
+            .First();
+        var legacyAccounts = result.World.Accounts
+            .Where(account => account.AccountType == "User"
+                              && account.EmployeeId?.StartsWith("OLD", StringComparison.Ordinal) == true)
+            .ToArray();
+
+        Assert.Equal(2, legacyAccounts.Length);
+        Assert.All(legacyAccounts, account => Assert.Equal(expectedCompanyId, account.CompanyId));
+    }
+
+    [Fact]
     public void WorldGenerator_Populates_Cryptographic_Passwords_And_Nested_Groups()
     {
         var services = new ServiceCollection()

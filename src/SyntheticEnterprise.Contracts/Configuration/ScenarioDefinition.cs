@@ -74,6 +74,17 @@ public record ScenarioCompanyDefinition
 
 public record IdentityProfile
 {
+    public const int MaximumLegacyDirectoryIdentifierVariantCount = 100;
+
+    /// <summary>
+    /// Number of user directory accounts across the generated world that retain a
+    /// legacy identifier variant referencing another employee. Variants are applied
+    /// only to the deterministic primary company: the company with the largest eligible
+    /// person population, using ordinal company ID as the tie-break. Values from zero through
+    /// <see cref="MaximumLegacyDirectoryIdentifierVariantCount"/> are supported;
+    /// zero disables this opt-in condition.
+    /// </summary>
+    public int LegacyDirectoryIdentifierVariantCount { get; init; }
     public bool IncludeHybridDirectory { get; init; } = true;
     public bool IncludeM365StyleGroups { get; init; } = true;
     public bool IncludeAdministrativeTiers { get; init; } = true;

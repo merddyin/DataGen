@@ -96,11 +96,16 @@ public sealed class RepresentativeManagementObservationTests
             Assert.Equal(server.CompanyId, application.CompanyId);
             Assert.Equal(server.CompanyId, observation.CompanyId);
             Assert.Contains(server.Id, serverSoftwareIds);
-            Assert.Contains(world.ApplicationServiceHostings, hosting =>
+            var isCurrentHosting = world.ApplicationServiceHostings.Any(hosting =>
                 hosting.CompanyId == application.CompanyId
                 && hosting.HostType == "Server"
                 && hosting.HostId == server.Id
                 && servicesById[hosting.ApplicationServiceId].ApplicationId == application.Id);
+            Assert.True(
+                isCurrentHosting
+                || (observation.SourceSystem == "ConfigurationManagement"
+                    && observation.Detail?.Contains("inventory snapshot", StringComparison.OrdinalIgnoreCase) == true),
+                "Installed-on history must be backed by either current hosting or a bounded inventory observation.");
         });
 
         var ownershipHistory = world.RelationshipHistoryObservations
@@ -116,7 +121,16 @@ public sealed class RepresentativeManagementObservationTests
             var application = applicationsById[observation.ToEntityId];
             Assert.Equal(application.CompanyId, owner.CompanyId);
             Assert.Equal(application.CompanyId, observation.CompanyId);
-            Assert.Equal(application.OwnerDepartmentId, owner.DepartmentId);
+            if (observation.LifecycleState == "Active")
+            {
+                Assert.Equal(application.OwnerDepartmentId, owner.DepartmentId);
+            }
+            else
+            {
+                Assert.Equal("Removed", observation.LifecycleState);
+                Assert.False(string.IsNullOrWhiteSpace(owner.DepartmentId));
+                Assert.True(string.IsNullOrWhiteSpace(application.OwnerDepartmentId));
+            }
         });
 
         var sourceText = string.Join('|',
@@ -136,6 +150,75 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
+    public void WorldGenerator_MaterializesFormerApplicationOwnershipWithoutCurrentOwnershipEvidence()
+    {
+        var world = Generate(
+            includeRepresentativeFacts: true,
+            companyCount: 2,
+            includeConfigurationManagement: true).World;
+        var primaryCompany = world.Companies[0];
+        var formerOwnership = Assert.Single(world.RelationshipHistoryObservations, observation =>
+            observation.CompanyId == primaryCompany.Id
+            && observation.RelationshipType == "Owns"
+            && observation.LifecycleState == "Removed");
+        var application = Assert.Single(world.Applications, candidate => candidate.Id == formerOwnership.ToEntityId);
+
+        Assert.Equal(primaryCompany.Id, application.CompanyId);
+        Assert.True(string.IsNullOrWhiteSpace(application.OwnerDepartmentId));
+        Assert.DoesNotContain(world.RelationshipHistoryObservations, observation =>
+            observation.CompanyId == primaryCompany.Id
+            && observation.RelationshipType == "Owns"
+            && observation.LifecycleState == "Active"
+            && observation.ToEntityId == application.Id);
+
+        var services = world.ApplicationServices
+            .Where(service => service.CompanyId == primaryCompany.Id && service.ApplicationId == application.Id)
+            .ToArray();
+        Assert.NotEmpty(services);
+        Assert.All(services, service => Assert.True(string.IsNullOrWhiteSpace(service.OwnerTeamId)));
+        Assert.DoesNotContain(world.AccessControlEvidence, evidence =>
+            evidence.CompanyId == primaryCompany.Id
+            && evidence.TargetType == "Application"
+            && evidence.TargetId == application.Id
+            && evidence.RightName.EndsWith("Administration", StringComparison.OrdinalIgnoreCase));
+
+        var applicationConfigurationItems = world.ConfigurationItems
+            .Where(item => item.CompanyId == primaryCompany.Id
+                && item.SourceEntityType == "Application"
+                && item.SourceEntityId == application.Id)
+            .ToArray();
+        Assert.NotEmpty(applicationConfigurationItems);
+        Assert.All(applicationConfigurationItems, item =>
+        {
+            Assert.True(string.IsNullOrWhiteSpace(item.BusinessOwnerPersonId));
+            Assert.True(string.IsNullOrWhiteSpace(item.TechnicalOwnerPersonId));
+            Assert.True(string.IsNullOrWhiteSpace(item.SupportTeamId));
+            Assert.True(string.IsNullOrWhiteSpace(item.OwningDepartmentId));
+        });
+
+        var applicationConfigurationItemIds = applicationConfigurationItems
+            .Select(item => item.Id)
+            .ToHashSet(StringComparer.Ordinal);
+        var applicationSourceRecordIds = world.CmdbSourceLinks
+            .Where(link => applicationConfigurationItemIds.Contains(link.ConfigurationItemId))
+            .Select(link => link.SourceRecordId)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.NotEmpty(applicationSourceRecordIds);
+        Assert.All(world.CmdbSourceRecords.Where(record => applicationSourceRecordIds.Contains(record.Id)), record =>
+        {
+            Assert.True(string.IsNullOrWhiteSpace(record.ObservedBusinessOwner));
+            Assert.True(string.IsNullOrWhiteSpace(record.ObservedTechnicalOwner));
+            Assert.True(string.IsNullOrWhiteSpace(record.ObservedSupportGroup));
+        });
+
+        Assert.All(world.ObservedEntitySnapshots.Where(snapshot =>
+                snapshot.CompanyId == primaryCompany.Id
+                && ((snapshot.EntityType == "Application" && snapshot.EntityId == application.Id)
+                    || (snapshot.EntityType == "ApplicationService" && services.Any(service => service.Id == snapshot.EntityId)))),
+            snapshot => Assert.True(string.IsNullOrWhiteSpace(snapshot.OwnerReference)));
+    }
+
+    [Fact]
     public void WorldGenerator_CoversEndpointPopulationWithCohortDominantProvidersAndBoundedOutliers()
     {
         var world = Generate(
@@ -149,9 +232,9 @@ public sealed class RepresentativeManagementObservationTests
             .Concat(world.Servers.Select(server => new { EndpointType = "Server", EndpointId = server.Id, server.OperatingSystem }))
             .ToArray();
 
-        Assert.Equal(endpoints.Length, current.Length);
+        Assert.True(current.Length >= endpoints.Length);
         Assert.All(endpoints, endpoint =>
-            Assert.Single(current, observation =>
+            Assert.Contains(current, observation =>
                 observation.EndpointType == endpoint.EndpointType
                 && observation.EndpointId == endpoint.EndpointId));
 
@@ -177,6 +260,119 @@ public sealed class RepresentativeManagementObservationTests
         Assert.Contains(current, observation =>
             observation.ManagementProvider is "ConfigurationManager" or "Rmm" or "BigFix" or "Puppet" or "Ansible"
             && observation.DeploymentCapability == "Supported");
+    }
+
+    [Fact]
+    public void WorldGenerator_KeepsManagementEvidenceCoherentWithInstalledAgentInventory()
+    {
+        var result = Generate(
+            includeRepresentativeFacts: true,
+            catalogs: CreateManagementAgentCatalog());
+        var replay = Generate(
+            includeRepresentativeFacts: true,
+            catalogs: CreateManagementAgentCatalog());
+        var world = result.World;
+
+        Assert.Equal(
+            JsonSerializer.Serialize(ProjectManagementAgentInventory(result.World)),
+            JsonSerializer.Serialize(ProjectManagementAgentInventory(replay.World)));
+        var softwareById = world.SoftwarePackages.ToDictionary(package => package.Id, StringComparer.Ordinal);
+        var current = world.ManagementObservations
+            .Where(observation => observation.IsCurrent
+                && string.Equals(observation.LifecycleState, "Current", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(observation.SupersededByObservationId))
+            .ToArray();
+        var unmanaged = current
+            .Where(observation => string.Equals(observation.ManagementProvider, "None", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(observation.RegistrationState, "NotRegistered", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(observation.DeploymentCapability, "Unsupported", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        Assert.NotEmpty(unmanaged);
+        Assert.All(current.Where(observation => observation.RegistrationState == "Registered"), observation =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(observation.AgentSoftwareId));
+            var agentSoftwareId = observation.AgentSoftwareId!;
+            Assert.True(softwareById.TryGetValue(agentSoftwareId, out var package));
+            Assert.True(ManagementAgentCatalog.IsKnownDeploymentAgent(package!));
+            Assert.True(IsInstalled(world, observation.EndpointType, observation.EndpointId, agentSoftwareId));
+        });
+
+        Assert.All(unmanaged, observation =>
+        {
+            Assert.Null(observation.AgentSoftwareId);
+            Assert.DoesNotContain(
+                InstalledSoftware(world, observation.EndpointType, observation.EndpointId),
+                softwareId => ManagementAgentCatalog.IsKnownDeploymentAgent(softwareById[softwareId]));
+        });
+
+        Assert.All(
+            ["Tanium Client", "SCCM Client", "ServiceNow Agent"],
+            agentName =>
+            {
+                var package = Assert.Single(world.SoftwarePackages, candidate => candidate.Name == agentName);
+                Assert.DoesNotContain(world.DeviceSoftwareInstallations, installation => installation.SoftwareId == package.Id);
+                Assert.DoesNotContain(world.ServerSoftwareInstallations, installation => installation.SoftwareId == package.Id);
+            });
+
+        var securityBaseline = Assert.Single(world.SoftwarePackages, package => package.Name == "CrowdStrike Falcon");
+        Assert.All(world.Devices, device =>
+            Assert.True(IsInstalled(world, "Device", device.Id, securityBaseline.Id)));
+    }
+
+    [Fact]
+    public void WorldGenerator_EmitsDirectoryBackedPreferredPathGapsWithViableAlternates()
+    {
+        var world = Generate(
+            includeRepresentativeFacts: true,
+            managementObservationPopulationCoveragePercentage: 100).World;
+        var devicesById = world.Devices.ToDictionary(device => device.Id, StringComparer.Ordinal);
+        var actionable = world.ManagementObservations
+            .Where(observation => observation.IsCurrent
+                && string.Equals(observation.LifecycleState, "Current", StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(observation.SupersededByObservationId)
+                && observation.LastCheckInAtUtc >= observation.ObservedAtUtc.AddDays(-20)
+                && observation.DeploymentCapability is "Supported" or "Available" or "Viable")
+            .ToArray();
+        var commonProviderByCohort = actionable
+            .GroupBy(observation => $"{observation.CompanyId}|{observation.OperatingSystemFamily}|{observation.Cohort}", StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.GroupBy(observation => observation.ManagementProvider, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(provider => provider.Count())
+                    .ThenBy(provider => provider.Key, StringComparer.Ordinal)
+                    .First().Key,
+                StringComparer.OrdinalIgnoreCase);
+        var pairedAlternates = actionable
+            .Where(alternate => alternate.EndpointType == "Device"
+                && devicesById.TryGetValue(alternate.EndpointId, out var device)
+                && device.DomainJoined
+                && !string.IsNullOrWhiteSpace(device.DirectoryAccountId)
+                && string.Equals(device.DirectoryAccountId, alternate.DeviceAccountId, StringComparison.Ordinal)
+                && commonProviderByCohort.TryGetValue(
+                    $"{alternate.CompanyId}|{alternate.OperatingSystemFamily}|{alternate.Cohort}",
+                    out var expectedProvider)
+                && !string.Equals(expectedProvider, alternate.ManagementProvider, StringComparison.OrdinalIgnoreCase)
+                && world.ManagementObservations.Any(expected =>
+                    expected.CompanyId == alternate.CompanyId
+                    && expected.EndpointType == alternate.EndpointType
+                    && expected.EndpointId == alternate.EndpointId
+                    && expected.OperatingSystemFamily == alternate.OperatingSystemFamily
+                    && expected.Cohort == alternate.Cohort
+                    && string.Equals(expected.ManagementProvider, expectedProvider, StringComparison.OrdinalIgnoreCase)
+                    && expected.IsCurrent
+                    && string.Equals(expected.LifecycleState, "Current", StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrWhiteSpace(expected.SupersededByObservationId)
+                    && expected.LastCheckInAtUtc < expected.ObservedAtUtc.AddDays(-20)
+                    && string.Equals(expected.DeviceAccountId, alternate.DeviceAccountId, StringComparison.Ordinal)))
+            .ToArray();
+
+        Assert.NotEmpty(pairedAlternates);
+        Assert.All(pairedAlternates, alternate =>
+        {
+            Assert.Contains(alternate.ManagementProvider, new[] { "ConfigurationManager", "Rmm", "BigFix", "Puppet", "Ansible" });
+            Assert.Equal("Supported", alternate.DeploymentCapability);
+        });
     }
 
     [Fact]
@@ -720,9 +916,8 @@ public sealed class RepresentativeManagementObservationTests
         var installedOn = world.RelationshipHistoryObservations
             .Where(observation => observation.RelationshipType == "InstalledOn")
             .ToArray();
-        Assert.Equal(2, installedOn.Length);
+        Assert.Single(installedOn);
         Assert.Contains(installedOn, observation => observation.LifecycleState == "Active");
-        Assert.Contains(installedOn, observation => observation.LifecycleState == "Removed");
         Assert.All(installedOn, observation =>
         {
             Assert.Equal("APP-001", observation.FromEntityId);
@@ -736,7 +931,7 @@ public sealed class RepresentativeManagementObservationTests
     }
 
     [Fact]
-    public void WorldGenerator_ProducesOrderedNeutralCorrectionHistory()
+    public void WorldGenerator_ProducesSeparateCurrentAndRetiredRelationshipEvidence()
     {
         var world = Generate(includeRepresentativeFacts: true).World;
 
@@ -756,15 +951,27 @@ public sealed class RepresentativeManagementObservationTests
             })
             .ToArray();
         Assert.NotEmpty(relationshipGroups);
+        Assert.Contains(world.RelationshipHistoryObservations, observation =>
+            observation.RelationshipType == "InstalledOn" && observation.LifecycleState == "Active");
+        Assert.Contains(world.RelationshipHistoryObservations, observation =>
+            observation.RelationshipType == "InstalledOn" && observation.LifecycleState == "Removed");
+        Assert.Contains(world.RelationshipHistoryObservations, observation =>
+            observation.RelationshipType == "Owns" && observation.LifecycleState == "Active");
+        Assert.Contains(world.RelationshipHistoryObservations, observation =>
+            observation.RelationshipType == "Owns" && observation.LifecycleState == "Removed");
         Assert.All(relationshipGroups, group =>
         {
-            var history = group.OrderBy(observation => observation.ObservedAtUtc).ToArray();
-            var removedRelationship = Assert.Single(history, observation => observation.LifecycleState == "Removed");
-            var restoredRelationship = Assert.Single(history, observation => observation.LifecycleState == "Active");
-            Assert.True(removedRelationship.ObservedAtUtc < removedRelationship.RemovedAtUtc);
-            Assert.True(removedRelationship.RemovedAtUtc < restoredRelationship.ObservedAtUtc);
-            Assert.Null(restoredRelationship.RemovedAtUtc);
-            Assert.Same(restoredRelationship, history[^1]);
+            var history = Assert.Single(group);
+            if (history.LifecycleState == "Removed")
+            {
+                Assert.NotNull(history.RemovedAtUtc);
+                Assert.True(history.ObservedAtUtc < history.RemovedAtUtc);
+            }
+            else
+            {
+                Assert.Equal("Active", history.LifecycleState);
+                Assert.Null(history.RemovedAtUtc);
+            }
         });
 
         Assert.Equal(
@@ -1003,7 +1210,9 @@ public sealed class RepresentativeManagementObservationTests
         int representativeHistoryObservationCount = 1,
         int seed = 1130,
         int companyCount = 1,
-        int managementObservationPopulationCoveragePercentage = 0)
+        int managementObservationPopulationCoveragePercentage = 0,
+        bool includeConfigurationManagement = false,
+        CatalogSet? catalogs = null)
     {
         using var services = new ServiceCollection()
             .AddSyntheticEnterpriseCore()
@@ -1019,17 +1228,90 @@ public sealed class RepresentativeManagementObservationTests
                     representativeObservationCount,
                     representativeHistoryObservationCount,
                     companyCount,
-                    managementObservationPopulationCoveragePercentage),
+                    managementObservationPopulationCoveragePercentage,
+                    includeConfigurationManagement),
             },
-            new CatalogSet());
+            catalogs ?? new CatalogSet());
     }
+
+    private static CatalogSet CreateManagementAgentCatalog()
+        => new()
+        {
+            CsvCatalogs = new Dictionary<string, IReadOnlyList<Dictionary<string, string?>>>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["software_catalog"] =
+                [
+                    SoftwareCatalogRow("CrowdStrike Falcon", "Security", "CrowdStrike", "7.2"),
+                    SoftwareCatalogRow("Tanium Client", "Security", "Tanium", "7.6"),
+                    SoftwareCatalogRow("SCCM Client", "Utility", "Microsoft", "5.00"),
+                    SoftwareCatalogRow("ServiceNow Agent", "Utility", "ServiceNow", "1.0"),
+                ],
+            },
+        };
+
+    private static Dictionary<string, string?> SoftwareCatalogRow(
+        string name,
+        string category,
+        string vendor,
+        string version)
+        => new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Name"] = name,
+            ["Category"] = category,
+            ["Vendor"] = vendor,
+            ["Version"] = version,
+        };
+
+    private static IEnumerable<string> InstalledSoftware(
+        SyntheticEnterpriseWorld world,
+        string endpointType,
+        string endpointId)
+        => endpointType == "Device"
+            ? world.DeviceSoftwareInstallations
+                .Where(installation => installation.DeviceId == endpointId)
+                .Select(installation => installation.SoftwareId)
+            : world.ServerSoftwareInstallations
+                .Where(installation => installation.ServerId == endpointId)
+                .Select(installation => installation.SoftwareId);
+
+    private static bool IsInstalled(
+        SyntheticEnterpriseWorld world,
+        string endpointType,
+        string endpointId,
+        string softwareId)
+        => InstalledSoftware(world, endpointType, endpointId)
+            .Contains(softwareId, StringComparer.Ordinal);
+
+    private static object ProjectManagementAgentInventory(SyntheticEnterpriseWorld world)
+        => new
+        {
+            Observations = world.ManagementObservations
+                .OrderBy(observation => observation.Id, StringComparer.Ordinal)
+                .Select(observation => new
+                {
+                    observation.Id,
+                    observation.EndpointType,
+                    observation.EndpointId,
+                    observation.ManagementProvider,
+                    observation.AgentSoftwareId,
+                    observation.RegistrationState,
+                    observation.DeploymentCapability,
+                }),
+            DeviceInstallations = world.DeviceSoftwareInstallations
+                .OrderBy(installation => installation.Id, StringComparer.Ordinal)
+                .Select(installation => new { installation.DeviceId, installation.SoftwareId }),
+            ServerInstallations = world.ServerSoftwareInstallations
+                .OrderBy(installation => installation.Id, StringComparer.Ordinal)
+                .Select(installation => new { installation.ServerId, installation.SoftwareId }),
+        };
 
     private static ScenarioDefinition CreateScenario(
         bool includeRepresentativeFacts,
         int representativeObservationCount,
         int representativeHistoryObservationCount,
         int companyCount,
-        int managementObservationPopulationCoveragePercentage = 0)
+        int managementObservationPopulationCoveragePercentage = 0,
+        bool includeConfigurationManagement = false)
     {
         return new ScenarioDefinition
         {
@@ -1052,6 +1334,10 @@ public sealed class RepresentativeManagementObservationTests
                 BaseApplicationCount = 6,
                 IncludeLineOfBusinessApplications = true,
                 IncludeSaaSApplications = true,
+            },
+            Cmdb = new CmdbProfile
+            {
+                IncludeConfigurationManagement = includeConfigurationManagement,
             },
             Companies = Enumerable.Range(1, companyCount)
                 .Select(index => new ScenarioCompanyDefinition

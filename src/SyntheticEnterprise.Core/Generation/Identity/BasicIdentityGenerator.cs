@@ -35,6 +35,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     public void GenerateIdentity(SyntheticEnterpriseWorld world, GenerationContext context, CatalogSet catalogs)
     {
         using var passwordRandomScope = UsePasswordRandom(context.Seed);
+        var legacyIdentifierCompanyId = SelectLegacyDirectoryIdentifierCompanyId(
+            world.People,
+            context.Scenario.Identity.LegacyDirectoryIdentifierVariantCount);
 
         foreach (var company in world.Companies)
         {
@@ -70,7 +73,18 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 world.Accounts.AddRange(builtInAccounts);
             }
 
-            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, companyOffices, ous, rootDomain, issuedPasswords, issuedSamAccountNames);
+            var peopleAccounts = CreateUserAccounts(
+                company,
+                companyPeople,
+                companyDepartments,
+                companyOffices,
+                ous,
+                rootDomain,
+                issuedPasswords,
+                issuedSamAccountNames,
+                string.Equals(company.Id, legacyIdentifierCompanyId, StringComparison.Ordinal)
+                    ? context.Scenario.Identity.LegacyDirectoryIdentifierVariantCount
+                    : 0);
             world.Accounts.AddRange(peopleAccounts);
             foreach (var upn in peopleAccounts
                          .Select(account => account.UserPrincipalName)
@@ -2149,7 +2163,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         string rootDomain,
         HashSet<string> issuedPasswords,
-        ISet<string> issuedSamAccountNames)
+        ISet<string> issuedSamAccountNames,
+        int legacyDirectoryIdentifierVariantCount)
     {
         var usersOu = ous.First(o => o.Name == "Employees");
         var officeNamesById = offices.ToDictionary(office => office.Id, office => office.City, StringComparer.OrdinalIgnoreCase);
@@ -2162,6 +2177,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             .GroupBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
         var departmentNamesById = departments.ToDictionary(d => d.Id, d => d.Name, StringComparer.OrdinalIgnoreCase);
+        var legacyEmployeeIdsByOwnerId = BuildLegacyDirectoryEmployeeIds(
+            people,
+            legacyDirectoryIdentifierVariantCount);
 
         return people.Select(person =>
         {
@@ -2194,7 +2212,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 Enabled = true,
                 Privileged = false,
                 MfaEnabled = true,
-                EmployeeId = person.EmployeeId,
+                EmployeeId = legacyEmployeeIdsByOwnerId.GetValueOrDefault(person.Id, person.EmployeeId),
                 GeneratedPassword = CreateUniquePassword(issuedPasswords),
                 PasswordProfile = "EmployeeStandard",
                 AdministrativeTier = null,
@@ -2211,6 +2229,63 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             };
         }).ToList();
     }
+
+    private static IReadOnlyDictionary<string, string> BuildLegacyDirectoryEmployeeIds(
+        IReadOnlyList<Person> people,
+        int requestedCount)
+    {
+        if (requestedCount <= 0)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var eligiblePeople = people
+            .Where(IsEligibleForLegacyDirectoryIdentifier)
+            .OrderBy(person => person.EmployeeId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(person => person.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (eligiblePeople.Length < 2)
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var boundedCount = Math.Min(
+            Math.Clamp(requestedCount, 0, IdentityProfile.MaximumLegacyDirectoryIdentifierVariantCount),
+            eligiblePeople.Length);
+        var variants = new Dictionary<string, string>(boundedCount, StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < boundedCount; index++)
+        {
+            var owner = eligiblePeople[index];
+            var identifierSource = eligiblePeople[(index + 1) % eligiblePeople.Length];
+            variants[owner.Id] = $"OLD{identifierSource.EmployeeId}";
+        }
+
+        return variants;
+    }
+
+    private static string? SelectLegacyDirectoryIdentifierCompanyId(
+        IReadOnlyList<Person> people,
+        int requestedCount)
+    {
+        if (requestedCount <= 0)
+        {
+            return null;
+        }
+
+        return people
+            .Where(IsEligibleForLegacyDirectoryIdentifier)
+            .GroupBy(person => person.CompanyId, StringComparer.Ordinal)
+            .Select(group => new { CompanyId = group.Key, EligibleCount = group.Count() })
+            .OrderByDescending(candidate => candidate.EligibleCount)
+            .ThenBy(candidate => candidate.CompanyId, StringComparer.Ordinal)
+            .Select(candidate => candidate.CompanyId)
+            .FirstOrDefault();
+    }
+
+    private static bool IsEligibleForLegacyDirectoryIdentifier(Person person)
+        => !string.IsNullOrWhiteSpace(person.EmployeeId)
+           && person.EmployeeId.Length >= 4
+           && char.IsDigit(person.EmployeeId[0]);
 
     private List<DirectoryAccount> CreateBuiltInAccounts(
         Company company,

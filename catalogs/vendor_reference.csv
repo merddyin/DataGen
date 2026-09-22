@@ -12,7 +12,6 @@ FedEx,Logistics,LogisticsProvider,Medium,All,Operations|Procurement,50,fedex.com
 UPS,Logistics,LogisticsProvider,Medium,All,Operations|Procurement,50,ups.com
 ADP,Payroll Services,SharedServiceProvider,High,All,Finance|Human Resources,100,adp.com
 UKG,Workforce Technology,SharedServiceProvider,High,All,Human Resources|Information Technology,250,ukg.com
-Accenture,Professional Services,ManagedServiceProvider,Medium,All,Information Technology|Operations,250,accenture.com
 Deloitte,Professional Services,ManagedServiceProvider,Medium,All,Finance|Information Technology,250,deloitte.com
 Kyndryl,Managed Infrastructure,ManagedServiceProvider,Medium,All,Information Technology|Operations,500,kyndryl.com
 CDW,Technology Reseller,TechnologySupplier,Medium,All,Information Technology|Procurement,100,cdw.com
