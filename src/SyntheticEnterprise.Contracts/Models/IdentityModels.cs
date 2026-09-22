@@ -35,6 +35,27 @@ public record DirectoryAccount
     public string? PersonId { get; init; }
     public string AccountType { get; init; } = "User";
     public string DisplayName { get; init; } = "";
+
+    /// <summary>
+    /// Raw given name held on the directory object. Populated only for accounts that stand for a
+    /// person; built-in, service, shared mailbox and machine accounts leave this null because such
+    /// objects have no given name.
+    /// </summary>
+    public string? GivenName { get; init; }
+
+    /// <summary>
+    /// Raw surname held on the directory object. Populated only for accounts that stand for a
+    /// person; built-in, service, shared mailbox and machine accounts leave this null because such
+    /// objects have no surname.
+    /// </summary>
+    public string? Surname { get; init; }
+
+    /// <summary>
+    /// Free-text description attribute held on the directory object, stating the purpose the
+    /// object serves. Populated for every account class.
+    /// </summary>
+    public string? Description { get; init; }
+
     public string SamAccountName { get; init; } = "";
     public string UserPrincipalName { get; init; } = "";
     public string? Mail { get; init; }

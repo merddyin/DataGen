@@ -18,6 +18,11 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
 
     public void GenerateOrganizations(SyntheticEnterpriseWorld world, GenerationContext context, CatalogSet catalogs)
     {
+        // User principal names are judged for duplicates across the whole world, so they must be
+        // issued across the whole world too: two companies whose names reduce to the same domain
+        // would otherwise mint the same principal twice.
+        var issuedUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (var companyDefinition in context.Scenario.Companies)
         {
             var primaryCountry = ResolvePrimaryCountry(companyDefinition.Countries);
@@ -46,7 +51,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
             var teams = CreateTeams(company, departments, companyDefinition, catalogs);
             world.Teams.AddRange(teams);
 
-            var people = CreatePeople(company, businessUnits, teams, departments, companyDefinition, catalogs);
+            var people = CreatePeople(company, businessUnits, teams, departments, companyDefinition, issuedUpns, catalogs);
             world.People.AddRange(people);
         }
     }
@@ -849,6 +854,7 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         IReadOnlyList<Team> teams,
         IReadOnlyList<Department> departments,
         ScenarioCompanyDefinition companyDefinition,
+        ISet<string> issuedUpns,
         CatalogSet catalogs)
     {
         var maleFirstNames = ReadGenderedReferenceNameCatalog(catalogs, "first_names_gendered", "Male", companyDefinition.Countries);
@@ -934,7 +940,6 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var domain = string.IsNullOrWhiteSpace(company.PrimaryDomain)
             ? BuildDomain(company.Name)
             : company.PrimaryDomain;
-        var issuedUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var issuedDisplayNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var departmentsById = departments.ToDictionary(department => department.Id, department => department, StringComparer.OrdinalIgnoreCase);
         var genderOffset = StableHash.GetIndex("organization.person.gender-offset", 2, company.Id);

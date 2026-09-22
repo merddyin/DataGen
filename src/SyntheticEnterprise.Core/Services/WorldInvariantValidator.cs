@@ -17,11 +17,35 @@ public sealed class WorldInvariantValidator : IWorldInvariantValidator
             errors,
             CountDuplicateValues(world.Accounts.Select(account => account.UserPrincipalName)),
             "duplicate directory account user principal names were generated.");
+        AppendIfPositive(
+            errors,
+            CountDuplicateValues(world.Accounts.Select(account => account.Mail)),
+            "duplicate directory account mail addresses were generated.");
+        AppendIfPositive(
+            errors,
+            CountAccountMailTakenByAnotherAccountUpn(world),
+            "directory account mail addresses collide with another account's user principal name.");
 
         return new WorldInvariantValidationResult
         {
             Errors = errors
         };
+    }
+
+    private static int CountAccountMailTakenByAnotherAccountUpn(SyntheticEnterpriseWorld world)
+    {
+        var upnOwners = world.Accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account.UserPrincipalName))
+            .GroupBy(account => account.UserPrincipalName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Select(account => account.Id).ToArray(), StringComparer.OrdinalIgnoreCase);
+
+        return world.Accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account.Mail))
+            .Where(account => upnOwners.TryGetValue(account.Mail!, out var owners)
+                              && owners.Any(ownerId => !string.Equals(ownerId, account.Id, StringComparison.OrdinalIgnoreCase)))
+            .Select(account => account.Mail!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
     }
 
     private static int CountDuplicateValues(IEnumerable<string?> values)

@@ -95,6 +95,7 @@ for ($index = 0; $index -lt $ScenarioPath.Count; $index++) {
         'configuration_item_count',
         'duplicate_person_upns',
         'duplicate_account_upns',
+        'duplicate_account_mail',
         'numbered_business_unit_names',
         'numbered_department_names',
         'numbered_team_names',
