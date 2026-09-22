@@ -7,6 +7,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Generation.Policy;
 
 public sealed class BasicIdentityGenerator : IIdentityGenerator
 {
@@ -617,7 +618,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Group", pawUsers?.Id, "SecurityFilterInclude", false, 1);
             AddAccessControlEvidence(world, company.Id, pawUsers?.Id, "Group", "Container", pawContainer.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Policy", pawPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
-            AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "BlockInheritance", "Allow", false, "ActiveDirectory", notes: "Privileged access OU with explicit inheritance block");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "ResetPassword", "Allow", false, "ActiveDirectory", notes: "Tier-0 delegated recovery on privileged workstation accounts");
         }
 
@@ -1569,7 +1569,273 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         ]);
         AddPolicyTarget(world, company.Id, networkFirewallPolicy.Id, "Container", workstationContainerId, "Linked", true, 59, true);
         AddPolicyTarget(world, company.Id, networkFirewallPolicy.Id, "Container", serverContainerId, "Linked", true, 60, true);
+
+        CreateWindowsCanonicalSecurityBaselines(world, company, activeDirectoryStoreId, workstationContainerId, serverContainerId, gpoEditorsGroupId);
     }
+
+    /// <summary>
+    /// Emits the two policy objects that carry Windows' own security vocabulary — the
+    /// privilege constants, audit subcategory display names and SDDL descriptors a
+    /// security template and a GPO audit backup actually contain — alongside, and without
+    /// disturbing, the friendly-named baselines above. The settings are keyed by the
+    /// canonical <c>UserRight:</c>, <c>Audit:</c>, <c>FileACL:</c> and <c>RegistryACL:</c>
+    /// forms carried in <see cref="PolicySettingRecord.PolicyPath"/>.
+    /// </summary>
+    private void CreateWindowsCanonicalSecurityBaselines(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string activeDirectoryStoreId,
+        string? workstationContainerId,
+        string? serverContainerId,
+        string? gpoEditorsGroupId)
+    {
+        var administrators = WindowsSecurityPolicyCatalog.Tier1Principals.Administrators;
+        var users = WindowsSecurityPolicyCatalog.Tier1Principals.Users;
+        var guests = WindowsSecurityPolicyCatalog.Tier1Principals.Guests;
+        var backupOperators = WindowsSecurityPolicyCatalog.Tier1Principals.BackupOperators;
+        var performanceLogUsers = WindowsSecurityPolicyCatalog.Tier1Principals.PerformanceLogUsers;
+        var remoteDesktopUsers = WindowsSecurityPolicyCatalog.Tier1Principals.RemoteDesktopUsers;
+        var authenticatedUsers = WindowsSecurityPolicyCatalog.Tier1Principals.AuthenticatedUsers;
+        var localService = WindowsSecurityPolicyCatalog.Tier1Principals.LocalService;
+        var networkService = WindowsSecurityPolicyCatalog.Tier1Principals.NetworkService;
+        var serviceLogons = WindowsSecurityPolicyCatalog.Tier2Principals.Service;
+        var localAccount = WindowsSecurityPolicyCatalog.Tier2Principals.LocalAccount;
+        var localAccountAdministrator = WindowsSecurityPolicyCatalog.Tier2Principals.LocalAccountAndMemberOfAdministratorsGroup;
+        var enterpriseDomainControllers = WindowsSecurityPolicyCatalog.Tier2Principals.EnterpriseDomainControllers;
+
+        var rootDomain = BuildRootDomain(company);
+        var netBiosName = WindowsSecurityPolicyCatalog.BuildNetBiosName(rootDomain);
+        var domainBackupOperators = QualifyGeneratedGroupPrincipal(world, company.Id, netBiosName, BackupOperatorsGroupName());
+        var domainServerRemoteDesktopUsers = QualifyGeneratedGroupPrincipal(world, company.Id, netBiosName, ServerRemoteDesktopUsersGroupName());
+
+        // "Log on as a service" and "Log on as a batch job" belong to the identities that
+        // actually run services and scheduled tasks, so they are drawn from the generated
+        // service accounts rather than from an administrative group.
+        var serviceAccountPrincipals = SelectServiceAccountPrincipals(world, company.Id, rootDomain, netBiosName, 4);
+        var serviceLogonPrincipals = serviceAccountPrincipals.Take(3).ToArray();
+        var batchLogonServiceAccount = serviceAccountPrincipals.Skip(3).FirstOrDefault() ?? "";
+
+        var securityTemplatePolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Security Template Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "SecurityTemplate",
+            "Privilege rights and object security descriptors in the vocabulary a security template export carries.",
+            activeDirectoryStoreId,
+            null);
+
+        (string Right, string Principals)[] privilegeRights =
+        [
+            (WindowsSecurityPolicyCatalog.DenyRights.NetworkLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(guests, localAccountAdministrator)),
+            (WindowsSecurityPolicyCatalog.DenyRights.InteractiveLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(guests, localAccountAdministrator)),
+            (WindowsSecurityPolicyCatalog.DenyRights.BatchLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(guests)),
+            (WindowsSecurityPolicyCatalog.DenyRights.ServiceLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(guests)),
+            (WindowsSecurityPolicyCatalog.DenyRights.RemoteInteractiveLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(guests, localAccount)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Debug, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Backup, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, backupOperators, domainBackupOperators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Restore, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, backupOperators, domainBackupOperators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.TakeOwnership, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.LoadDriver, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Security, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.SystemTime, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, localService)),
+            (WindowsSecurityPolicyCatalog.GrantRights.RemoteShutdown, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Shutdown, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, users)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Impersonate, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, localService, networkService, serviceLogons)),
+            (WindowsSecurityPolicyCatalog.GrantRights.CreateGlobal, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, localService, networkService, serviceLogons)),
+            (WindowsSecurityPolicyCatalog.GrantRights.AssignPrimaryToken, WindowsSecurityPolicyCatalog.JoinPrincipals(localService, networkService)),
+            (WindowsSecurityPolicyCatalog.GrantRights.IncreaseQuota, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, localService, networkService)),
+            (WindowsSecurityPolicyCatalog.GrantRights.SystemEnvironment, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.ManageVolume, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.ProfileSingleProcess, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.SystemProfile, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.CreatePagefile, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.CreateSymbolicLink, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.IncreaseBasePriority, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators)),
+            (WindowsSecurityPolicyCatalog.GrantRights.EnableDelegation, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, enterpriseDomainControllers)),
+            (WindowsSecurityPolicyCatalog.GrantRights.Audit, WindowsSecurityPolicyCatalog.JoinPrincipals(localService, networkService)),
+            (WindowsSecurityPolicyCatalog.GrantRights.NetworkLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, authenticatedUsers)),
+            (WindowsSecurityPolicyCatalog.GrantRights.InteractiveLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, users)),
+            (WindowsSecurityPolicyCatalog.GrantRights.RemoteInteractiveLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, remoteDesktopUsers, domainServerRemoteDesktopUsers)),
+            (WindowsSecurityPolicyCatalog.GrantRights.ServiceLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(serviceLogonPrincipals)),
+            (WindowsSecurityPolicyCatalog.GrantRights.BatchLogon, WindowsSecurityPolicyCatalog.JoinPrincipals(administrators, backupOperators, performanceLogUsers, batchLogonServiceAccount)),
+            (WindowsSecurityPolicyCatalog.GrantRights.CreateToken, ""),
+            (WindowsSecurityPolicyCatalog.GrantRights.Tcb, ""),
+            (WindowsSecurityPolicyCatalog.GrantRights.LockMemory, ""),
+            (WindowsSecurityPolicyCatalog.GrantRights.CreatePermanent, ""),
+            (WindowsSecurityPolicyCatalog.GrantRights.Relabel, ""),
+            (WindowsSecurityPolicyCatalog.GrantRights.TrustedCredManAccess, "")
+        ];
+        foreach (var (right, principals) in privilegeRights)
+        {
+            AddPolicySetting(
+                world,
+                company.Id,
+                securityTemplatePolicy.Id,
+                right,
+                WindowsSecurityPolicyCatalog.UserRightsAssignmentCategory,
+                "String",
+                principals,
+                sourceReference: "Security template [Privilege Rights]",
+                policyPath: WindowsSecurityPolicyCatalog.BuildUserRightKey(right));
+        }
+
+        (string Path, string Sddl)[] fileSecurityDescriptors =
+        [
+            (WindowsSecurityPolicyCatalog.FileAclPaths.SystemConfig, WindowsSecurityPolicyCatalog.SecurityDescriptors.ProtectedSystemDirectory),
+            (WindowsSecurityPolicyCatalog.FileAclPaths.SystemDrivers, WindowsSecurityPolicyCatalog.SecurityDescriptors.InheritedSystemDirectory),
+            (WindowsSecurityPolicyCatalog.FileAclPaths.ProgramFiles, WindowsSecurityPolicyCatalog.SecurityDescriptors.AdministratorOwnedDirectory)
+        ];
+        foreach (var (path, sddl) in fileSecurityDescriptors)
+        {
+            AddPolicySetting(
+                world,
+                company.Id,
+                securityTemplatePolicy.Id,
+                path,
+                WindowsSecurityPolicyCatalog.FileSecurityCategory,
+                "String",
+                sddl,
+                sourceReference: "Security template [File Security]",
+                policyPath: WindowsSecurityPolicyCatalog.BuildFileAclKey(path));
+        }
+
+        (string Key, string Sddl)[] registrySecurityDescriptors =
+        [
+            (WindowsSecurityPolicyCatalog.RegistryAclKeys.Services, WindowsSecurityPolicyCatalog.SecurityDescriptors.InheritedSystemDirectory),
+            (WindowsSecurityPolicyCatalog.RegistryAclKeys.Policies, WindowsSecurityPolicyCatalog.SecurityDescriptors.ProtectedSystemDirectory)
+        ];
+        foreach (var (registryKey, sddl) in registrySecurityDescriptors)
+        {
+            AddPolicySetting(
+                world,
+                company.Id,
+                securityTemplatePolicy.Id,
+                registryKey,
+                WindowsSecurityPolicyCatalog.RegistryKeysCategory,
+                "String",
+                sddl,
+                sourceReference: "Security template [Registry Keys]",
+                policyPath: WindowsSecurityPolicyCatalog.BuildRegistryAclKey(registryKey));
+        }
+
+        AddPolicyTarget(world, company.Id, securityTemplatePolicy.Id, "Container", workstationContainerId, "Linked", true, 65, true);
+        AddPolicyTarget(world, company.Id, securityTemplatePolicy.Id, "Container", serverContainerId, "Linked", true, 66, true);
+        AddPolicyTarget(world, company.Id, securityTemplatePolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        var auditTemplatePolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Windows Advanced Audit Policy Template",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "AuditPolicy",
+            "Advanced audit subcategories and inclusion settings in the vocabulary a Group Policy audit backup carries.",
+            activeDirectoryStoreId,
+            null);
+
+        var noAuditing = WindowsSecurityPolicyCatalog.AuditValues.NoAuditing;
+        var success = WindowsSecurityPolicyCatalog.AuditValues.Success;
+        var failure = WindowsSecurityPolicyCatalog.AuditValues.Failure;
+        var successAndFailure = WindowsSecurityPolicyCatalog.AuditValues.SuccessAndFailure;
+
+        (string Subcategory, string InclusionSetting)[] auditSubcategories =
+        [
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.CredentialValidation, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.KerberosAuthenticationService, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.KerberosServiceTicketOperations, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.ComputerAccountManagement, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.OtherAccountManagementEvents, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecurityGroupManagement, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.UserAccountManagement, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DirectoryServiceAccess, failure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DirectoryServiceChanges, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.AccountLockout, failure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.GroupMembership, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.Logon, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.Logoff, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SpecialLogon, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.OtherLogonLogoffEvents, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DetailedFileShare, failure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.FileShare, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.FileSystem, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.Registry, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.RemovableStorage, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.OtherObjectAccessEvents, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.PnpActivity, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.ProcessCreation, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.ProcessTermination, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.AuditPolicyChange, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.AuthenticationPolicyChange, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.AuthorizationPolicyChange, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.MpsSvcRuleLevelPolicyChange, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.OtherPolicyChangeEvents, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SensitivePrivilegeUse, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.OtherSystemEvents, successAndFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecurityStateChange, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecuritySystemExtension, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SystemIntegrity, successAndFailure)
+        ];
+        foreach (var (subcategory, inclusionSetting) in auditSubcategories)
+        {
+            AddPolicySetting(
+                world,
+                company.Id,
+                auditTemplatePolicy.Id,
+                subcategory,
+                WindowsSecurityPolicyCatalog.AuditPolicyCategory,
+                "String",
+                inclusionSetting,
+                sourceReference: "Group Policy audit backup audit.csv",
+                policyPath: WindowsSecurityPolicyCatalog.BuildAuditKey(subcategory));
+        }
+
+        AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Container", workstationContainerId, "Linked", true, 67, true);
+        AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Container", serverContainerId, "Linked", true, 68, true);
+        AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+    }
+
+    /// <summary>
+    /// Renders a generated group as the domain-qualified principal a collection reports,
+    /// or an empty string when the scenario did not generate it. A
+    /// <see cref="DirectoryGroup"/> carries no separate logon name, so its
+    /// <see cref="DirectoryGroup.Name"/> is used, matching directories where a group's
+    /// logon name equals its common name.
+    /// </summary>
+    private static string QualifyGeneratedGroupPrincipal(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string netBiosName,
+        string groupName)
+    {
+        var group = FindGroup(world.Groups, companyId, groupName);
+        return group is null
+            ? ""
+            : WindowsSecurityPolicyCatalog.QualifyDomainPrincipal(netBiosName, group.Name);
+    }
+
+    /// <summary>
+    /// Selects the first generated service accounts of a company by ordinal logon name,
+    /// rendered as domain-qualified principals. Ordering by name rather than by
+    /// generation order keeps the choice stable no matter how the accounts were
+    /// assembled; a company with fewer service accounts simply yields fewer principals.
+    /// </summary>
+    private static string[] SelectServiceAccountPrincipals(
+        SyntheticEnterpriseWorld world,
+        string companyId,
+        string rootDomain,
+        string netBiosName,
+        int count)
+        => world.Accounts
+            .Where(account => account.CompanyId == companyId
+                && string.Equals(account.AccountType, "Service", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(account.Domain, rootDomain, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(account.SamAccountName))
+            .OrderBy(account => account.SamAccountName, StringComparer.Ordinal)
+            .Take(count)
+            .Select(account => WindowsSecurityPolicyCatalog.QualifyDomainPrincipal(netBiosName, account.SamAccountName))
+            .ToArray();
 
     private void CreateBrowserAndOfficeBenchmarkPolicies(
         SyntheticEnterpriseWorld world,
@@ -4115,37 +4381,21 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string environmentRole = "Source",
         string status = "Enabled")
     {
-        var existing = world.Policies.FirstOrDefault(policy =>
-            policy.CompanyId == companyId
-            && string.Equals(policy.Name, name, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.PolicyType, policyType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.Platform, platform, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
-        {
-            return existing;
-        }
-
-        var policy = new PolicyRecord
-        {
-            Id = _idFactory.Next("POL"),
-            CompanyId = companyId,
-            PolicyGuid = CreateStableGuid(companyId, name, policyType, platform, category),
-            Name = name,
-            PolicyType = policyType,
-            Platform = platform,
-            Category = category,
-            Environment = "Production",
-            EnvironmentRole = environmentRole,
-            Status = status,
-            Description = description,
-            IdentityStoreId = identityStoreId,
-            CloudTenantId = cloudTenantId,
-            SourceEntityType = sourceEntityType,
-            SourceEntityId = sourceEntityId
-        };
-        world.Policies.Add(policy);
-        return policy;
+        return PolicyEmitter.EnsurePolicy(
+            world,
+            _idFactory,
+            companyId,
+            name,
+            policyType,
+            platform,
+            category,
+            description,
+            identityStoreId,
+            cloudTenantId,
+            sourceEntityType,
+            sourceEntityId,
+            environmentRole,
+            status);
     }
 
     private void AddPolicySetting(
@@ -4163,15 +4413,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string? registryPath = null,
         string environmentRole = "Source")
     {
-        if (world.PolicySettings.Any(setting =>
-                setting.CompanyId == companyId
-                && string.Equals(setting.PolicyId, policyId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(setting.SettingName, settingName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(setting.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
         var metadata = ResolvePolicySettingMetadata(
             world,
             companyId,
@@ -4180,27 +4421,22 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             settingCategory,
             policyPath,
             registryPath);
-        var source = ResolvePolicySettingSource(world, policyId, settingCategory, metadata.PolicyPath, metadata.RegistryPath);
-        var behavior = ResolvePolicySettingBehavior(settingCategory, metadata.PolicyPath, metadata.RegistryPath);
 
-        world.PolicySettings.Add(new PolicySettingRecord
-        {
-            Id = _idFactory.Next("PST"),
-            CompanyId = companyId,
-            PolicyId = policyId,
-            SettingName = settingName,
-            SettingCategory = settingCategory,
-            PolicyPath = metadata.PolicyPath,
-            RegistryPath = metadata.RegistryPath,
-            ValueType = valueType,
-            ConfiguredValue = configuredValue,
-            Source = source,
-            Behavior = behavior,
-            EnvironmentRole = environmentRole,
-            IsLegacy = isLegacy,
-            IsConflicting = isConflicting,
-            SourceReference = sourceReference
-        });
+        PolicyEmitter.AddResolvedPolicySetting(
+            world,
+            _idFactory,
+            companyId,
+            policyId,
+            settingName,
+            settingCategory,
+            valueType,
+            configuredValue,
+            metadata.PolicyPath,
+            metadata.RegistryPath,
+            isLegacy,
+            isConflicting,
+            sourceReference,
+            environmentRole);
     }
 
     private void AddPolicyTarget(
@@ -4302,83 +4538,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         var fallbackRegistryPath = BuildCustomPolicyRegistryPath(company, IsUserScopedPolicySetting(policy, settingCategory, settingName), policy.Name, settingCategory, settingName);
         return (fallbackRegistryPath, fallbackRegistryPath);
-    }
-
-    private static string ResolvePolicySettingSource(
-        SyntheticEnterpriseWorld world,
-        string policyId,
-        string settingCategory,
-        string policyPath,
-        string? registryPath)
-    {
-        var policy = world.Policies.FirstOrDefault(candidate =>
-            string.Equals(candidate.Id, policyId, StringComparison.OrdinalIgnoreCase));
-        if (policy is null)
-        {
-            return "CustomProfile";
-        }
-
-        if (string.Equals(policy.Platform, "Intune", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy.PolicyType, "IntuneConfigurationProfile", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy.PolicyType, "IntuneCompliancePolicy", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy.Platform, "EntraID", StringComparison.OrdinalIgnoreCase))
-        {
-            return "CustomProfile";
-        }
-
-        if (string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase))
-        {
-            return "AuditCsv";
-        }
-
-        if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
-            || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase))
-        {
-            return "SecTemplate";
-        }
-
-        if (string.Equals(settingCategory, "DriveMappings", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "Printers", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "Shortcuts", StringComparison.OrdinalIgnoreCase))
-        {
-            return "GPP";
-        }
-
-        if (!string.IsNullOrWhiteSpace(registryPath) || policyPath.Contains("Administrative Templates", StringComparison.OrdinalIgnoreCase))
-        {
-            return "GPO";
-        }
-
-        return "CustomProfile";
-    }
-
-    private static string ResolvePolicySettingBehavior(
-        string settingCategory,
-        string policyPath,
-        string? registryPath)
-    {
-        if (!string.IsNullOrWhiteSpace(registryPath))
-        {
-            return registryPath.Contains("\\Policies\\", StringComparison.OrdinalIgnoreCase)
-                ? "BlueDot"
-                : "RedDot";
-        }
-
-        if (policyPath.Contains("Administrative Templates", StringComparison.OrdinalIgnoreCase))
-        {
-            return "BlueDot";
-        }
-
-        if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
-            || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase))
-        {
-            return "RedDot";
-        }
-
-        return "Unknown";
     }
 
     private (string PolicyPath, string? RegistryPath) ResolveGroupPolicySettingMetadata(
@@ -4731,15 +4890,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             : company.PrimaryDomain.Replace(".", "_", StringComparison.OrdinalIgnoreCase);
 
         return $@"{rootHive}\Software\Policies\{vendorNode}\{Slug(policyName)}\{Slug(settingCategory)}\{Slug(settingName)}";
-    }
-
-    private static string CreateStableGuid(params string[] components)
-    {
-        var seed = string.Join("|", components.Where(component => !string.IsNullOrWhiteSpace(component)));
-        var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(seed));
-        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
-        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
-        return new Guid(bytes[..16]).ToString();
     }
 
     private void AddAccessControlEvidence(
@@ -5241,7 +5391,13 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         };
     }
 
-    private static string BuildRootDomain(Company company)
+    /// <summary>
+    /// Resolves the company's Active Directory root domain, falling back to a name-derived
+    /// domain when the scenario supplied none. Exposed to the assembly because the
+    /// per-endpoint effective-configuration generator must derive the same NetBIOS prefix
+    /// the canonical baselines used, and deriving it twice would let the two sides drift.
+    /// </summary>
+    internal static string BuildRootDomain(Company company)
     {
         if (!string.IsNullOrWhiteSpace(company.PrimaryDomain))
         {

@@ -985,6 +985,35 @@ public sealed class ScenarioValidator : IScenarioValidator
                 $"CMDB deviation profile override must be one of: {string.Join(", ", ScenarioDeviationProfiles.All)}."));
         }
 
+        var effectiveSecurityConfigurationEndpointCount = resolved.Infrastructure.EffectiveSecurityConfigurationEndpointCount;
+        if (effectiveSecurityConfigurationEndpointCount < 0
+            || effectiveSecurityConfigurationEndpointCount > InfrastructureProfile.MaximumEffectiveSecurityConfigurationEndpointCount)
+        {
+            messages.Add(new ScenarioValidationMessage(
+                "infrastructure-effective-security-configuration-count",
+                ScenarioValidationSeverity.Error,
+                "$.infrastructure.effectiveSecurityConfigurationEndpointCount",
+                $"EffectiveSecurityConfigurationEndpointCount must be between 0 and {InfrastructureProfile.MaximumEffectiveSecurityConfigurationEndpointCount}."));
+        }
+
+        // Endpoints are never invented, so the option is only feasible where the scenario
+        // actually generates Windows endpoints, and where the largest company is big enough
+        // to supply them: workstation population is derived from a company's headcount.
+        var largestCompanyPopulation = resolved.Companies
+            .Select(company => company.EmployeeCount)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (effectiveSecurityConfigurationEndpointCount > 0
+            && ((!resolved.Infrastructure.IncludeWorkstations && !resolved.Infrastructure.IncludeServers)
+                || effectiveSecurityConfigurationEndpointCount > largestCompanyPopulation))
+        {
+            messages.Add(new ScenarioValidationMessage(
+                "infrastructure-effective-security-configuration-population",
+                ScenarioValidationSeverity.Error,
+                "$.infrastructure.effectiveSecurityConfigurationEndpointCount",
+                "The scenario must include workstations or servers, and the largest company must contain at least as many employees as the requested effective security configuration endpoints."));
+        }
+
         foreach (var company in resolved.Companies)
         {
             if (company.EmployeeCount <= 0)

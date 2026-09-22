@@ -4,6 +4,11 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 
 ## Changelog
 
+### v0.11.1
+
+- Repairs the portable release preflight so Git, tar, and .NET are resolved to validated full executable paths on the current host instead of assuming Windows installation paths.
+- Retains the v0.11.0 management-intelligence contract and prepares deterministic multi-company output for Cartograph's governed Duckburg regeneration.
+
 ### v0.11.0
 
 - added opt-in representative multi-management observations by operating-system and endpoint cohort, while retaining the legacy fixed per-company sample when the feature is not requested
@@ -264,8 +269,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.11.0 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.0\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.11.1 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.1\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world

@@ -2,6 +2,7 @@ namespace SyntheticEnterprise.Core.Generation;
 
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
+using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
 using SyntheticEnterprise.Core.Services;
 
@@ -122,6 +123,8 @@ public sealed class LayerProcessor : ILayerProcessor
                 staging.World.EndpointAdministrativeAssignments.Count > 0 ||
                 staging.World.EndpointPolicyBaselines.Count > 0 ||
                 staging.World.EndpointLocalGroupMembers.Count > 0;
+            var preserveExistingEffectiveSecurityConfiguration =
+                staging.World.Policies.Any(IsInfrastructureOwnedPolicy);
             ClearInfrastructureData(staging);
             if (preservedSoftwarePackages.Count > 0)
             {
@@ -154,6 +157,11 @@ public sealed class LayerProcessor : ILayerProcessor
                 staging.World.EndpointAdministrativeAssignments.Clear();
                 staging.World.EndpointPolicyBaselines.Clear();
                 staging.World.EndpointLocalGroupMembers.Clear();
+            }
+
+            if (preserveExistingEffectiveSecurityConfiguration)
+            {
+                RemoveInfrastructureOwnedPolicies(staging.World);
             }
 
             MergeInfrastructureLayerArtifacts(result, staging);
@@ -334,7 +342,8 @@ public sealed class LayerProcessor : ILayerProcessor
         input.World.Devices.Count > 0 ||
         input.World.Servers.Count > 0 ||
         input.World.NetworkAssets.Count > 0 ||
-        input.World.TelephonyAssets.Count > 0;
+        input.World.TelephonyAssets.Count > 0 ||
+        input.World.Policies.Any(IsInfrastructureOwnedPolicy);
 
     private static bool HasRepositoryData(GenerationResult input) =>
         input.World.Databases.Count > 0 ||
@@ -401,6 +410,37 @@ public sealed class LayerProcessor : ILayerProcessor
         target.World.EndpointPolicyBaselines.AddRange(generated.World.EndpointPolicyBaselines);
         target.World.EndpointLocalGroupMembers.AddRange(generated.World.EndpointLocalGroupMembers);
         target.World.InfrastructureAnomalies.AddRange(generated.World.InfrastructureAnomalies);
+
+        var generatedPolicies = generated.World.Policies.Where(IsInfrastructureOwnedPolicy).ToList();
+        var generatedPolicyIds = generatedPolicies
+            .Select(policy => policy.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        target.World.Policies.AddRange(generatedPolicies);
+        target.World.PolicySettings.AddRange(
+            generated.World.PolicySettings.Where(setting => generatedPolicyIds.Contains(setting.PolicyId)));
+    }
+
+    /// <summary>
+    /// Identifies the policy records the Infrastructure layer owns. The Identity layer
+    /// writes its Group Policy objects into the same collection, so every Infrastructure
+    /// probe, clear and merge selects on this predicate rather than on the collection.
+    /// </summary>
+    private static bool IsInfrastructureOwnedPolicy(PolicyRecord policy)
+        => string.Equals(policy.PolicyType, "LocalSecurityPolicy", StringComparison.OrdinalIgnoreCase);
+
+    private static void RemoveInfrastructureOwnedPolicies(SyntheticEnterpriseWorld world)
+    {
+        var removedPolicyIds = world.Policies
+            .Where(IsInfrastructureOwnedPolicy)
+            .Select(policy => policy.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (removedPolicyIds.Count == 0)
+        {
+            return;
+        }
+
+        world.Policies.RemoveAll(IsInfrastructureOwnedPolicy);
+        world.PolicySettings.RemoveAll(setting => removedPolicyIds.Contains(setting.PolicyId));
     }
 
     private static void MergeRepositoryLayerArtifacts(
@@ -422,6 +462,7 @@ public sealed class LayerProcessor : ILayerProcessor
 
     private static void ClearInfrastructureData(GenerationResult input)
     {
+        RemoveInfrastructureOwnedPolicies(input.World);
         input.World.Devices.Clear();
         input.World.Servers.Clear();
         input.World.NetworkAssets.Clear();

@@ -6,6 +6,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Generation.Policy;
 
 public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 {
@@ -57,6 +58,15 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                     context,
                     _idFactory,
                     context.Scenario.Infrastructure);
+            }
+
+            if (context.Scenario.Infrastructure is { EffectiveSecurityConfigurationEndpointCount: > 0 } infrastructure)
+            {
+                EffectiveSecurityConfigurationGenerator.Apply(
+                    world,
+                    company,
+                    _idFactory,
+                    infrastructure);
             }
         }
     }
@@ -1678,24 +1688,26 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         var devices = world.Devices.Where(d => d.CompanyId == company.Id).ToList();
         var servers = world.Servers.Where(s => s.CompanyId == company.Id).ToList();
         var crowdStrikeFalcon = companySoftware.FirstOrDefault(s => string.Equals(s.Name, "CrowdStrike Falcon", StringComparison.OrdinalIgnoreCase));
-        var universalDeviceAgents = companySoftware
-            .Where(IsUniversalManagedEndpointSoftware)
+        var universalDeviceSecuritySoftware = companySoftware
+            .Where(IsUniversalEndpointSecuritySoftware)
             .ToList();
-        var universalServerAgents = companySoftware
-            .Where(IsUniversalManagedServerSoftware)
+        var universalServerSecuritySoftware = companySoftware
+            .Where(IsUniversalServerSecuritySoftware)
             .ToList();
 
         var workstationDefaults = companySoftware
-            .Where(s => s.Category is "Productivity" or "Collaboration" or "Browser" or "Security" or "VPN" or "Utility")
+            .Where(s => s.Category is "Productivity" or "Collaboration" or "Browser" or "Security" or "VPN" or "Utility"
+                        && !ManagementAgentCatalog.IsKnownDeploymentAgent(s))
             .ToList();
 
         var serverDefaults = companySoftware
-            .Where(s => s.Category is "Database" or "Web" or "Backup" or "Security" or "Virtualization" or "Utility")
+            .Where(s => s.Category is "Database" or "Web" or "Backup" or "Security" or "Virtualization" or "Utility"
+                        && !ManagementAgentCatalog.IsKnownDeploymentAgent(s))
             .ToList();
 
         foreach (var device in devices)
         {
-            foreach (var software in universalDeviceAgents)
+            foreach (var software in universalDeviceSecuritySoftware)
             {
                 AddDeviceSoftwareInstallation(world, device.Id, software.Id);
             }
@@ -1722,7 +1734,7 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 
         foreach (var server in servers)
         {
-            foreach (var software in universalServerAgents)
+            foreach (var software in universalServerSecuritySoftware)
             {
                 AddServerSoftwareInstallation(world, server.Id, software.Id);
             }
@@ -1773,22 +1785,19 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
         });
     }
 
-    private static bool IsUniversalManagedEndpointSoftware(SoftwarePackage software)
+    private static bool IsUniversalEndpointSecuritySoftware(SoftwarePackage software)
     {
         var name = software.Name ?? string.Empty;
         return name.Contains("CrowdStrike", StringComparison.OrdinalIgnoreCase)
                || name.Contains("SentinelOne", StringComparison.OrdinalIgnoreCase)
                || name.Contains("Defender for Endpoint", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("Qualys Cloud Agent", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("Tanium Client", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("SCCM Client", StringComparison.OrdinalIgnoreCase)
-               || name.Contains("ServiceNow Agent", StringComparison.OrdinalIgnoreCase);
+               || name.Contains("Qualys Cloud Agent", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsUniversalManagedServerSoftware(SoftwarePackage software)
+    private static bool IsUniversalServerSecuritySoftware(SoftwarePackage software)
     {
         var name = software.Name ?? string.Empty;
-        return IsUniversalManagedEndpointSoftware(software)
+        return IsUniversalEndpointSecuritySoftware(software)
                || name.Contains("Windows Server Backup", StringComparison.OrdinalIgnoreCase)
                || name.Contains("VMware Tools", StringComparison.OrdinalIgnoreCase);
     }

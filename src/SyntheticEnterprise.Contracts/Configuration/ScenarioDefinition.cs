@@ -119,6 +119,22 @@ public record InfrastructureProfile
     /// </summary>
     public int RepresentativeManagementHistoryObservationCount { get; init; } = 1;
     public int HostedComputeObservationPercentage { get; init; } = 20;
+
+    /// <summary>
+    /// Upper bound on <see cref="EffectiveSecurityConfigurationEndpointCount"/>. The
+    /// families emitted per endpoint are large, so the option is bounded rather than
+    /// open-ended.
+    /// </summary>
+    public const int MaximumEffectiveSecurityConfigurationEndpointCount = 250;
+
+    /// <summary>
+    /// Number of Windows endpoints per company that report their effective local security
+    /// configuration — privilege rights, advanced audit subcategories and object security
+    /// descriptors in the vocabulary <c>secedit</c> and <c>auditpol</c> produce. Zero, the
+    /// default, emits none. A company holding fewer Windows endpoints than requested
+    /// reports on every endpoint it has; endpoints are never invented to reach the count.
+    /// </summary>
+    public int EffectiveSecurityConfigurationEndpointCount { get; init; }
 }
 
 public record RepositoryProfile

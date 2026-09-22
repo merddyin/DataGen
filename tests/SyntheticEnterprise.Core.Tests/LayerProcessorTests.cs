@@ -865,11 +865,91 @@ public sealed class LayerProcessorTests
         });
     }
 
-    private static ScenarioDefinition BuildScenario(string name, int employeeCount)
+    [Fact]
+    public void AddInfrastructureLayer_Preserves_Directory_Policies_And_Endpoint_Effective_Configuration_Counts()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        var generator = services.GetRequiredService<IWorldGenerator>();
+        var processor = services.GetRequiredService<ILayerProcessor>();
+        var result = generator.Generate(
+            new GenerationContext
+            {
+                Scenario = BuildScenario("Effective Configuration Layer Test", 260, effectiveSecurityConfigurationEndpointCount: 9)
+            },
+            new CatalogSet());
+
+        var originalEndpointPolicyCount = result.World.Policies.Count(IsEndpointPolicy);
+        var originalEndpointSettingCount = EndpointSettingCount(result.World);
+        var originalDirectoryPolicyCount = result.World.Policies.Count(policy => !IsEndpointPolicy(policy));
+        var originalDirectorySettingCount = result.World.PolicySettings.Count - originalEndpointSettingCount;
+        Assert.Equal(9, originalEndpointPolicyCount);
+        Assert.True(originalEndpointSettingCount > 0);
+
+        var replaced = processor.AddInfrastructureLayer(result, new LayerProcessingOptions
+        {
+            InfrastructureMode = LayerRegenerationMode.ReplaceLayer
+        });
+
+        Assert.Equal(originalEndpointPolicyCount, replaced.World.Policies.Count(IsEndpointPolicy));
+        Assert.Equal(originalEndpointSettingCount, EndpointSettingCount(replaced.World));
+        Assert.Equal(originalDirectoryPolicyCount, replaced.World.Policies.Count(policy => !IsEndpointPolicy(policy)));
+        Assert.Equal(originalDirectorySettingCount, replaced.World.PolicySettings.Count - EndpointSettingCount(replaced.World));
+        AssertEndpointPoliciesResolve(replaced);
+
+        var merged = processor.AddInfrastructureLayer(result, new LayerProcessingOptions
+        {
+            InfrastructureMode = LayerRegenerationMode.Merge
+        });
+
+        Assert.Equal(originalEndpointPolicyCount, merged.World.Policies.Count(IsEndpointPolicy));
+        Assert.Equal(originalEndpointSettingCount, EndpointSettingCount(merged.World));
+        Assert.Equal(originalDirectoryPolicyCount, merged.World.Policies.Count(policy => !IsEndpointPolicy(policy)));
+        Assert.Equal(originalDirectorySettingCount, merged.World.PolicySettings.Count - EndpointSettingCount(merged.World));
+        AssertEndpointPoliciesResolve(merged);
+    }
+
+    private static bool IsEndpointPolicy(PolicyRecord policy)
+        => string.Equals(policy.PolicyType, "LocalSecurityPolicy", StringComparison.OrdinalIgnoreCase);
+
+    private static int EndpointSettingCount(SyntheticEnterpriseWorld world)
+    {
+        var endpointPolicyIds = world.Policies
+            .Where(IsEndpointPolicy)
+            .Select(policy => policy.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return world.PolicySettings.Count(setting => endpointPolicyIds.Contains(setting.PolicyId));
+    }
+
+    private static void AssertEndpointPoliciesResolve(GenerationResult result)
+    {
+        Assert.All(result.World.Policies.Where(IsEndpointPolicy), policy =>
+        {
+            if (string.Equals(policy.SourceEntityType, "ServerAsset", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.Contains(result.World.Servers, server => server.Id == policy.SourceEntityId);
+            }
+            else
+            {
+                Assert.Contains(result.World.Devices, device => device.Id == policy.SourceEntityId);
+            }
+        });
+    }
+
+    private static ScenarioDefinition BuildScenario(
+        string name,
+        int employeeCount,
+        int effectiveSecurityConfigurationEndpointCount = 0)
     {
         return new ScenarioDefinition
         {
             Name = name,
+            Infrastructure = new InfrastructureProfile
+            {
+                EffectiveSecurityConfigurationEndpointCount = effectiveSecurityConfigurationEndpointCount
+            },
             ObservedData = new ObservedDataProfile
             {
                 IncludeObservedViews = true,

@@ -375,3 +375,7 @@ docs/DataGen_DTEnvDiscovery_Mapping_Matrix.md
 .dolt/
 *.db
 .beads-credential-key
+
+# beads runtime artifacts
+.beads/proxieddb/
+*.gate.lock*

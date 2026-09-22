@@ -217,18 +217,17 @@ internal static class RepresentativeManagementObservationGenerator
             var missingCount = OutlierCount(selected.Length, 1);
             var staleCount = OutlierCount(selected.Length, 2);
             var alternateCount = OutlierCount(selected.Length, 2);
+            var pairedAlternateEndpointKeys = selected
+                .Where(IsDirectoryBackedDevice)
+                .Skip(missingCount + staleCount)
+                .Take(alternateCount)
+                .Select(endpoint => endpoint.Key)
+                .ToHashSet(StringComparer.Ordinal);
 
             for (var index = 0; index < selected.Length; index++)
             {
                 var endpoint = selected[index];
                 var hostedFallback = hostedFallbackIds.Contains(endpoint.Key);
-                var profile = ResolvePopulationProfile(
-                    cohort.Key,
-                    index,
-                    missingCount,
-                    staleCount,
-                    alternateCount,
-                    hostedFallback);
                 var joinStateIndex = StableHash.GetIndex(
                     "endpoint-management-join-state",
                     4,
@@ -236,6 +235,43 @@ internal static class RepresentativeManagementObservationGenerator
                     company.Id,
                     endpoint.EndpointType,
                     endpoint.EndpointId);
+                var pairedAlternate = pairedAlternateEndpointKeys.Contains(endpoint.Key);
+                var profile = ResolvePopulationProfile(
+                    cohort.Key,
+                    index,
+                    missingCount,
+                    staleCount,
+                    alternateCount,
+                    hostedFallback);
+                var dominant = ResolveDominantProfile(cohort.Key);
+                if (pairedAlternate)
+                {
+                    // The preferred path is present but stale while another
+                    // supported provider is current on the same endpoint.
+                    // This is representative operational state, not a product
+                    // scenario marker or decision.
+                    AddObservation(
+                        world,
+                        idFactory,
+                        company.Id,
+                        endpoint.EndpointType,
+                        endpoint.EndpointId,
+                        endpoint.DeviceAccountId,
+                        endpoint.OperatingSystem,
+                        ResolveJoinState(endpoint.DomainJoined, endpoint.CloudDirectoryAccountId, joinStateIndex),
+                        cohort.Key,
+                        endpoint.IsHosted ? "HostedCompute" : "NonHosted",
+                        endpoint.HostingProvider,
+                        endpoint.IsHosted ? "Unknown" : "Unavailable",
+                        dominant with { CheckInAgeDays = 35, Confidence = 0.70m },
+                        context.GeneratedAt,
+                        software);
+                    profile = ResolveAlternateProfile(cohort.Key);
+                }
+                else if (string.Equals(profile.Provider, ResolveAlternateProfile(cohort.Key).Provider, StringComparison.OrdinalIgnoreCase))
+                {
+                    profile = dominant;
+                }
                 AddObservation(
                     world,
                     idFactory,
@@ -298,6 +334,11 @@ internal static class RepresentativeManagementObservationGenerator
         "WindowsServer" => new("BigFix", "BigFix Client", "Registered", "Supported", 3, 0.87m),
         _ => new("Puppet", "Puppet Agent", "Registered", "Supported", 3, 0.88m),
     };
+
+    private static bool IsDirectoryBackedDevice(PopulationEndpoint endpoint) =>
+        endpoint.EndpointType == "Device"
+        && endpoint.DomainJoined
+        && !string.IsNullOrWhiteSpace(endpoint.DeviceAccountId);
 
     private static string ResolveCohort(PopulationEndpoint endpoint)
     {
@@ -581,48 +622,177 @@ internal static class RepresentativeManagementObservationGenerator
         var installedServerIds = world.ServerSoftwareInstallations
             .Select(installation => installation.ServerId)
             .ToHashSet(StringComparer.Ordinal);
-        var candidate = world.ApplicationServiceHostings
+        var topologyCandidates = world.ApplicationServiceHostings
             .Where(hosting => hosting.CompanyId == company.Id
                               && string.Equals(hosting.HostType, "Server", StringComparison.OrdinalIgnoreCase)
                               && !string.IsNullOrWhiteSpace(hosting.HostId)
                               && services.TryGetValue(hosting.ApplicationServiceId, out _)
                               && servers.ContainsKey(hosting.HostId)
                               && installedServerIds.Contains(hosting.HostId))
-            .Select(hosting => new
-            {
-                Hosting = hosting,
-                Application = applications.GetValueOrDefault(services[hosting.ApplicationServiceId].ApplicationId),
-                Server = servers[hosting.HostId!]
-            })
+            .Select(hosting => new TopologyCandidate(
+                applications.GetValueOrDefault(services[hosting.ApplicationServiceId].ApplicationId),
+                servers[hosting.HostId!],
+                hosting.Id))
             .Where(item => item.Application is not null)
             .OrderBy(item => item.Application!.Id, StringComparer.Ordinal)
             .ThenBy(item => item.Server.Id, StringComparer.Ordinal)
-            .ThenBy(item => item.Hosting.Id, StringComparer.Ordinal)
-            .FirstOrDefault();
-        if (candidate?.Application is null)
+            .ThenBy(item => item.HostingId, StringComparer.Ordinal)
+            .ToArray();
+        var topologyTupleKeys = topologyCandidates
+            .Where(item => item.Application is not null)
+            .Select(item => $"{item.Application!.Id}\0{item.Server.Id}")
+            .ToHashSet(StringComparer.Ordinal);
+        var installedServers = servers.Values
+            .Where(server => installedServerIds.Contains(server.Id))
+            .OrderBy(server => server.Id, StringComparer.Ordinal)
+            .ToArray();
+        var historicalCandidates = installedServers.Length == 0
+            ? Enumerable.Empty<TopologyCandidate>()
+            : applications.Values
+                .OrderBy(application => application.Id, StringComparer.Ordinal)
+                .Select((application, index) => new TopologyCandidate(
+                    application,
+                    installedServers[(index + 1) % installedServers.Length],
+                    $"historical-{application.Id}"))
+                .Where(item => !topologyTupleKeys.Contains($"{item.Application!.Id}\0{item.Server.Id}"));
+        var candidates = SelectDistinctTopologyCandidates(topologyCandidates.Concat(historicalCandidates));
+        if (candidates.Count == 0)
         {
             return;
         }
 
-        AddRelationshipHistory("InstalledOn", "applications", candidate.Application.Id, "servers", candidate.Server.Id,
-            "ConfigurationManagement", "An inventory snapshot recorded this hosted application.", observedAt.AddDays(-7), null, "Active");
-        AddRelationshipHistory("InstalledOn", "applications", candidate.Application.Id, "servers", candidate.Server.Id,
-            "ConfigurationManagement", "A prior inventory snapshot recorded this hosted application.", observedAt.AddDays(-45), observedAt.AddDays(-20), "Removed");
+        // Keep current, retired-mapping, and retired-owner evidence on different
+        // application/server tuples so each reflects a real operational state.
+        var ownerableCurrent = candidates.FirstOrDefault(candidate => FindOwner(candidate.Application) is not null);
+        var current = ownerableCurrent.Application is not null ? ownerableCurrent : candidates[0];
+        AddInstalledOnHistory(current, "An inventory snapshot records this hosted application.", observedAt.AddDays(-7), null, "Active");
+        var currentOwner = FindOwner(current.Application);
+        if (currentOwner is not null)
+        {
+            AddOwnershipHistory(currentOwner, current.Application, "The current service catalog names this owner.", observedAt.AddDays(-7), null, "Active");
+        }
 
-        var owner = world.People
+        var retiredMappings = candidates
+            .Where(candidate => candidate.Application.Id != current.Application.Id
+                                && candidate.Server.Id != current.Server.Id
+                                && !topologyTupleKeys.Contains($"{candidate.Application.Id}\0{candidate.Server.Id}"))
+            .Take(3)
+            .ToArray();
+        foreach (var retiredMapping in retiredMappings)
+        {
+            AddInstalledOnHistory(retiredMapping, "A prior inventory snapshot recorded this hosted application.", observedAt.AddDays(-45), observedAt.AddDays(-20), "Removed");
+        }
+
+        var retiredOwner = candidates.FirstOrDefault(candidate =>
+            candidate.Application.Id != current.Application.Id
+            && candidate.Server.Id != current.Server.Id
+            && retiredMappings.All(mapping => mapping.Application.Id != candidate.Application.Id
+                                      && mapping.Server.Id != candidate.Server.Id)
+            && FindOwner(candidate.Application) is not null);
+        if (retiredOwner.Application is not null)
+        {
+            AddInstalledOnHistory(retiredOwner, "A current inventory snapshot records this hosted application.", observedAt.AddDays(-6), null, "Active");
+            var formerOwner = FindOwner(retiredOwner.Application);
+            if (formerOwner is not null)
+            {
+                AddOwnershipHistory(
+                    formerOwner,
+                    retiredOwner.Application,
+                    "A prior service catalog named this owner; the current catalog does not identify a replacement.",
+                    observedAt.AddDays(-90),
+                    observedAt.AddDays(-30),
+                    "Removed");
+                ClearCurrentOwnershipEvidence(retiredOwner.Application);
+            }
+        }
+
+        void ClearCurrentOwnershipEvidence(ApplicationRecord application)
+        {
+            var applicationIndex = world.Applications.FindIndex(candidate => candidate.Id == application.Id);
+            if (applicationIndex >= 0)
+            {
+                world.Applications[applicationIndex] = application with { OwnerDepartmentId = string.Empty };
+            }
+
+            for (var index = 0; index < world.ApplicationServices.Count; index++)
+            {
+                var service = world.ApplicationServices[index];
+                if (service.CompanyId == company.Id && service.ApplicationId == application.Id)
+                {
+                    world.ApplicationServices[index] = service with { OwnerTeamId = string.Empty };
+                }
+            }
+
+            world.AccessControlEvidence.RemoveAll(evidence =>
+                evidence.CompanyId == company.Id
+                && string.Equals(evidence.TargetType, "Application", StringComparison.OrdinalIgnoreCase)
+                && evidence.TargetId == application.Id
+                && evidence.RightName.EndsWith("Administration", StringComparison.OrdinalIgnoreCase));
+        }
+
+        List<(ApplicationRecord Application, ServerAsset Server)> SelectDistinctTopologyCandidates(
+            IEnumerable<TopologyCandidate> values)
+        {
+            var selected = new List<(ApplicationRecord Application, ServerAsset Server)>();
+            var applicationIds = new HashSet<string>(StringComparer.Ordinal);
+            var serverIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var value in values)
+            {
+                if (value.Application is not ApplicationRecord application
+                    || !applicationIds.Add(application.Id)
+                    || !serverIds.Add(value.Server.Id))
+                {
+                    continue;
+                }
+
+                selected.Add((application, value.Server));
+            }
+
+            return selected;
+        }
+
+        Person? FindOwner(ApplicationRecord application) => world.People
             .Where(person => person.CompanyId == company.Id
-                             && person.DepartmentId == candidate.Application.OwnerDepartmentId)
+                             && person.DepartmentId == application.OwnerDepartmentId)
             .OrderBy(person => person.Id, StringComparer.Ordinal)
             .FirstOrDefault();
-        if (owner is null)
-        {
-            return;
-        }
 
-        AddRelationshipHistory("Owns", "people", owner.Id, "applications", candidate.Application.Id,
-            "ServiceCatalog", "The current service catalog names this owner.", observedAt.AddDays(-7), null, "Active");
-        AddRelationshipHistory("Owns", "people", owner.Id, "applications", candidate.Application.Id,
-            "ServiceCatalog", "A prior service catalog named this owner.", observedAt.AddDays(-90), observedAt.AddDays(-30), "Removed");
+        void AddInstalledOnHistory(
+            (ApplicationRecord Application, ServerAsset Server) candidate,
+            string detail,
+            DateTimeOffset relationshipObservedAt,
+            DateTimeOffset? removedAtUtc,
+            string lifecycleState) =>
+            AddRelationshipHistory(
+                "InstalledOn",
+                "applications",
+                candidate.Application.Id,
+                "servers",
+                candidate.Server.Id,
+                "ConfigurationManagement",
+                detail,
+                relationshipObservedAt,
+                removedAtUtc,
+                lifecycleState);
+
+        void AddOwnershipHistory(
+            Person owner,
+            ApplicationRecord application,
+            string detail,
+            DateTimeOffset relationshipObservedAt,
+            DateTimeOffset? removedAtUtc,
+            string lifecycleState) =>
+            AddRelationshipHistory(
+                "Owns",
+                "people",
+                owner.Id,
+                "applications",
+                application.Id,
+                "ServiceCatalog",
+                detail,
+                relationshipObservedAt,
+                removedAtUtc,
+                lifecycleState);
 
         void AddRelationshipHistory(
             string relationshipType,
@@ -726,4 +896,9 @@ internal static class RepresentativeManagementObservationGenerator
     {
         public string Key => $"{EndpointType}|{EndpointId}";
     }
+
+    private sealed record TopologyCandidate(
+        ApplicationRecord? Application,
+        ServerAsset Server,
+        string HostingId);
 }
