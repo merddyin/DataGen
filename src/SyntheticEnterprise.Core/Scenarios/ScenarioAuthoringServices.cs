@@ -985,31 +985,6 @@ public sealed class ScenarioValidator : IScenarioValidator
                 $"CMDB deviation profile override must be one of: {string.Join(", ", ScenarioDeviationProfiles.All)}."));
         }
 
-        var legacyIdentifierVariantCount = resolved.Identity.LegacyDirectoryIdentifierVariantCount;
-        if (legacyIdentifierVariantCount < 0
-            || legacyIdentifierVariantCount > IdentityProfile.MaximumLegacyDirectoryIdentifierVariantCount)
-        {
-            messages.Add(new ScenarioValidationMessage(
-                "identity-legacy-directory-identifier-count",
-                ScenarioValidationSeverity.Error,
-                "$.identity.legacyDirectoryIdentifierVariantCount",
-                $"LegacyDirectoryIdentifierVariantCount must be between 0 and {IdentityProfile.MaximumLegacyDirectoryIdentifierVariantCount}."));
-        }
-
-        var primaryCompanyPopulation = resolved.Companies
-            .Select(company => company.EmployeeCount)
-            .DefaultIfEmpty(0)
-            .Max();
-        if (legacyIdentifierVariantCount > 0
-            && (primaryCompanyPopulation < 2 || legacyIdentifierVariantCount > primaryCompanyPopulation))
-        {
-            messages.Add(new ScenarioValidationMessage(
-                "identity-legacy-directory-identifier-population",
-                ScenarioValidationSeverity.Error,
-                "$.identity.legacyDirectoryIdentifierVariantCount",
-                "The primary company must contain at least two employees and at least as many employees as the requested legacy directory identifier variants."));
-        }
-
         foreach (var company in resolved.Companies)
         {
             if (company.EmployeeCount <= 0)

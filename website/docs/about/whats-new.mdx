@@ -11,8 +11,6 @@ This page tracks the most recent product-level changes that matter to users of D
 
 - Release preflight now resolves Git, tar, and .NET to validated full paths on the active host, restoring clean-checkout CI portability.
 - Multi-company generation remains deterministic and is ready for governed downstream scenario regeneration without product-specific facts in DataGen.
-- **Opt-in legacy directory identifiers**
-  Set `identity.legacyDirectoryIdentifierVariantCount` when a lab needs plausible cross-identity legacy identifier evidence. The setting defaults to `0` and accepts a bounded world-level count from `0` through `100`. DataGen applies that budget only to the company with the largest eligible person population, using ordinal company ID as the deterministic tie-break, so a small secondary company does not multiply or constrain the requested variants. For each selected account, DataGen keeps the true person association and account address but applies a legacy-prefixed employee identifier derived from a different person in that company. This remains generic directory evidence: it does not create or name any Cartograph review, matching, or reconciliation workflow.
 
 ## v0.11.0
 
