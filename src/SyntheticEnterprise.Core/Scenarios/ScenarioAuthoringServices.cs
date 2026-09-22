@@ -945,9 +945,15 @@ public sealed class ScenarioValidator : IScenarioValidator
 
     public ScenarioValidationResult Validate(object scenario)
     {
+        // Retired options survive only in the raw document: they map to no CLR member, so they are
+        // gone once the scenario is deserialized.
+        var messages = scenario is string scenarioJson
+            ? RetiredScenarioOptionInspector.Inspect(scenarioJson).ToList()
+            : new List<ScenarioValidationMessage>();
+
         var resolved = _resolver.Resolve(scenario);
         var hydration = _pluginProfileHydrator.Hydrate(resolved);
-        var messages = hydration.Messages.ToList();
+        messages.AddRange(hydration.Messages);
         resolved = hydration.Scenario;
         var contributionResolution = _pluginContributionResolver.Resolve(resolved);
 

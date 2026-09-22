@@ -1,6 +1,5 @@
 namespace SyntheticEnterprise.Core.Scenarios;
 
-using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Core.Abstractions;
@@ -8,12 +7,6 @@ using SyntheticEnterprise.Core.Plugins;
 
 public sealed class JsonScenarioLoader : IScenarioLoader
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        WriteIndented = true
-    };
-
     private readonly IScenarioDefaultsResolver _resolver;
     private readonly IScenarioPluginProfileHydrator _pluginProfileHydrator;
 
@@ -59,6 +52,15 @@ public sealed class JsonScenarioLoader : IScenarioLoader
         if (string.IsNullOrWhiteSpace(json))
         {
             throw new ArgumentException("Scenario JSON is required.", nameof(json));
+        }
+
+        // Loading has no validation channel, so a retired option here would be dropped silently and
+        // the generated world would not match what the scenario asked for.
+        var retiredOptions = RetiredScenarioOptionInspector.Inspect(json);
+        if (retiredOptions.Count > 0)
+        {
+            throw new InvalidOperationException(
+                string.Join(" ", retiredOptions.Select(message => message.Message)));
         }
 
         var scenario = _resolver.Resolve(json);

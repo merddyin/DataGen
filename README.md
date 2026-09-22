@@ -16,6 +16,7 @@ DataGen is a synthetic enterprise data generation platform. It procedurally buil
 - Carries endpoint policy attachment through layer regeneration, so regenerating the infrastructure layer leaves each endpoint policy pointing at the endpoint it describes.
 - Removes an access-control evidence record that named `BlockInheritance` as a right; block inheritance is a container property already carried on `EnvironmentContainer.BlocksPolicyInheritance`, and no collection method produces an access-control entry with that right name.
 - Retires the `identity.legacyDirectoryIdentifierVariantCount` scenario option, which existed only in unreleased work and was never published, so no released version is affected.
+- Rejects a scenario that still sets a retired option instead of dropping it silently: scenario validation reports a `retired-scenario-option` error naming the option, the version that retired it, and its replacement, and scenario loading refuses the document. Unknown properties that are not registered as retired are still accepted, so forward-compatible and third-party fields keep working.
 - Repairs the portable release preflight so Git, tar, and .NET are resolved to validated full executable paths on the current host instead of assuming Windows installation paths.
 - Retains the v0.11.0 management-intelligence contract and its deterministic multi-company output.
 
