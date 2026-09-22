@@ -25,7 +25,8 @@
     "includeServers": true,
     "includeWorkstations": true,
     "includeNetworkAssets": true,
-    "includeTelephony": true
+    "includeTelephony": true,
+    "effectiveSecurityConfigurationEndpointCount": 12
   },
   "repositories": {
     "includeDatabases": true,

@@ -6,6 +6,7 @@ using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Generation.Policy;
 
 public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
 {
@@ -57,6 +58,15 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                     context,
                     _idFactory,
                     context.Scenario.Infrastructure);
+            }
+
+            if (context.Scenario.Infrastructure is { EffectiveSecurityConfigurationEndpointCount: > 0 } infrastructure)
+            {
+                EffectiveSecurityConfigurationGenerator.Apply(
+                    world,
+                    company,
+                    _idFactory,
+                    infrastructure);
             }
         }
     }

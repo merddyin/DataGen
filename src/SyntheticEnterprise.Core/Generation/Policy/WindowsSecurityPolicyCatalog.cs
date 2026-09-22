@@ -56,6 +56,36 @@ internal static class WindowsSecurityPolicyCatalog
     /// <summary>Canonical key prefix for a registry-key security descriptor.</summary>
     internal const string RegistryAclKeyPrefix = "RegistryACL:";
 
+    /// <summary>
+    /// Name of the directory policy object carrying the security-template vocabulary.
+    /// Both the generator that emits it and every generator that reads it back use this
+    /// constant, so the two can never disagree about which object is the baseline.
+    /// </summary>
+    internal const string SecurityTemplateBaselinePolicyName = "Windows Security Template Baseline";
+
+    /// <summary>
+    /// Name of the directory policy object carrying the advanced audit vocabulary.
+    /// </summary>
+    internal const string AdvancedAuditPolicyTemplatePolicyName = "Windows Advanced Audit Policy Template";
+
+    /// <summary>Policy type of a directory-authored Group Policy object.</summary>
+    internal const string GroupPolicyObjectPolicyType = "GroupPolicyObject";
+
+    /// <summary>
+    /// Policy type of the effective configuration a single machine actually carries, as
+    /// <c>secedit</c> and <c>auditpol</c> report it on that machine.
+    /// </summary>
+    internal const string LocalSecurityPolicyPolicyType = "LocalSecurityPolicy";
+
+    /// <summary>Platform of a local security policy object.</summary>
+    internal const string WindowsPlatform = "Windows";
+
+    /// <summary>Category of the directory-authored security-template policy object.</summary>
+    internal const string SecurityTemplatePolicyCategory = "SecurityTemplate";
+
+    /// <summary>Category of a per-machine effective configuration policy object.</summary>
+    internal const string EffectiveConfigurationPolicyCategory = "EffectiveConfiguration";
+
     /// <summary>Setting category that resolves a row to the <c>SecTemplate</c> source.</summary>
     internal const string UserRightsAssignmentCategory = "UserRightsAssignment";
 
@@ -445,6 +475,56 @@ internal static class WindowsSecurityPolicyCatalog
     [
         RegistryAclKeys.Services,
         RegistryAclKeys.Policies
+    ];
+
+    /// <summary>
+    /// Names describing how a single machine's effective configuration relates to the
+    /// security template assigned to it. Each name states an observable property of the
+    /// emitted data — which token sets are supersets, subsets or merely overlapping, and
+    /// which audit values cover more or less than the template — and nothing about how any
+    /// consumer might later rate that machine.
+    /// </summary>
+    internal static class ConfigurationProfiles
+    {
+        /// <summary>Every token set and audit value identical to the template.</summary>
+        internal const string Aligned = "Aligned";
+
+        /// <summary>A grant right holds a strict superset of the template's principals.</summary>
+        internal const string ExpandedPrincipals = "ExpandedPrincipals";
+
+        /// <summary>A grant right holds a strict, non-empty subset of the template's principals.</summary>
+        internal const string ReducedPrincipals = "ReducedPrincipals";
+
+        /// <summary>A grant right overlaps the template's principals without containing or being contained by them.</summary>
+        internal const string DivergentPrincipals = "DivergentPrincipals";
+
+        /// <summary>A <c>SeDeny*</c> right holds a strict superset of the template's principals.</summary>
+        internal const string ExpandedDenyPrincipals = "ExpandedDenyPrincipals";
+
+        /// <summary>An audit subcategory covers one outcome where the template covers both.</summary>
+        internal const string ReducedAuditCoverage = "ReducedAuditCoverage";
+
+        /// <summary>An audit subcategory covers both outcomes where the template covers one.</summary>
+        internal const string ExpandedAuditCoverage = "ExpandedAuditCoverage";
+
+        /// <summary>A security descriptor differs from the template's descriptor for the same object.</summary>
+        internal const string DivergentAcl = "DivergentAcl";
+    }
+
+    /// <summary>
+    /// Every configuration profile, in the order endpoints are assigned to them. A world
+    /// generated with at least this many endpoints carries all of them.
+    /// </summary>
+    internal static readonly IReadOnlyList<string> ConfigurationProfileNames =
+    [
+        ConfigurationProfiles.Aligned,
+        ConfigurationProfiles.ExpandedPrincipals,
+        ConfigurationProfiles.ReducedPrincipals,
+        ConfigurationProfiles.DivergentPrincipals,
+        ConfigurationProfiles.ExpandedDenyPrincipals,
+        ConfigurationProfiles.ReducedAuditCoverage,
+        ConfigurationProfiles.ExpandedAuditCoverage,
+        ConfigurationProfiles.DivergentAcl
     ];
 
     /// <summary>Builds the canonical key for a privilege-rights assignment.</summary>

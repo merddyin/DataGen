@@ -4381,37 +4381,21 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string environmentRole = "Source",
         string status = "Enabled")
     {
-        var existing = world.Policies.FirstOrDefault(policy =>
-            policy.CompanyId == companyId
-            && string.Equals(policy.Name, name, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.PolicyType, policyType, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.Platform, platform, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(policy.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null)
-        {
-            return existing;
-        }
-
-        var policy = new PolicyRecord
-        {
-            Id = _idFactory.Next("POL"),
-            CompanyId = companyId,
-            PolicyGuid = CreateStableGuid(companyId, name, policyType, platform, category),
-            Name = name,
-            PolicyType = policyType,
-            Platform = platform,
-            Category = category,
-            Environment = "Production",
-            EnvironmentRole = environmentRole,
-            Status = status,
-            Description = description,
-            IdentityStoreId = identityStoreId,
-            CloudTenantId = cloudTenantId,
-            SourceEntityType = sourceEntityType,
-            SourceEntityId = sourceEntityId
-        };
-        world.Policies.Add(policy);
-        return policy;
+        return PolicyEmitter.EnsurePolicy(
+            world,
+            _idFactory,
+            companyId,
+            name,
+            policyType,
+            platform,
+            category,
+            description,
+            identityStoreId,
+            cloudTenantId,
+            sourceEntityType,
+            sourceEntityId,
+            environmentRole,
+            status);
     }
 
     private void AddPolicySetting(
@@ -4429,15 +4413,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string? registryPath = null,
         string environmentRole = "Source")
     {
-        if (world.PolicySettings.Any(setting =>
-                setting.CompanyId == companyId
-                && string.Equals(setting.PolicyId, policyId, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(setting.SettingName, settingName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(setting.EnvironmentRole, environmentRole, StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
         var metadata = ResolvePolicySettingMetadata(
             world,
             companyId,
@@ -4446,27 +4421,22 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             settingCategory,
             policyPath,
             registryPath);
-        var source = ResolvePolicySettingSource(world, policyId, settingCategory, metadata.PolicyPath, metadata.RegistryPath);
-        var behavior = ResolvePolicySettingBehavior(settingCategory, metadata.PolicyPath, metadata.RegistryPath);
 
-        world.PolicySettings.Add(new PolicySettingRecord
-        {
-            Id = _idFactory.Next("PST"),
-            CompanyId = companyId,
-            PolicyId = policyId,
-            SettingName = settingName,
-            SettingCategory = settingCategory,
-            PolicyPath = metadata.PolicyPath,
-            RegistryPath = metadata.RegistryPath,
-            ValueType = valueType,
-            ConfiguredValue = configuredValue,
-            Source = source,
-            Behavior = behavior,
-            EnvironmentRole = environmentRole,
-            IsLegacy = isLegacy,
-            IsConflicting = isConflicting,
-            SourceReference = sourceReference
-        });
+        PolicyEmitter.AddResolvedPolicySetting(
+            world,
+            _idFactory,
+            companyId,
+            policyId,
+            settingName,
+            settingCategory,
+            valueType,
+            configuredValue,
+            metadata.PolicyPath,
+            metadata.RegistryPath,
+            isLegacy,
+            isConflicting,
+            sourceReference,
+            environmentRole);
     }
 
     private void AddPolicyTarget(
@@ -4568,87 +4538,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         var fallbackRegistryPath = BuildCustomPolicyRegistryPath(company, IsUserScopedPolicySetting(policy, settingCategory, settingName), policy.Name, settingCategory, settingName);
         return (fallbackRegistryPath, fallbackRegistryPath);
-    }
-
-    private static string ResolvePolicySettingSource(
-        SyntheticEnterpriseWorld world,
-        string policyId,
-        string settingCategory,
-        string policyPath,
-        string? registryPath)
-    {
-        var policy = world.Policies.FirstOrDefault(candidate =>
-            string.Equals(candidate.Id, policyId, StringComparison.OrdinalIgnoreCase));
-        if (policy is null)
-        {
-            return "CustomProfile";
-        }
-
-        if (string.Equals(policy.Platform, "Intune", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy.PolicyType, "IntuneConfigurationProfile", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy.PolicyType, "IntuneCompliancePolicy", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(policy.Platform, "EntraID", StringComparison.OrdinalIgnoreCase))
-        {
-            return "CustomProfile";
-        }
-
-        if (string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase))
-        {
-            return "AuditCsv";
-        }
-
-        if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
-            || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "FileSecurity", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "RegistryKeys", StringComparison.OrdinalIgnoreCase))
-        {
-            return "SecTemplate";
-        }
-
-        if (string.Equals(settingCategory, "DriveMappings", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "Printers", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "Shortcuts", StringComparison.OrdinalIgnoreCase))
-        {
-            return "GPP";
-        }
-
-        if (!string.IsNullOrWhiteSpace(registryPath) || policyPath.Contains("Administrative Templates", StringComparison.OrdinalIgnoreCase))
-        {
-            return "GPO";
-        }
-
-        return "CustomProfile";
-    }
-
-    private static string ResolvePolicySettingBehavior(
-        string settingCategory,
-        string policyPath,
-        string? registryPath)
-    {
-        if (!string.IsNullOrWhiteSpace(registryPath))
-        {
-            return registryPath.Contains("\\Policies\\", StringComparison.OrdinalIgnoreCase)
-                ? "BlueDot"
-                : "RedDot";
-        }
-
-        if (policyPath.Contains("Administrative Templates", StringComparison.OrdinalIgnoreCase))
-        {
-            return "BlueDot";
-        }
-
-        if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
-            || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "FileSecurity", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(settingCategory, "RegistryKeys", StringComparison.OrdinalIgnoreCase))
-        {
-            return "RedDot";
-        }
-
-        return "Unknown";
     }
 
     private (string PolicyPath, string? RegistryPath) ResolveGroupPolicySettingMetadata(
@@ -5001,15 +4890,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             : company.PrimaryDomain.Replace(".", "_", StringComparison.OrdinalIgnoreCase);
 
         return $@"{rootHive}\Software\Policies\{vendorNode}\{Slug(policyName)}\{Slug(settingCategory)}\{Slug(settingName)}";
-    }
-
-    private static string CreateStableGuid(params string[] components)
-    {
-        var seed = string.Join("|", components.Where(component => !string.IsNullOrWhiteSpace(component)));
-        var bytes = SHA1.HashData(Encoding.UTF8.GetBytes(seed));
-        bytes[6] = (byte)((bytes[6] & 0x0F) | 0x50);
-        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
-        return new Guid(bytes[..16]).ToString();
     }
 
     private void AddAccessControlEvidence(
@@ -5511,7 +5391,13 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         };
     }
 
-    private static string BuildRootDomain(Company company)
+    /// <summary>
+    /// Resolves the company's Active Directory root domain, falling back to a name-derived
+    /// domain when the scenario supplied none. Exposed to the assembly because the
+    /// per-endpoint effective-configuration generator must derive the same NetBIOS prefix
+    /// the canonical baselines used, and deriving it twice would let the two sides drift.
+    /// </summary>
+    internal static string BuildRootDomain(Company company)
     {
         if (!string.IsNullOrWhiteSpace(company.PrimaryDomain))
         {

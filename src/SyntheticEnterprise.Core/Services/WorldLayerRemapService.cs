@@ -1181,6 +1181,18 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
                 return (changed, updated);
             });
 
+            updatedCount += UpdateRecords(currentWorld.Policies, policy =>
+            {
+                if (!string.Equals(policy.SourceEntityType, "ServerAsset", StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, policy);
+                }
+
+                var updated = policy;
+                var changed = TryMapOptional(policy.SourceEntityId, serverMergeMap, value => updated = updated with { SourceEntityId = value });
+                return (changed, updated);
+            });
+
             RemoveMappedDuplicates(currentWorld.Servers, server => server.Id, serverMergeMap, "servers", warnings);
         }
 
@@ -1269,6 +1281,18 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
 
                 var updated = record;
                 var changed = TryMapOptional(record.AssociatedEntityId, deviceMergeMap, value => updated = updated with { AssociatedEntityId = value });
+                return (changed, updated);
+            });
+
+            updatedCount += UpdateRecords(currentWorld.Policies, policy =>
+            {
+                if (!string.Equals(policy.SourceEntityType, "ManagedDevice", StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, policy);
+                }
+
+                var updated = policy;
+                var changed = TryMapOptional(policy.SourceEntityId, deviceMergeMap, value => updated = updated with { SourceEntityId = value });
                 return (changed, updated);
             });
 
@@ -1448,6 +1472,21 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
                 return (changed, updated);
             });
 
+            // A per-endpoint policy object — the effective local security configuration —
+            // names its endpoint through SourceEntityId, so it follows the preserved
+            // identifier exactly as an endpoint policy baseline does.
+            updatedCount += UpdateRecords(currentWorld.Policies, policy =>
+            {
+                if (!string.Equals(policy.SourceEntityType, "ServerAsset", StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, policy);
+                }
+
+                var updated = policy;
+                var changed = TryMapOptional(policy.SourceEntityId, serverIdMap, value => updated = updated with { SourceEntityId = value });
+                return (changed, updated);
+            });
+
             updatedCount += UpdateRecords(currentWorld.ObservedEntitySnapshots, snapshot =>
             {
                 if (!string.Equals(snapshot.EntityType, "Server", StringComparison.OrdinalIgnoreCase))
@@ -1556,6 +1595,18 @@ public sealed class WorldLayerRemapService : IWorldLayerRemapService
 
                 var updated = membership;
                 var changed = TryMapOptional(membership.EndpointId, deviceIdMap, value => updated = updated with { EndpointId = value });
+                return (changed, updated);
+            });
+
+            updatedCount += UpdateRecords(currentWorld.Policies, policy =>
+            {
+                if (!string.Equals(policy.SourceEntityType, "ManagedDevice", StringComparison.OrdinalIgnoreCase))
+                {
+                    return (false, policy);
+                }
+
+                var updated = policy;
+                var changed = TryMapOptional(policy.SourceEntityId, deviceIdMap, value => updated = updated with { SourceEntityId = value });
                 return (changed, updated);
             });
 

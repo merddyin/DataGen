@@ -205,6 +205,31 @@ public sealed class DefaultLayerOwnershipRegistry : ILayerOwnershipRegistry
             SupportsStableRemap = true,
             SupportsMergeReconciliation = true
         },
+        // The Infrastructure layer contributes the per-endpoint effective security
+        // configuration into the same two collections the Identity layer writes its Group
+        // Policy objects to, so both entries are shared and the predicate claims only the
+        // LocalSecurityPolicy records. Regenerating Infrastructure must leave every
+        // directory-authored policy untouched.
+        new()
+        {
+            LayerName = "Infrastructure",
+            EntityType = "PolicyRecord",
+            CollectionPath = "World.Policies",
+            OwnershipMode = "Shared",
+            SelectionPredicate = "PolicyType in {LocalSecurityPolicy}",
+            SupportsStableRemap = false,
+            SupportsMergeReconciliation = true
+        },
+        new()
+        {
+            LayerName = "Infrastructure",
+            EntityType = "PolicySettingRecord",
+            CollectionPath = "World.PolicySettings",
+            OwnershipMode = "Shared",
+            SelectionPredicate = "PolicyId in World.Policies where PolicyType in {LocalSecurityPolicy}",
+            SupportsStableRemap = false,
+            SupportsMergeReconciliation = true
+        },
         new()
         {
             LayerName = "Repository",

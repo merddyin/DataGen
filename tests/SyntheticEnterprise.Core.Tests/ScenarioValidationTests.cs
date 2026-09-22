@@ -9,6 +9,122 @@ namespace SyntheticEnterprise.Core.Tests;
 
 public sealed class ScenarioValidationTests
 {
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(251)]
+    public void Validator_Rejects_Effective_Security_Configuration_Count_Outside_Bounds(int count)
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var validator = services.GetRequiredService<IScenarioValidator>();
+
+        var result = validator.Validate(new ScenarioEnvelope
+        {
+            Name = "Invalid Effective Security Configuration Count",
+            Infrastructure = new InfrastructureProfile { EffectiveSecurityConfigurationEndpointCount = count }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Messages, message => message.Code == "infrastructure-effective-security-configuration-count");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(InfrastructureProfile.MaximumEffectiveSecurityConfigurationEndpointCount)]
+    public void Validator_Accepts_Effective_Security_Configuration_Count_On_The_Bounds(int count)
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var validator = services.GetRequiredService<IScenarioValidator>();
+
+        var result = validator.Validate(new ScenarioEnvelope
+        {
+            Name = "Bounded Effective Security Configuration Count",
+            Infrastructure = new InfrastructureProfile { EffectiveSecurityConfigurationEndpointCount = count },
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Endpoint Population Company",
+                    EmployeeCount = InfrastructureProfile.MaximumEffectiveSecurityConfigurationEndpointCount,
+                    Countries = new() { "United States" }
+                }
+            }
+        });
+
+        Assert.True(result.IsValid);
+        Assert.DoesNotContain(result.Messages, message => message.Code == "infrastructure-effective-security-configuration-count");
+        Assert.DoesNotContain(result.Messages, message => message.Code == "infrastructure-effective-security-configuration-population");
+    }
+
+    [Fact]
+    public void Validator_Rejects_Effective_Security_Configuration_Count_Above_Largest_Company_Population()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var validator = services.GetRequiredService<IScenarioValidator>();
+
+        var result = validator.Validate(new ScenarioEnvelope
+        {
+            Name = "Oversized Effective Security Configuration Population",
+            Infrastructure = new InfrastructureProfile { EffectiveSecurityConfigurationEndpointCount = 40 },
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Small Company",
+                    EmployeeCount = 12,
+                    Countries = new() { "United States" }
+                },
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Larger Company",
+                    EmployeeCount = 30,
+                    Countries = new() { "United States" }
+                }
+            }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Messages, message => message.Code == "infrastructure-effective-security-configuration-population");
+    }
+
+    [Fact]
+    public void Validator_Rejects_Effective_Security_Configuration_Without_An_Endpoint_Population()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+        var validator = services.GetRequiredService<IScenarioValidator>();
+
+        var result = validator.Validate(new ScenarioEnvelope
+        {
+            Name = "Effective Security Configuration Without Endpoints",
+            Infrastructure = new InfrastructureProfile
+            {
+                IncludeWorkstations = false,
+                IncludeServers = false,
+                EffectiveSecurityConfigurationEndpointCount = 4
+            },
+            Companies = new()
+            {
+                new ScenarioCompanyDefinition
+                {
+                    Name = "Endpointless Company",
+                    EmployeeCount = 200,
+                    Countries = new() { "United States" }
+                }
+            }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Messages, message => message.Code == "infrastructure-effective-security-configuration-population");
+    }
+
     [Fact]
     public void Resolver_Preserves_Root_Deviation_Profile()
     {
