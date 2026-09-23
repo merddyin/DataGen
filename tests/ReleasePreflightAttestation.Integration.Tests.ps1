@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [string]$SourceRoot,
@@ -208,7 +208,7 @@ $certificate.Thumbprint
     $attestation = (Get-Content -LiteralPath $attestationPath -Raw).Trim()
     & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File (Join-Path $candidateRoot 'scripts\assert-release-preflight-attestation.ps1') `
         -Attestation $attestation `
-        -ExpectedVersion '0.11.1' `
+        -ExpectedVersion '0.13.0' `
         -ExpectedSourceCommit $candidateCommit `
         -ExpectedSourceTreeId $candidateTree `
         -PublicCertificatePath $publicCertificatePath

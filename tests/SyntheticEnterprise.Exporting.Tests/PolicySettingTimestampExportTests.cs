@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using Microsoft.VisualBasic.FileIO;
 using SyntheticEnterprise.Contracts.Abstractions;
@@ -13,7 +13,7 @@ namespace SyntheticEnterprise.Exporting.Tests;
 
 public sealed class PolicySettingTimestampExportTests
 {
-    private const string ExpectedSchemaVersion = "2.1.0";
+    private const string ExpectedSchemaVersion = "2.2.0";
 
     [Theory]
     [InlineData(ExportSerializationFormat.Json)]

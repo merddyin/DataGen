@@ -1,4 +1,4 @@
-# DataGen
+﻿# DataGen
 
 DataGen is a synthetic enterprise data generation platform. It procedurally builds realistic enterprise datasets that teams can use for labs, validation, demos, exports, discovery-tool testing, and downstream integration work.
 
@@ -288,8 +288,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.11.1 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.1\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.13.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.13.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
@@ -449,7 +449,7 @@ The release workflow creates both the versioned module bundle and a PowerShell G
 Release publication is manual and requires fresh evidence from the prepared Windows workstation. Hosted CI continuously gates the portable publisher-metadata contract; it cannot exercise the real cross-filesystem path because GitHub-hosted runners do not provide the prepared `D:` NTFS and `G:` ReFS volumes. From a clean, committed `main` checkout on that workstation, use a fresh empty output directory and retain its evidence files:
 
 ```powershell
-$evidenceRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('DataGenReleaseEvidence-v0.11.0-' + [Guid]::NewGuid().ToString('N'))))
+$evidenceRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('DataGenReleaseEvidence-v0.13.0-' + [Guid]::NewGuid().ToString('N'))))
 .\scripts\invoke-release-preflight.ps1 `
   -OutputRoot $evidenceRoot `
   -CreateReleaseAttestation
@@ -462,7 +462,7 @@ The output includes `source-archive.tar`, `source-snapshot`, `source-manifest.js
 ```powershell
 $attestation = (Get-Content "$evidenceRoot\release-preflight-attestation.txt" -Raw).Trim()
 gh workflow run release-module.yml --ref main `
-  -f version=0.11.0 `
+  -f version=0.13.0 `
   -f "publisher_metadata_attestation=$attestation" `
   -f publish_to_psgallery=true `
   -f create_github_release=true

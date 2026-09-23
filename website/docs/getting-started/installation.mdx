@@ -1,4 +1,4 @@
----
+﻿---
 title: Installation
 description: Install prerequisites, build or import the module, and verify the DataGen command surface.
 ---
@@ -65,8 +65,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a packaged module with a manifest, build one from the repo root:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.11.1 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.1\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.13.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.13.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ## Verify the core command surface
