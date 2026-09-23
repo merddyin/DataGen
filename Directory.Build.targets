@@ -724,12 +724,30 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
       catalogs.sqlite over those CSVs. Only ever refresh a copy that already exists; never create one, so a
       clean checkout stays clean (asserted by tests/CleanCheckoutCatalogContract.Tests.ps1).
     -->
-    <GetFileHash Files="$(DataGenCatalogArtifactPath)" Algorithm="SHA256" HashEncoding="hex">
+    <!--
+      Every catalog read below is tolerant of a failed open, and each is followed by an Error naming
+      what could not be read. GetFileHash opens the file, so a process holding it open makes the task
+      throw MSB4018 with a stack trace that names neither the catalog nor the lock. The canonical
+      artifact is exposed as well as the copies: PublishWithWindowsReplace calls File.Replace on it,
+      which needs exclusive access and leaves it transiently unopenable, and the Global mutex taken in
+      EnsureDataGenCatalogArtifact is released before this target runs - so a concurrent build can be
+      publishing the artifact while this one hashes it. Being uniform here also spares a maintainer the
+      question of why one read differs from the rest.
+
+      This makes a locked read legible, not survivable: the build still fails. Making same-checkout
+      concurrency actually work needs a bounded retry, and GetFileHash has no Retries parameter. That
+      is deliberately out of scope - see DataGen-wis.
+    -->
+    <GetFileHash Files="$(DataGenCatalogArtifactPath)" Algorithm="SHA256" HashEncoding="hex" ContinueOnError="WarnAndContinue">
       <Output TaskParameter="Items" ItemName="_DataGenCatalogCanonicalArtifact" />
     </GetFileHash>
-    <GetFileHash Files="$(DataGenCatalogRoot)\catalogs.sqlite" Algorithm="SHA256" HashEncoding="hex">
+    <Error Condition="'@(_DataGenCatalogCanonicalArtifact)' == ''"
+           Text="Could not read the canonical catalog artifact '$(DataGenCatalogArtifactPath)'. It is most likely held open by a concurrent build publishing it, or by a test host. Stop other builds against this checkout and build again." />
+    <GetFileHash Files="$(DataGenCatalogRoot)\catalogs.sqlite" Algorithm="SHA256" HashEncoding="hex" ContinueOnError="WarnAndContinue">
       <Output TaskParameter="Items" ItemName="_DataGenCatalogWorkingCopy" />
     </GetFileHash>
+    <Error Condition="'@(_DataGenCatalogWorkingCopy)' == ''"
+           Text="Could not read the catalog working copy '$(DataGenCatalogRoot)\catalogs.sqlite' to compare it against the canonical artifact. It is most likely held open by another process - a running test host or a generator using this checkout. Stop other runs against this checkout and build again. Refusing to build without knowing whether the catalog is current." />
     <PropertyGroup>
       <_DataGenCatalogWorkingCopyIsStale Condition="'@(_DataGenCatalogCanonicalArtifact->'%(FileHash)')' != '@(_DataGenCatalogWorkingCopy->'%(FileHash)')'">true</_DataGenCatalogWorkingCopyIsStale>
     </PropertyGroup>
@@ -754,12 +772,23 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
           DestinationFiles="$(_DataGenCatalogOutputPath)"
           SkipUnchangedFiles="false"
           Condition="!Exists('$(_DataGenCatalogOutputPath)')" />
-    <GetFileHash Files="$(DataGenCatalogArtifactPath)" Algorithm="SHA256" HashEncoding="hex">
+    <!-- Tolerant for the same reasons as the reads in RefreshDataGenCatalogWorkingCopy above. This one
+         is reachable by a supported test: the same-destination regression in
+         tests/CleanCheckoutCatalogContract.Tests.ps1 drives two concurrent builds that share one
+         DataGenCatalogArtifactPath, so a sibling build can be publishing this file while we hash it. -->
+    <GetFileHash Files="$(DataGenCatalogArtifactPath)" Algorithm="SHA256" HashEncoding="hex" ContinueOnError="WarnAndContinue">
       <Output TaskParameter="Items" ItemName="_DataGenCatalogOutputCanonical" />
     </GetFileHash>
-    <GetFileHash Files="$(_DataGenCatalogOutputPath)" Algorithm="SHA256" HashEncoding="hex">
+    <Error Condition="'@(_DataGenCatalogOutputCanonical)' == ''"
+           Text="Could not read the canonical catalog artifact '$(DataGenCatalogArtifactPath)'. It is most likely held open by a concurrent build publishing it, or by a test host. Stop other builds against this checkout and build again." />
+    <!-- The output copy is the read a concurrent test host is most likely to hold open: a test host
+         opens this file at run time, which is how DataGen-wis was found. Each guard below must stay
+         ahead of the staleness comparison, so an unread hash is never compared against the canonical. -->
+    <GetFileHash Files="$(_DataGenCatalogOutputPath)" Algorithm="SHA256" HashEncoding="hex" ContinueOnError="WarnAndContinue">
       <Output TaskParameter="Items" ItemName="_DataGenCatalogOutputCurrent" />
     </GetFileHash>
+    <Error Condition="'@(_DataGenCatalogOutputCurrent)' == ''"
+           Text="Could not read the catalog copy '$(_DataGenCatalogOutputPath)' to compare it against the canonical artifact. It is most likely held open by a test host from a concurrent run against this checkout. Stop other test runs and build again. Refusing to build without knowing whether the catalog is current." />
     <PropertyGroup>
       <_DataGenCatalogOutputIsStale Condition="'@(_DataGenCatalogOutputCanonical->'%(FileHash)')' != '@(_DataGenCatalogOutputCurrent->'%(FileHash)')'">true</_DataGenCatalogOutputIsStale>
     </PropertyGroup>
@@ -770,9 +799,14 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
           DestinationFiles="$(_DataGenCatalogOutputPath)"
           SkipUnchangedFiles="false"
           Condition="'$(_DataGenCatalogOutputIsStale)' == 'true'" />
-    <GetFileHash Files="$(_DataGenCatalogOutputPath)" Algorithm="SHA256" HashEncoding="hex">
+    <GetFileHash Files="$(_DataGenCatalogOutputPath)" Algorithm="SHA256" HashEncoding="hex" ContinueOnError="WarnAndContinue">
       <Output TaskParameter="Items" ItemName="_DataGenCatalogOutputVerified" />
     </GetFileHash>
+    <!-- Distinguished from a hash mismatch on purpose: an unreadable file and a stale one are
+         different problems, and a message describing the wrong one is what made DataGen-ddi
+         expensive to diagnose in the first place. -->
+    <Error Condition="'@(_DataGenCatalogOutputVerified)' == ''"
+           Text="Could not re-read the catalog copy '$(_DataGenCatalogOutputPath)' after refreshing it. It is most likely held open by a test host from a concurrent run against this checkout. Stop other test runs and build again." />
     <Error Condition="'@(_DataGenCatalogOutputCanonical->'%(FileHash)')' != '@(_DataGenCatalogOutputVerified->'%(FileHash)')'"
            Text="Catalog copy '$(_DataGenCatalogOutputPath)' does not match the canonical artifact '$(DataGenCatalogArtifactPath)'. Refusing to build against a stale catalog." />
   </Target>
