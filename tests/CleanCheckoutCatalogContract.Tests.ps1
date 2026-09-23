@@ -963,8 +963,8 @@ function Assert-ReleaseVersionContract {
         [string]$RepositoryRoot
     )
 
-    $expectedVersion = '0.13.0'
-    $expectedAssemblyVersion = '0.13.0.0'
+    $expectedVersion = '0.14.0'
+    $expectedAssemblyVersion = '0.14.0.0'
     $propsPath = Join-Path $RepositoryRoot 'Directory.Build.props'
     $packageScriptPath = Join-Path $RepositoryRoot 'scripts\package-module.ps1'
     $websitePackagePath = Join-Path $RepositoryRoot 'website\package.json'
@@ -2384,7 +2384,7 @@ try {
         throw "The packaged module does not contain '$packagedCatalogPath'."
     }
 
-    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.13.0\SyntheticEnterprise.PowerShell.psd1'
+    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.14.0\SyntheticEnterprise.PowerShell.psd1'
     if (-not (Test-Path -LiteralPath $versionedManifestPath -PathType Leaf)) {
         throw "The default package version did not produce '$versionedManifestPath'."
     }
