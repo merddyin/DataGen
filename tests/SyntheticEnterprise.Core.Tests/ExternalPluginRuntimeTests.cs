@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +19,17 @@ public sealed class ExternalPluginRuntimeTests
     {
         PropertyNameCaseInsensitive = true
     };
+
+    /// <summary>
+    /// Fixed generation time for the exact-boundary payload tests. Those tests set the payload
+    /// limit to the measured payload size, so every byte that feeds the payload must be identical
+    /// between the measuring call and the executing call. <see cref="GenerationContext.GeneratedAt"/>
+    /// otherwise defaults to the current time, and because a serialized timestamp drops trailing
+    /// zeros from its fractional seconds, two contexts created moments apart can serialize to
+    /// different lengths and push the executed payload past a limit measured from a shorter one.
+    /// </summary>
+    private static readonly DateTimeOffset BoundaryGeneratedAt =
+        new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public void BoundedPluginPayloadStream_Stops_Writing_At_Configured_Limit()
@@ -1079,9 +1090,11 @@ public sealed class ExternalPluginRuntimeTests
                 candidate => candidate.Capability == "BoundaryPowerShell");
             var scenario = PopulationScenario("Boundary PowerShell Population", 16);
             var world = services.GetRequiredService<IWorldGenerator>()
-                .Generate(new GenerationContext { Scenario = scenario }, new CatalogSet())
+                .Generate(
+                    new GenerationContext { Scenario = scenario, GeneratedAt = BoundaryGeneratedAt },
+                    new CatalogSet())
                 .World;
-            var context = new GenerationContext { Scenario = scenario };
+            var context = new GenerationContext { Scenario = scenario, GeneratedAt = BoundaryGeneratedAt };
             var inputBytes = GetPowerShellInputPayloadBytes(manifest, world, context);
 
             var result = services.GetServices<IExternalPluginHostAdapter>()
@@ -1093,6 +1106,7 @@ public sealed class ExternalPluginRuntimeTests
                     new GenerationContext
                     {
                         Scenario = scenario,
+                        GeneratedAt = BoundaryGeneratedAt,
                         ExternalPlugins = new ExternalPluginExecutionSettings { MaxInputPayloadBytes = inputBytes }
                     },
                     new CatalogSet());
@@ -2441,9 +2455,11 @@ public sealed class ExternalPluginRuntimeTests
                 candidate => candidate.Capability == "BoundaryAssembly");
             var scenario = PopulationScenario("Boundary Assembly Population", 16);
             var world = services.GetRequiredService<IWorldGenerator>()
-                .Generate(new GenerationContext { Scenario = scenario }, new CatalogSet())
+                .Generate(
+                    new GenerationContext { Scenario = scenario, GeneratedAt = BoundaryGeneratedAt },
+                    new CatalogSet())
                 .World;
-            var context = new GenerationContext { Scenario = scenario };
+            var context = new GenerationContext { Scenario = scenario, GeneratedAt = BoundaryGeneratedAt };
             var inputBytes = GetAssemblyInputPayloadBytes(manifest, world, context);
 
             var result = new OutOfProcessAssemblyExternalPluginHostAdapter().Execute(
@@ -2452,6 +2468,7 @@ public sealed class ExternalPluginRuntimeTests
                 new GenerationContext
                 {
                     Scenario = scenario,
+                    GeneratedAt = BoundaryGeneratedAt,
                     ExternalPlugins = new ExternalPluginExecutionSettings { MaxInputPayloadBytes = inputBytes }
                 },
                 new CatalogSet());

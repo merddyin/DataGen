@@ -1,4 +1,4 @@
-namespace SyntheticEnterprise.Core.Generation.Identity;
+﻿namespace SyntheticEnterprise.Core.Generation.Identity;
 
 using System.Security.Cryptography;
 using System.Text;
@@ -37,6 +37,17 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     {
         using var passwordRandomScope = UsePasswordRandom(context.Seed);
 
+        // Issuance is scoped the way validation judges the result. Passwords, account UPNs and
+        // mail addresses are unique world-wide; sAMAccountName is unique within a directory
+        // domain, which is the surface the attribute is actually unique on.
+        var issuedPasswords = new HashSet<string>(StringComparer.Ordinal);
+        var issuedAccountUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var issuedAccountMail = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var issuedSamAccountNamesByDomain = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var issuedPersonUpns = new HashSet<string>(
+            world.People.Select(person => person.UserPrincipalName).Where(value => !string.IsNullOrWhiteSpace(value)),
+            StringComparer.OrdinalIgnoreCase);
+
         foreach (var company in world.Companies)
         {
             var companyDefinition = context.Scenario.Companies.FirstOrDefault(c =>
@@ -52,9 +63,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var companyTeams = world.Teams.Where(team => team.CompanyId == company.Id).ToList();
             var companyOffices = world.Offices.Where(office => office.CompanyId == company.Id).ToList();
             var rootDomain = BuildRootDomain(company);
-            var issuedPasswords = new HashSet<string>(StringComparer.Ordinal);
-            var issuedAccountUpns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var issuedSamAccountNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var issuedSamAccountNames = ResolveDomainSamAccountNames(issuedSamAccountNamesByDomain, rootDomain);
             var includeAdministrativeTiers = context.Scenario.Identity.IncludeAdministrativeTiers;
 
             var identityStores = CreateIdentityStores(company, rootDomain, context.Scenario.Identity);
@@ -71,26 +80,28 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 world.Accounts.AddRange(builtInAccounts);
             }
 
-            var peopleAccounts = CreateUserAccounts(company, companyPeople, companyDepartments, companyOffices, ous, rootDomain, issuedPasswords, issuedSamAccountNames);
+            var peopleAccounts = CreateUserAccounts(
+                company,
+                companyPeople,
+                companyDepartments,
+                companyOffices,
+                ous,
+                rootDomain,
+                issuedPasswords,
+                issuedAccountUpns,
+                issuedAccountMail,
+                issuedSamAccountNames);
             world.Accounts.AddRange(peopleAccounts);
-            foreach (var upn in peopleAccounts
-                         .Select(account => account.UserPrincipalName)
-                         .Where(upn => !string.IsNullOrWhiteSpace(upn)))
-            {
-                issuedAccountUpns.Add(upn!);
-            }
-
-            SetManagerRelationships(world, company, companyPeople, peopleAccounts);
 
             var serviceAccounts = CreateServiceAccounts(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames, includeAdministrativeTiers);
             world.Accounts.AddRange(serviceAccounts);
 
-            var sharedAccounts = CreateSharedMailboxes(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames);
+            var sharedAccounts = CreateSharedMailboxes(company, companyDefinition, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedAccountMail, issuedSamAccountNames);
             world.Accounts.AddRange(sharedAccounts);
 
             if (companyDefinition.IncludePrivilegedAccounts)
             {
-                var privileged = CreatePrivilegedAccounts(company, companyPeople, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedSamAccountNames, includeAdministrativeTiers);
+                var privileged = CreatePrivilegedAccounts(company, companyPeople, ous, rootDomain, issuedPasswords, issuedAccountUpns, issuedAccountMail, issuedSamAccountNames, includeAdministrativeTiers);
                 world.Accounts.AddRange(privileged);
             }
 
@@ -117,6 +128,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                     world.Offices.Where(office => office.CompanyId == company.Id).ToList(),
                     externalOrganizations,
                     rootDomain,
+                    issuedPersonUpns,
                     catalogs);
                 if (externalPeople.Count > 0)
                 {
@@ -131,6 +143,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                         ous,
                         issuedPasswords,
                         issuedAccountUpns,
+                        issuedAccountMail,
                         issuedSamAccountNames,
                         rootDomain);
                     world.Accounts.AddRange(externalAccounts);
@@ -152,9 +165,27 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 }
             }
 
+            world.Accounts.AddRange(CreateAccountOwnershipConditions(
+                world,
+                company,
+                companyDefinition,
+                companyPeople,
+                companyDepartments,
+                ous,
+                rootDomain,
+                context.Scenario.Identity.AccountOwnershipConditionCount,
+                catalogs,
+                issuedPasswords,
+                issuedAccountUpns,
+                issuedAccountMail,
+                issuedSamAccountNames));
+
+            SetManagerRelationships(world, company, companyPeople, peopleAccounts);
+
             CreateDirectoryPolicies(world, company, includeAdministrativeTiers);
             CreateCrossTenantPolicyObjects(world, company);
             CreateTargetEnvironmentGpoSlice(world, company, rootDomain);
+            CreateDirectoryObjectSecurity(world, company, ous);
         }
     }
 
@@ -1794,6 +1825,90 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Container", workstationContainerId, "Linked", true, 67, true);
         AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Container", serverContainerId, "Linked", true, 68, true);
         AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        CreateDomainControllerAuditReportBaseline(
+            world,
+            company,
+            activeDirectoryStoreId,
+            gpoEditorsGroupId);
+    }
+
+    /// <summary>
+    /// Emits a domain controller audit baseline whose evidence came from a Group Policy
+    /// report export rather than from a backup's <c>audit.csv</c>.
+    /// </summary>
+    /// <remarks>
+    /// A real estate collects its Group Policy objects by more than one route, and the two
+    /// routes spell a combined audit value differently: a backup's <c>audit.csv</c> carries
+    /// the words, while a report export carries the numeric code that a reader renders with
+    /// a comma. Both spellings are real, so both appear, each on a policy object whose
+    /// recorded source says which route produced it. This is a separate policy object rather
+    /// than the same settings restated, because restating one configuration in two spellings
+    /// would assert that an estate holds it twice.
+    /// </remarks>
+    private void CreateDomainControllerAuditReportBaseline(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string? activeDirectoryStoreId,
+        string? gpoEditorsGroupId)
+    {
+        // The report-derived baseline links where a domain controller audit policy really
+        // links. Resolved rather than passed in so the link cannot drift from the container
+        // the rest of the identity layer created.
+        var domainControllerContainerId = string.IsNullOrWhiteSpace(activeDirectoryStoreId)
+            ? null
+            : FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStoreId, "Domain Controllers")?.Id;
+
+        var reportPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Domain Controller Audit Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "AuditPolicy",
+            "Domain controller audit subcategories as a Group Policy report export renders them.",
+            activeDirectoryStoreId,
+            null);
+
+        var noAuditing = WindowsSecurityPolicyCatalog.AuditValues.NoAuditing;
+        var success = WindowsSecurityPolicyCatalog.AuditValues.Success;
+        var failure = WindowsSecurityPolicyCatalog.AuditValues.Failure;
+        var successCommaFailure = WindowsSecurityPolicyCatalog.AuditValues.SuccessCommaFailure;
+
+        (string Subcategory, string InclusionSetting)[] domainControllerSubcategories =
+        [
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.CredentialValidation, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.KerberosAuthenticationService, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.KerberosServiceTicketOperations, failure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DirectoryServiceAccess, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DirectoryServiceChanges, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.ComputerAccountManagement, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecurityGroupManagement, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.UserAccountManagement, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.Logon, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SpecialLogon, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.AuditPolicyChange, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SensitivePrivilegeUse, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecurityStateChange, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SystemIntegrity, successCommaFailure)
+        ];
+
+        foreach (var (subcategory, inclusionSetting) in domainControllerSubcategories)
+        {
+            AddPolicySetting(
+                world,
+                company.Id,
+                reportPolicy.Id,
+                subcategory,
+                WindowsSecurityPolicyCatalog.AuditPolicyReportCategory,
+                "String",
+                inclusionSetting,
+                sourceReference: "Group Policy report export gpreport.xml",
+                policyPath: WindowsSecurityPolicyCatalog.BuildAuditKey(subcategory));
+        }
+
+        AddPolicyTarget(world, company.Id, reportPolicy.Id, "Container", domainControllerContainerId, "Linked", true, 69, true);
+        AddPolicyTarget(world, company.Id, reportPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
     }
 
     /// <summary>
@@ -2315,7 +2430,16 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var computers = CreateOu(company, "Endpoints", null, $"OU=Endpoints,{dc}", "Managed Computers");
         var workstations = CreateOu(company, "Workstations", computers.Id, $"OU=Workstations,{computers.DistinguishedName}", "Managed Workstations");
         var servers = CreateOu(company, "Servers", computers.Id, $"OU=Servers,{computers.DistinguishedName}", "Managed Servers");
-        var productionServers = CreateOu(company, "Production", servers.Id, $"OU=Production,{servers.DistinguishedName}", "Production Servers");
+        // Production server objects are held away from delegations set higher in the endpoint tree,
+        // so the access control list on this organizational unit is protected from inheritance. This
+        // is the object's own security descriptor, unrelated to Group Policy link inheritance.
+        var productionServers = CreateOu(
+            company,
+            "Production",
+            servers.Id,
+            $"OU=Production,{servers.DistinguishedName}",
+            "Production Servers",
+            daclInheritanceProtected: true);
         var stagingServers = CreateOu(company, "Staging", servers.Id, $"OU=Staging,{servers.DistinguishedName}", "Staging Servers");
         var developmentServers = CreateOu(company, "Development", servers.Id, $"OU=Development,{servers.DistinguishedName}", "Development Servers");
         var workstationStandard = CreateOu(company, "Corporate Standard", workstations.Id, $"OU=Corporate Standard,{workstations.DistinguishedName}", "Corporate workstation baseline");
@@ -2415,6 +2539,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         string rootDomain,
         HashSet<string> issuedPasswords,
+        ISet<string> issuedAccountUpns,
+        ISet<string> issuedAccountMail,
         ISet<string> issuedSamAccountNames)
     {
         var usersOu = ous.First(o => o.Name == "Employees");
@@ -2432,6 +2558,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return people.Select(person =>
         {
             var sam = EnsureUniqueSamAccountName(BuildSam(person.FirstName, person.LastName, person.EmployeeId), issuedSamAccountNames);
+            var upn = RegisterPersonAccountUpn(person, issuedAccountUpns);
             var targetOu = !string.IsNullOrWhiteSpace(person.OfficeId)
                            && officeNamesById.TryGetValue(person.OfficeId, out var officeCity)
                            && locationUserOus.TryGetValue(officeCity, out var officeOu)
@@ -2451,9 +2578,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PersonId = person.Id,
                 AccountType = "User",
                 DisplayName = person.DisplayName,
+                GivenName = person.FirstName,
+                Surname = person.LastName,
+                Description = string.IsNullOrWhiteSpace(person.Title)
+                    ? $"Primary user account for {person.DisplayName}."
+                    : $"Primary user account for {person.DisplayName}, {person.Title}.",
                 SamAccountName = sam,
-                UserPrincipalName = person.UserPrincipalName,
-                Mail = person.UserPrincipalName,
+                UserPrincipalName = upn,
+                Mail = EnsureUniqueAccountMail(upn, upn, issuedAccountMail, issuedAccountUpns),
                 Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(person.DisplayName)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
@@ -2489,12 +2621,12 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var serviceOu = ous.First(o => o.Name == "Service Accounts");
         var now = _clock.UtcNow;
         var domainDn = BuildNamingContext(rootDomain);
-        var blueprints = new (string DisplayName, string Sam, string LocalPart, string AccountType, string DistinguishedName, bool Enabled, bool Privileged, string PasswordProfile)[]
+        var blueprints = new (string DisplayName, string Sam, string LocalPart, string AccountType, string DistinguishedName, bool Enabled, bool Privileged, string PasswordProfile, string Description)[]
         {
-            ("Administrator", "Administrator", "administrator", "BuiltIn", $"CN=Administrator,CN=Users,{domainDn}", true, true, "BuiltInAdministrator"),
-            ("Guest", "Guest", "guest", "BuiltIn", $"CN=Guest,CN=Users,{domainDn}", false, false, "BuiltInGuest"),
-            ("krbtgt", "krbtgt", "krbtgt", "BuiltIn", $"CN=krbtgt,CN=Users,{domainDn}", true, true, "KerberosService"),
-            ("Entra Connect Sync", "MSOL_sync", "MSOL_sync", "Service", $"CN=MSOL_sync,{serviceOu.DistinguishedName}", true, true, "DirectorySynchronization")
+            ("Administrator", "Administrator", "administrator", "BuiltIn", $"CN=Administrator,CN=Users,{domainDn}", true, true, "BuiltInAdministrator", "Built-in account for administering the domain."),
+            ("Guest", "Guest", "guest", "BuiltIn", $"CN=Guest,CN=Users,{domainDn}", false, false, "BuiltInGuest", "Built-in account for guest access to the domain."),
+            ("krbtgt", "krbtgt", "krbtgt", "BuiltIn", $"CN=krbtgt,CN=Users,{domainDn}", true, true, "KerberosService", "Key Distribution Center service account for the domain."),
+            ("Entra Connect Sync", "MSOL_sync", "MSOL_sync", "Service", $"CN=MSOL_sync,{serviceOu.DistinguishedName}", true, true, "DirectorySynchronization", "Directory synchronization service account used by Entra Connect.")
         };
 
         return blueprints.Select(blueprint =>
@@ -2510,6 +2642,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 AccountType = blueprint.AccountType,
                 DisplayName = blueprint.DisplayName,
+                GivenName = null,
+                Surname = null,
+                Description = blueprint.Description,
                 SamAccountName = EnsureUniqueSamAccountName(blueprint.Sam, issuedSamAccountNames),
                 UserPrincipalName = BuildUniqueDirectoryAccountUpn(blueprint.LocalPart, rootDomain, issuedAccountUpns),
                 Mail = null,
@@ -2566,6 +2701,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 AccountType = "Service",
                 DisplayName = blueprint.CommonName,
+                GivenName = null,
+                Surname = null,
+                Description = blueprint.Description,
                 SamAccountName = samAccountName,
                 UserPrincipalName = upn,
                 Mail = null,
@@ -2601,6 +2739,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string rootDomain,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
+        ISet<string> issuedAccountMail,
         ISet<string> issuedSamAccountNames)
     {
         var targetOu = ous.First(o => o.Name == "Shared Mailboxes");
@@ -2620,9 +2759,12 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 CompanyId = company.Id,
                 AccountType = "Shared",
                 DisplayName = blueprint.DisplayName,
+                GivenName = null,
+                Surname = null,
+                Description = $"Shared mailbox for {blueprint.DisplayName}.",
                 SamAccountName = samAccountName,
                 UserPrincipalName = upn,
-                Mail = upn,
+                Mail = EnsureUniqueAccountMail(upn, upn, issuedAccountMail, issuedAccountUpns),
                 Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(blueprint.DisplayName)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
@@ -2648,26 +2790,126 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return results;
     }
 
-    private static string EnsureUniqueSamAccountName(string baseValue, ISet<string> issuedValues)
+    private const int SamAccountNameMaxLength = 20;
+    private const int SamAccountNameMaxDisambiguationSuffix = 99999;
+
+    /// <summary>
+    /// Issues a sAMAccountName no longer than the directory's 20-character limit that no other
+    /// account in the same registry already holds. Exposed to the assembly so the issuance rules
+    /// can be exercised directly, including the exhaustion path.
+    /// </summary>
+    internal static string EnsureUniqueSamAccountName(string baseValue, ISet<string> issuedValues)
     {
         var normalizedBase = string.IsNullOrWhiteSpace(baseValue) ? "shared" : baseValue.Trim();
-        var candidate = Truncate(normalizedBase, 20);
+        var candidate = Truncate(normalizedBase, SamAccountNameMaxLength);
         if (issuedValues.Add(candidate))
         {
             return candidate;
         }
 
-        for (var suffix = 2; suffix < 1000; suffix++)
+        for (var suffix = 2; suffix <= SamAccountNameMaxDisambiguationSuffix; suffix++)
         {
             var suffixText = suffix.ToString(CultureInfo.InvariantCulture);
-            candidate = Truncate($"{normalizedBase}{suffixText}", 20);
+
+            // Truncating the stem rather than the whole string keeps the disambiguating suffix,
+            // which a plain Truncate would discard once the stem already filled the length limit.
+            var stemBudget = Math.Max(1, SamAccountNameMaxLength - suffixText.Length);
+            candidate = $"{Truncate(normalizedBase, stemBudget)}{suffixText}";
             if (issuedValues.Add(candidate))
             {
                 return candidate;
             }
         }
 
-        return candidate;
+        throw new InvalidOperationException(
+            $"Unable to issue a unique sAMAccountName for base value '{normalizedBase}': " +
+            $"all {SamAccountNameMaxDisambiguationSuffix} disambiguated candidates within {SamAccountNameMaxLength} characters are already in use.");
+    }
+
+    /// <summary>
+    /// Resolves the sAMAccountName registry for a directory domain. sAMAccountName carries no
+    /// domain component, so it is unique within a domain rather than world-wide; keeping one
+    /// registry per domain issues values on exactly the surface the attribute is unique on.
+    /// </summary>
+    private static ISet<string> ResolveDomainSamAccountNames(
+        Dictionary<string, HashSet<string>> registriesByDomain,
+        string domain)
+    {
+        var key = string.IsNullOrWhiteSpace(domain) ? string.Empty : domain.Trim();
+        if (!registriesByDomain.TryGetValue(key, out var registry))
+        {
+            registry = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            registriesByDomain[key] = registry;
+        }
+
+        return registry;
+    }
+
+    /// <summary>
+    /// Registers the user principal name a person's primary account carries. The account and the
+    /// person must agree on this value, so a collision is an upstream fault rather than something
+    /// the account layer may silently paper over.
+    /// </summary>
+    private static string RegisterPersonAccountUpn(Person person, ISet<string> issuedAccountUpns)
+    {
+        var upn = person.UserPrincipalName;
+        if (string.IsNullOrWhiteSpace(upn))
+        {
+            return upn;
+        }
+
+        if (!issuedAccountUpns.Add(upn))
+        {
+            throw new InvalidOperationException(
+                $"User principal name '{upn}' for person '{person.Id}' was already issued to another directory account.");
+        }
+
+        return upn;
+    }
+
+    /// <summary>
+    /// Issues a mail address that no other account already carries and that does not collide with
+    /// a different account's user principal name. An account's own user principal name is allowed
+    /// because a mailbox-enabled account legitimately carries it as its primary address.
+    /// </summary>
+    private static string? EnsureUniqueAccountMail(
+        string? candidate,
+        string ownUserPrincipalName,
+        ISet<string> issuedMailAddresses,
+        ISet<string> issuedAccountUpns)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        bool Conflicts(string value)
+            => issuedMailAddresses.Contains(value)
+               || (!string.Equals(value, ownUserPrincipalName, StringComparison.OrdinalIgnoreCase)
+                   && issuedAccountUpns.Contains(value));
+
+        if (!Conflicts(candidate))
+        {
+            issuedMailAddresses.Add(candidate);
+            return candidate;
+        }
+
+        var separatorIndex = candidate.LastIndexOf('@');
+        var localPart = separatorIndex < 0 ? candidate : candidate[..separatorIndex];
+        var domainPart = separatorIndex < 0 ? string.Empty : candidate[separatorIndex..];
+
+        for (var suffix = 2; suffix <= 9999; suffix++)
+        {
+            var disambiguated = $"{localPart}{suffix.ToString(CultureInfo.InvariantCulture)}{domainPart}";
+            if (!Conflicts(disambiguated))
+            {
+                issuedMailAddresses.Add(disambiguated);
+                return disambiguated;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to issue a unique mail address derived from '{candidate}': all 9999 disambiguated candidates are already in use.");
     }
 
     private SharedMailboxBlueprint BuildSharedMailboxBlueprint(int index)
@@ -2710,6 +2952,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string rootDomain,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
+        ISet<string> issuedAccountMail,
         ISet<string> issuedSamAccountNames,
         bool includeAdministrativeTiers)
     {
@@ -2728,44 +2971,901 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 ? ous.First(o => o.Name == "Service Accounts")
                 : FindAdminTierOu(ous, tier.Replace("Tier", "Tier ")) ?? ous.First(o => o.Name == "Service Accounts");
             var employeeSuffix = Slug(person.EmployeeId);
-            var localPart = $"adm.{Slug(person.FirstName)}.{Slug(person.LastName)}.{employeeSuffix}";
-            var upn = BuildUniqueDirectoryAccountUpn(localPart, rootDomain, issuedAccountUpns);
-            var samAccountName = EnsureUniqueSamAccountName(Truncate($"adm_{Slug(person.LastName)}_{employeeSuffix}", 20), issuedSamAccountNames);
-            var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 45));
-            var lifecycle = CreateAccountLifecycle(passwordLastSet, 60, 1460, 7);
 
-            return new DirectoryAccount
-            {
-                Id = _idFactory.Next("ACT"),
-                CompanyId = company.Id,
-                PersonId = person.Id,
-                AccountType = "Privileged",
-                DisplayName = BuildSecondaryAccountDisplayName(person, "Admin"),
-                SamAccountName = samAccountName,
-                UserPrincipalName = upn,
-                Mail = null,
-                Domain = rootDomain,
-                DistinguishedName = $"CN={EscapeDn(person.DisplayName)} Admin,{targetOu.DistinguishedName}",
-                OuId = targetOu.Id,
-                Enabled = true,
-                Privileged = true,
-                MfaEnabled = _randomSource.NextDouble() >= 0.15,
-                EmployeeId = BuildSecondaryEmployeeId(person.EmployeeId, "A"),
-                GeneratedPassword = CreateUniquePassword(issuedPasswords, 20),
-                PasswordProfile = "PrivilegedElevated",
-                AdministrativeTier = tier,
-                LastLogon = lifecycle.LastLogon,
-                WhenCreated = lifecycle.WhenCreated,
-                WhenModified = lifecycle.WhenModified,
-                PasswordLastSet = passwordLastSet,
-                PasswordExpires = passwordLastSet.AddDays(45),
-                PasswordNeverExpires = false,
-                MustChangePasswordAtNextLogon = ShouldRequirePasswordReset($"privileged:{company.Id}:{person.Id}:{person.EmployeeId}:{tier}", 0.05),
-                UserType = "Member",
-                IdentityProvider = "HybridDirectory",
-                ExternalAccessCategory = "Privileged"
-            };
+            return CreateSecondaryDirectoryAccount(
+                company,
+                person,
+                new SecondaryAccountBlueprint
+                {
+                    AccountType = "Privileged",
+                    DisplayName = BuildSecondaryAccountDisplayName(person, "Admin"),
+                    GivenName = person.FirstName,
+                    Surname = person.LastName,
+                    Description = tier is null
+                        ? $"Administrative account for {person.DisplayName}."
+                        : $"{tier} administrative account for {person.DisplayName}.",
+                    UserPrincipalNameLocalPart = $"adm.{Slug(person.FirstName)}.{Slug(person.LastName)}.{employeeSuffix}",
+                    SamAccountNameBase = $"adm_{Slug(person.LastName)}_{employeeSuffix}",
+                    EmployeeId = BuildSecondaryEmployeeId(person.EmployeeId, "A"),
+                    Privileged = true,
+                    AdministrativeTier = tier,
+                    PasswordProfile = "PrivilegedElevated",
+                    PasswordLength = 20,
+                    MaximumPasswordAgeDays = 45,
+                    PasswordLifetimeDays = 45,
+                    MaximumCreatedAgeDays = 1460,
+                    MaximumLastLogonAgeDays = 7,
+                    PasswordResetScopeKey = $"privileged:{company.Id}:{person.Id}:{person.EmployeeId}:{tier}",
+                    PasswordResetProbability = 0.05,
+                    ExternalAccessCategory = "Privileged"
+                },
+                targetOu,
+                $"CN={EscapeDn(person.DisplayName)} Admin,{targetOu.DistinguishedName}",
+                rootDomain,
+                issuedPasswords,
+                issuedAccountUpns,
+                issuedAccountMail,
+                issuedSamAccountNames);
         }).ToList();
+    }
+
+    /// <summary>
+    /// Builds a directory object that stands beside the accounts the joiner process creates: a
+    /// second account a person holds, an object retained through a change of holder, or an object
+    /// carrying no employee link at all. <paramref name="holder"/> is the person the directory
+    /// links the object to, and <see langword="null"/> when it records no link; the name
+    /// attributes always come from the blueprint, because a directory object's name attributes and
+    /// its employee link are separate facts that can disagree. Identifiers, timestamps and the
+    /// password are issued here so every object built this way passes through the same issuance
+    /// rules as the rest of the directory.
+    /// </summary>
+    private DirectoryAccount CreateSecondaryDirectoryAccount(
+        Company company,
+        Person? holder,
+        SecondaryAccountBlueprint blueprint,
+        DirectoryOrganizationalUnit targetOu,
+        string distinguishedName,
+        string rootDomain,
+        HashSet<string> issuedPasswords,
+        ISet<string> issuedAccountUpns,
+        ISet<string> issuedAccountMail,
+        ISet<string> issuedSamAccountNames)
+    {
+        var upn = BuildUniqueDirectoryAccountUpn(blueprint.UserPrincipalNameLocalPart, rootDomain, issuedAccountUpns);
+        var samAccountName = EnsureUniqueSamAccountName(
+            Truncate(blueprint.SamAccountNameBase, SamAccountNameMaxLength),
+            issuedSamAccountNames);
+        var passwordLastSet = _clock.UtcNow.AddDays(
+            -_randomSource.Next(blueprint.MinimumPasswordAgeDays, blueprint.MaximumPasswordAgeDays));
+        var lifecycle = CreateAccountLifecycle(
+            passwordLastSet,
+            blueprint.MinimumCreatedAgeDays,
+            blueprint.MaximumCreatedAgeDays,
+            blueprint.MaximumLastLogonAgeDays);
+
+        return new DirectoryAccount
+        {
+            Id = _idFactory.Next("ACT"),
+            CompanyId = company.Id,
+            PersonId = holder?.Id,
+            AccountType = blueprint.AccountType,
+            DisplayName = blueprint.DisplayName,
+            GivenName = blueprint.GivenName,
+            Surname = blueprint.Surname,
+            Description = blueprint.Description,
+            SamAccountName = samAccountName,
+            UserPrincipalName = upn,
+            Mail = blueprint.MailEnabled
+                ? EnsureUniqueAccountMail(upn, upn, issuedAccountMail, issuedAccountUpns)
+                : null,
+            Domain = rootDomain,
+            DistinguishedName = distinguishedName,
+            OuId = targetOu.Id,
+            Enabled = blueprint.Enabled,
+            Privileged = blueprint.Privileged,
+            MfaEnabled = _randomSource.NextDouble() >= blueprint.MfaExemptionProbability,
+            EmployeeId = blueprint.EmployeeId,
+            GeneratedPassword = CreateUniquePassword(issuedPasswords, blueprint.PasswordLength),
+            PasswordProfile = blueprint.PasswordProfile,
+            AdministrativeTier = blueprint.AdministrativeTier,
+            LastLogon = lifecycle.LastLogon,
+            WhenCreated = lifecycle.WhenCreated,
+            WhenModified = lifecycle.WhenModified,
+            PasswordLastSet = passwordLastSet,
+            PasswordExpires = blueprint.PasswordNeverExpires
+                ? null
+                : passwordLastSet.AddDays(blueprint.PasswordLifetimeDays),
+            PasswordNeverExpires = blueprint.PasswordNeverExpires,
+            MustChangePasswordAtNextLogon = ShouldRequirePasswordReset(
+                blueprint.PasswordResetScopeKey,
+                blueprint.PasswordResetProbability),
+            UserType = "Member",
+            IdentityProvider = "HybridDirectory",
+            ExternalAccessCategory = blueprint.ExternalAccessCategory
+        };
+    }
+
+    /// <summary>
+    /// What an object class decides for itself when
+    /// <see cref="CreateSecondaryDirectoryAccount"/> builds it. Everything a directory derives per
+    /// object — the issued identifiers, the timestamps and the password — is left to the builder.
+    /// </summary>
+    private sealed record SecondaryAccountBlueprint
+    {
+        public required string AccountType { get; init; }
+        public required string DisplayName { get; init; }
+        public string? GivenName { get; init; }
+        public string? Surname { get; init; }
+        public required string Description { get; init; }
+        public required string UserPrincipalNameLocalPart { get; init; }
+        public required string SamAccountNameBase { get; init; }
+        public string? EmployeeId { get; init; }
+
+        /// <summary>Whether the object carries a mail address of its own.</summary>
+        public bool MailEnabled { get; init; }
+
+        public bool Enabled { get; init; } = true;
+        public bool Privileged { get; init; }
+
+        /// <summary>
+        /// Share of objects of this class that carry no multi-factor registration. Compared the
+        /// way the privileged population has always compared it, so sharing the builder leaves
+        /// every existing account with the value it already drew. A value of 1 leaves multi-factor
+        /// authentication off, which is what a service-shaped object carries.
+        /// </summary>
+        public double MfaExemptionProbability { get; init; } = 0.15;
+
+        public string? AdministrativeTier { get; init; }
+        public required string PasswordProfile { get; init; }
+        public int PasswordLength { get; init; } = 18;
+        public int MinimumPasswordAgeDays { get; init; } = 1;
+        public int MaximumPasswordAgeDays { get; init; } = 90;
+        public int PasswordLifetimeDays { get; init; } = 90;
+        public bool PasswordNeverExpires { get; init; }
+        public int MinimumCreatedAgeDays { get; init; } = 60;
+        public int MaximumCreatedAgeDays { get; init; } = 1460;
+        public int MaximumLastLogonAgeDays { get; init; } = 14;
+        public required string PasswordResetScopeKey { get; init; }
+        public double PasswordResetProbability { get; init; }
+        public required string ExternalAccessCategory { get; init; }
+    }
+
+    private const string OwnershipConditionCandidateHashDomain = "identity.account-ownership-condition.candidate";
+    private const string OwnershipConditionFormerHolderFirstNameHashDomain = "identity.account-ownership-condition.former-holder-first-name";
+    private const string OwnershipConditionFormerHolderLastNameHashDomain = "identity.account-ownership-condition.former-holder-last-name";
+    private const string OwnershipConditionOwningTeamHashDomain = "identity.account-ownership-condition.owning-team";
+    private const string OwnershipConditionOwningTeamContactHashDomain = "identity.account-ownership-condition.owning-team-contact";
+    private const string OwnershipConditionMailboxDelegateHashDomain = "identity.account-ownership-condition.mailbox-delegate";
+
+    /// <summary>People a shared mailbox's access is delegated to when the mailbox is connected to its users.</summary>
+    private const int SharedMailboxDelegateCount = 3;
+
+    /// <summary>
+    /// Emits the directory account ownership conditions an enterprise directory accumulates over
+    /// its life: a second account a person genuinely holds, an object whose name attributes were
+    /// never corrected when its holder changed, a second object presenting as one holder's primary,
+    /// a disabled object retained after it was superseded, a hand-made object that was never linked
+    /// to an employee record, an object no owner is recorded for, a shared mailbox several named
+    /// people hold access to, and an object whose only ownership record is prose.
+    /// <para>
+    /// Every employee link emitted here is real, and no existing account's link is changed: each
+    /// person's primary account keeps the link it already carries, and the objects below are
+    /// additions beside it. Where the directory records no owner, no owner is emitted.
+    /// </para>
+    /// <para>
+    /// A company that cannot supply the people or the shared mailbox a condition needs emits that
+    /// condition fewer times; neither is invented to reach the requested count.
+    /// </para>
+    /// </summary>
+    private List<DirectoryAccount> CreateAccountOwnershipConditions(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        ScenarioCompanyDefinition definition,
+        IReadOnlyList<Person> companyPeople,
+        IReadOnlyList<Department> companyDepartments,
+        IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        string rootDomain,
+        int conditionCount,
+        CatalogSet catalogs,
+        HashSet<string> issuedPasswords,
+        ISet<string> issuedAccountUpns,
+        ISet<string> issuedAccountMail,
+        ISet<string> issuedSamAccountNames)
+    {
+        var results = new List<DirectoryAccount>();
+        var employeesOu = ous.FirstOrDefault(ou => ou.Name == "Employees");
+        var serviceOu = ous.FirstOrDefault(ou => ou.Name == "Service Accounts");
+        if (conditionCount <= 0 || employeesOu is null || serviceOu is null)
+        {
+            return results;
+        }
+
+        var primaryAccountsByPersonId = world.Accounts
+            .Where(account => account.CompanyId == company.Id
+                              && string.Equals(account.AccountType, "User", StringComparison.OrdinalIgnoreCase)
+                              && !string.IsNullOrWhiteSpace(account.PersonId))
+            .GroupBy(account => account.PersonId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        if (primaryAccountsByPersonId.Count == 0)
+        {
+            return results;
+        }
+
+        // Each condition that needs a person takes one nobody else has taken, in an order that
+        // depends only on the company and the person, so the same scenario picks the same people.
+        var candidates = companyPeople
+            .Where(person => primaryAccountsByPersonId.ContainsKey(person.Id))
+            .OrderBy(person => StableHash.GetIndex(
+                OwnershipConditionCandidateHashDomain,
+                Math.Max(1, companyPeople.Count),
+                company.Id,
+                person.Id))
+            .ThenBy(person => person.Id, StringComparer.Ordinal)
+            .ToList();
+
+        var context = new AccountOwnershipConditionContext
+        {
+            World = world,
+            Company = company,
+            RootDomain = rootDomain,
+            EmployeesOu = employeesOu,
+            ServiceOu = serviceOu,
+            PrimaryAccountsByPersonId = primaryAccountsByPersonId,
+            Candidates = candidates,
+            CompanyPeople = companyPeople,
+            Departments = companyDepartments,
+            // Scoped the way the world invariant validator judges distinguished names.
+            IssuedDistinguishedNames = new HashSet<string>(
+                world.Accounts
+                    .Select(account => account.DistinguishedName)
+                    .Where(value => !string.IsNullOrWhiteSpace(value)),
+                StringComparer.OrdinalIgnoreCase),
+            IssuedPasswords = issuedPasswords,
+            IssuedAccountUpns = issuedAccountUpns,
+            IssuedAccountMail = issuedAccountMail,
+            IssuedSamAccountNames = issuedSamAccountNames,
+            // A former holder is someone the directory no longer holds a person record for, so the
+            // names come from the catalogs rather than from an employee, and never reproduce the
+            // name of a person the world does hold.
+            FormerHolderFirstNames = BuildExternalFirstNamePool(catalogs, definition.Countries, Array.Empty<Person>()),
+            FormerHolderLastNames = BuildExternalLastNamePool(catalogs, definition.Countries, Array.Empty<Person>()),
+            ReservedHolderDisplayNames = new HashSet<string>(
+                world.People.Select(person => person.DisplayName).Where(value => !string.IsNullOrWhiteSpace(value)),
+                StringComparer.OrdinalIgnoreCase)
+        };
+
+        for (var ordinal = 1; ordinal <= conditionCount; ordinal++)
+        {
+            AddIfNotNull(results, CreateHeldSecondaryAccount(context));
+            AddIfNotNull(results, CreateRetainedHolderChangeAccount(context, ordinal));
+            AddIfNotNull(results, CreateSecondPrimaryObjectAccount(context));
+            AddIfNotNull(results, CreateDisabledSupersededAccount(context));
+            AddIfNotNull(results, CreateUnlinkedNamedAccount(context));
+            AddIfNotNull(results, CreateUnownedAccount(context, ordinal));
+            AddIfNotNull(results, CreateTeamOwnedAccount(context, ordinal));
+            ConnectSharedMailboxToItsUsers(context, ordinal);
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// A second account a person genuinely holds: the same given name and surname as the person,
+    /// the person's own employee link, its own identifiers, and a description that states what the
+    /// object is for and which account remains the holder's primary.
+    /// </summary>
+    private DirectoryAccount? CreateHeldSecondaryAccount(AccountOwnershipConditionContext context)
+    {
+        var holder = TakeOwnershipConditionCandidate(context.Candidates);
+        if (holder is null)
+        {
+            return null;
+        }
+
+        var primary = context.PrimaryAccountsByPersonId[holder.Id];
+        var employeeSuffix = Slug(holder.EmployeeId);
+        var displayName = BuildSecondaryAccountDisplayName(holder, "Test");
+
+        return CreateOwnershipConditionAccount(
+            context,
+            holder,
+            displayName,
+            context.EmployeesOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "Secondary",
+                DisplayName = displayName,
+                GivenName = holder.FirstName,
+                Surname = holder.LastName,
+                Description = $"Secondary non-production account for {holder.DisplayName}. "
+                    + $"Day-to-day work stays on primary account {primary.SamAccountName}.",
+                UserPrincipalNameLocalPart = $"tst.{Slug(holder.FirstName)}.{Slug(holder.LastName)}.{employeeSuffix}",
+                SamAccountNameBase = $"tst_{Slug(holder.LastName)}_{employeeSuffix}",
+                EmployeeId = BuildSecondaryEmployeeId(holder.EmployeeId, "T"),
+                MfaExemptionProbability = 0.25,
+                PasswordProfile = "SecondaryStandard",
+                MaximumPasswordAgeDays = 60,
+                MinimumCreatedAgeDays = 30,
+                MaximumCreatedAgeDays = 900,
+                MaximumLastLogonAgeDays = 30,
+                PasswordResetScopeKey = $"secondary-non-production:{context.Company.Id}:{holder.Id}",
+                PasswordResetProbability = 0.03,
+                ExternalAccessCategory = "Secondary"
+            });
+    }
+
+    /// <summary>
+    /// An object created for a holder the directory no longer keeps a person record for, and
+    /// reissued to its current holder without renaming it. The name attributes, the login name and
+    /// the mail address all name the former holder; the employee link names the person who uses the
+    /// object now. Both facts are true of the object, and they disagree.
+    /// </summary>
+    private DirectoryAccount? CreateRetainedHolderChangeAccount(
+        AccountOwnershipConditionContext context,
+        int ordinal)
+    {
+        var holder = TakeOwnershipConditionCandidate(context.Candidates);
+        if (holder is null)
+        {
+            return null;
+        }
+
+        var formerHolder = TakeFormerHolderName(context, ordinal);
+        if (formerHolder is null)
+        {
+            return null;
+        }
+
+        var initial = Slug(formerHolder.Value.FirstName);
+
+        return CreateOwnershipConditionAccount(
+            context,
+            holder,
+            formerHolder.Value.DisplayName,
+            context.EmployeesOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "User",
+                DisplayName = formerHolder.Value.DisplayName,
+                GivenName = formerHolder.Value.FirstName,
+                Surname = formerHolder.Value.LastName,
+                Description = $"User account created for {formerHolder.Value.DisplayName} and retained through a change of holder.",
+                UserPrincipalNameLocalPart = $"{Slug(formerHolder.Value.FirstName)}.{Slug(formerHolder.Value.LastName)}",
+                SamAccountNameBase = $"{(initial.Length > 0 ? initial[..1] : string.Empty)}{Slug(formerHolder.Value.LastName)}",
+
+                // The employee number was never carried over either, which is why the name
+                // attributes are the only owner evidence the object itself offers.
+                EmployeeId = null,
+                MailEnabled = true,
+                PasswordProfile = "EmployeeStandard",
+                MinimumCreatedAgeDays = 400,
+                MaximumCreatedAgeDays = 2500,
+                PasswordResetScopeKey = $"retained-through-holder-change:{context.Company.Id}:{holder.Id}",
+                PasswordResetProbability = 0.02,
+                ExternalAccessCategory = "Employee"
+            });
+    }
+
+    /// <summary>
+    /// A second object presenting as one holder's primary account, of the kind a directory keeps
+    /// after the same person is created twice. It carries the holder's names, the holder's employee
+    /// number and a description in the same shape as a primary account's, so nothing in the object
+    /// says which of the two is the primary. The account created by the joiner process keeps its
+    /// link and is left exactly as it was.
+    /// </summary>
+    private DirectoryAccount? CreateSecondPrimaryObjectAccount(AccountOwnershipConditionContext context)
+    {
+        // A directory holds one object per position, so the second object needs a container the
+        // holder's primary account does not already occupy with the same common name.
+        var holder = TakeOwnershipConditionCandidate(
+            context.Candidates,
+            candidate => !string.Equals(
+                context.PrimaryAccountsByPersonId[candidate.Id].OuId,
+                context.EmployeesOu.Id,
+                StringComparison.OrdinalIgnoreCase));
+        if (holder is null)
+        {
+            return null;
+        }
+
+        var separatorIndex = holder.UserPrincipalName.IndexOf('@', StringComparison.Ordinal);
+        var localPart = separatorIndex > 0
+            ? holder.UserPrincipalName[..separatorIndex]
+            : $"{Slug(holder.FirstName)}.{Slug(holder.LastName)}";
+
+        return CreateOwnershipConditionAccount(
+            context,
+            holder,
+            holder.DisplayName,
+            context.EmployeesOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "User",
+                DisplayName = holder.DisplayName,
+                GivenName = holder.FirstName,
+                Surname = holder.LastName,
+                Description = string.IsNullOrWhiteSpace(holder.Title)
+                    ? $"Primary user account for {holder.DisplayName}."
+                    : $"Primary user account for {holder.DisplayName}, {holder.Title}.",
+                UserPrincipalNameLocalPart = localPart,
+                SamAccountNameBase = BuildSam(holder.FirstName, holder.LastName, holder.EmployeeId),
+                EmployeeId = holder.EmployeeId,
+                MailEnabled = true,
+                PasswordProfile = "EmployeeStandard",
+                MinimumCreatedAgeDays = 30,
+                MaximumCreatedAgeDays = 400,
+                MaximumLastLogonAgeDays = 21,
+                PasswordResetScopeKey = $"second-primary-object:{context.Company.Id}:{holder.Id}",
+                PasswordResetProbability = 0.02,
+                ExternalAccessCategory = "Employee"
+            });
+    }
+
+    /// <summary>
+    /// A disabled object a holder used before it was rebuilt, retained rather than deleted. The
+    /// timestamps read the way a real disabled object's do: it was created, used, and then last
+    /// modified on the day it was disabled, and its password expired before that.
+    /// </summary>
+    private DirectoryAccount? CreateDisabledSupersededAccount(AccountOwnershipConditionContext context)
+    {
+        var holder = TakeOwnershipConditionCandidate(context.Candidates);
+        if (holder is null)
+        {
+            return null;
+        }
+
+        var disabledOn = _clock.UtcNow.AddDays(-RandomInclusive(30, 400));
+        var lastLogon = disabledOn.AddDays(-RandomInclusive(1, 45));
+        var whenCreated = lastLogon.AddDays(-RandomInclusive(180, 900));
+        var passwordLastSet = whenCreated.AddDays(RandomInclusive(1, 30));
+        var account = CreateOwnershipConditionAccount(
+            context,
+            holder,
+            holder.DisplayName,
+            context.EmployeesOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "User",
+                DisplayName = holder.DisplayName,
+                GivenName = holder.FirstName,
+                Surname = holder.LastName,
+                Description = $"Former primary user account for {holder.DisplayName}, superseded when the object was rebuilt. "
+                    + $"Disabled on {disabledOn.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)} and retained for audit.",
+                UserPrincipalNameLocalPart = $"{Slug(holder.FirstName)}.{Slug(holder.LastName)}.old",
+                SamAccountNameBase = $"{Slug(holder.LastName)}old",
+
+                // The employee link moved to the object that replaced this one.
+                EmployeeId = null,
+                Enabled = false,
+                PasswordProfile = "EmployeeStandard",
+                MinimumPasswordAgeDays = 200,
+                MaximumPasswordAgeDays = 700,
+                MinimumCreatedAgeDays = 800,
+                MaximumCreatedAgeDays = 2500,
+                MaximumLastLogonAgeDays = 400,
+                PasswordResetScopeKey = $"disabled-superseded-object:{context.Company.Id}:{holder.Id}",
+                PasswordResetProbability = 0d,
+                ExternalAccessCategory = "Employee"
+            });
+
+        return account with
+        {
+            WhenCreated = whenCreated,
+            LastLogon = lastLogon,
+
+            // Disabling an object is a modification of it, and nothing has touched it since.
+            WhenModified = disabledOn,
+            PasswordLastSet = passwordLastSet,
+            PasswordExpires = passwordLastSet.AddDays(90)
+        };
+    }
+
+    /// <summary>
+    /// An object created by hand rather than by the joiner process: it carries a given name and a
+    /// surname, and no employee link at all. The person whose name it carries keeps their own
+    /// primary account and its link; this object asserts nothing about who holds it.
+    /// </summary>
+    private DirectoryAccount? CreateUnlinkedNamedAccount(AccountOwnershipConditionContext context)
+    {
+        var namesake = TakeOwnershipConditionCandidate(context.Candidates);
+        if (namesake is null)
+        {
+            return null;
+        }
+
+        var displayName = $"{namesake.FirstName} {namesake.LastName} (Secondary)";
+
+        return CreateOwnershipConditionAccount(
+            context,
+            null,
+            displayName,
+            context.EmployeesOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "Secondary",
+                DisplayName = displayName,
+                GivenName = namesake.FirstName,
+                Surname = namesake.LastName,
+                Description = "Secondary account created by hand for pre-production work. "
+                    + "No employee record was linked to the object when it was created.",
+                UserPrincipalNameLocalPart = $"{Slug(namesake.FirstName)}.{Slug(namesake.LastName)}.lab",
+                SamAccountNameBase = $"lab_{Slug(namesake.LastName)}",
+                EmployeeId = null,
+                MfaExemptionProbability = 0.5,
+                PasswordProfile = "SecondaryStandard",
+                MaximumPasswordAgeDays = 400,
+                MinimumCreatedAgeDays = 90,
+                MaximumCreatedAgeDays = 1200,
+                MaximumLastLogonAgeDays = 120,
+                PasswordResetScopeKey = $"unlinked-named-object:{context.Company.Id}:{namesake.Id}",
+                PasswordResetProbability = 0d,
+                ExternalAccessCategory = "Secondary"
+            });
+    }
+
+    /// <summary>
+    /// An object left behind by a system that no longer exists: no employee link, no name
+    /// attributes, no owner named anywhere on it, and a description that says so.
+    /// </summary>
+    private DirectoryAccount? CreateUnownedAccount(AccountOwnershipConditionContext context, int ordinal)
+    {
+        var displayName = $"svc-legacy-transfer-{ordinal:00}";
+
+        return CreateOwnershipConditionAccount(
+            context,
+            null,
+            displayName,
+            context.ServiceOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "Service",
+                DisplayName = displayName,
+                GivenName = null,
+                Surname = null,
+                Description = "Retained account for a decommissioned file transfer integration. "
+                    + "No owner is recorded for this object.",
+                UserPrincipalNameLocalPart = $"svc.legacy.transfer.{ordinal:00}",
+                SamAccountNameBase = $"svc_legacy_tr{ordinal:00}",
+                EmployeeId = null,
+                MfaExemptionProbability = 1d,
+                PasswordProfile = "ServiceManaged",
+                PasswordLength = 20,
+                MinimumPasswordAgeDays = 200,
+                MaximumPasswordAgeDays = 1200,
+                PasswordNeverExpires = true,
+                MinimumCreatedAgeDays = 900,
+                MaximumCreatedAgeDays = 3650,
+                MaximumLastLogonAgeDays = 900,
+                PasswordResetScopeKey = $"unowned-object:{context.Company.Id}:{ordinal}",
+                PasswordResetProbability = 0d,
+                ExternalAccessCategory = "Service"
+            });
+    }
+
+    /// <summary>
+    /// An object whose only record of ownership is the prose in its description, naming the team
+    /// that runs it and the person to ask about it. No identifier is emitted for either, because
+    /// the directory holds none: prose is all the object carries.
+    /// </summary>
+    private DirectoryAccount? CreateTeamOwnedAccount(AccountOwnershipConditionContext context, int ordinal)
+    {
+        if (context.Departments.Count == 0)
+        {
+            return null;
+        }
+
+        var ordinalText = ordinal.ToString(CultureInfo.InvariantCulture);
+        var department = context.Departments[StableHash.GetIndex(
+            OwnershipConditionOwningTeamHashDomain,
+            context.Departments.Count,
+            context.Company.Id,
+            ordinalText)];
+        var departmentPeople = context.CompanyPeople
+            .Where(person => string.Equals(person.DepartmentId, department.Id, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(person => person.Id, StringComparer.Ordinal)
+            .ToList();
+        if (departmentPeople.Count == 0)
+        {
+            return null;
+        }
+
+        var contact = departmentPeople[StableHash.GetIndex(
+            OwnershipConditionOwningTeamContactHashDomain,
+            departmentPeople.Count,
+            context.Company.Id,
+            department.Id,
+            ordinalText)];
+        var displayName = $"svc-scheduled-reporting-{ordinal:00}";
+
+        return CreateOwnershipConditionAccount(
+            context,
+            null,
+            displayName,
+            context.ServiceOu,
+            new SecondaryAccountBlueprint
+            {
+                AccountType = "Service",
+                DisplayName = displayName,
+                GivenName = null,
+                Surname = null,
+                Description = string.IsNullOrWhiteSpace(contact.Title)
+                    ? $"Runs the overnight reporting extract. Owned by the {department.Name} team; ask {contact.DisplayName}."
+                    : $"Runs the overnight reporting extract. Owned by the {department.Name} team; ask {contact.DisplayName}, {contact.Title}.",
+                UserPrincipalNameLocalPart = $"svc.scheduled.reporting.{ordinal:00}",
+                SamAccountNameBase = $"svc_report{ordinal:00}",
+                EmployeeId = null,
+                MfaExemptionProbability = 1d,
+                PasswordProfile = "ServiceManaged",
+                PasswordLength = 20,
+                MinimumPasswordAgeDays = 30,
+                MaximumPasswordAgeDays = 900,
+                PasswordNeverExpires = true,
+                MinimumCreatedAgeDays = 180,
+                MaximumCreatedAgeDays = 2200,
+                MaximumLastLogonAgeDays = 7,
+                PasswordResetScopeKey = $"team-owned-object:{context.Company.Id}:{department.Id}:{ordinal}",
+                PasswordResetProbability = 0d,
+                ExternalAccessCategory = "Service"
+            });
+    }
+
+    /// <summary>
+    /// Records that a shared mailbox is genuinely used by several people: each of them is granted
+    /// mailbox access in their own right, alongside the departments already nested in the access
+    /// group, and the mailbox itself states that its access is held by named people rather than by
+    /// one owner. The mailbox is not replaced — the object the company already has is the one
+    /// several people use.
+    /// </summary>
+    private void ConnectSharedMailboxToItsUsers(AccountOwnershipConditionContext context, int ordinal)
+    {
+        var mailboxes = context.World.Accounts
+            .Where(account => account.CompanyId == context.Company.Id
+                              && string.Equals(account.AccountType, "Shared", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (ordinal > mailboxes.Count)
+        {
+            return;
+        }
+
+        var mailbox = mailboxes[ordinal - 1];
+        var accessGroup = FindGroup(context.World.Groups, context.Company.Id, SharedMailboxAccessGroupName(mailbox));
+        if (accessGroup is null)
+        {
+            return;
+        }
+
+        var delegateAccounts = ResolveSharedMailboxDelegateAccounts(context, mailbox, accessGroup);
+        if (delegateAccounts.Count < 2)
+        {
+            return;
+        }
+
+        foreach (var delegateAccount in delegateAccounts)
+        {
+            if (context.World.GroupMemberships.Any(membership =>
+                    membership.GroupId == accessGroup.Id
+                    && string.Equals(membership.MemberObjectId, delegateAccount.Id, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            context.World.GroupMemberships.Add(CreateMembership(accessGroup.Id, delegateAccount.Id, "Account"));
+        }
+
+        var mailboxIndex = context.World.Accounts.FindIndex(account => account.Id == mailbox.Id);
+        if (mailboxIndex < 0)
+        {
+            return;
+        }
+
+        var purpose = (mailbox.Description ?? string.Empty).TrimEnd();
+        context.World.Accounts[mailboxIndex] = mailbox with
+        {
+            Description = string.IsNullOrEmpty(purpose)
+                ? $"Mailbox access is held by {delegateAccounts.Count} named people rather than by one owner."
+                : $"{purpose} Mailbox access is held by {delegateAccounts.Count} named people rather than by one owner."
+        };
+    }
+
+    /// <summary>
+    /// The accounts that hold a shared mailbox's access. Staff in the departments already nested in
+    /// the mailbox's access group are preferred, because those are the people the mailbox serves.
+    /// </summary>
+    private static List<DirectoryAccount> ResolveSharedMailboxDelegateAccounts(
+        AccountOwnershipConditionContext context,
+        DirectoryAccount mailbox,
+        DirectoryGroup accessGroup)
+    {
+        var nestedGroupIds = context.World.GroupMemberships
+            .Where(membership => membership.GroupId == accessGroup.Id
+                                 && string.Equals(membership.MemberObjectType, "Group", StringComparison.OrdinalIgnoreCase))
+            .Select(membership => membership.MemberObjectId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var servedDepartmentIds = context.World.Groups
+            .Where(group => nestedGroupIds.Contains(group.Id))
+            .SelectMany(group => context.Departments
+                .Where(department => string.Equals(group.Name, DepartmentUserGroupName(department), StringComparison.OrdinalIgnoreCase)))
+            .Select(department => department.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var departmentIdsByPersonId = context.CompanyPeople
+            .GroupBy(person => person.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().DepartmentId, StringComparer.OrdinalIgnoreCase);
+        var userAccounts = context.World.Accounts
+            .Where(account => account.CompanyId == context.Company.Id
+                              && string.Equals(account.AccountType, "User", StringComparison.OrdinalIgnoreCase)
+                              && !string.IsNullOrWhiteSpace(account.PersonId)
+                              && departmentIdsByPersonId.ContainsKey(account.PersonId!))
+            .ToList();
+        var served = servedDepartmentIds.Count == 0
+            ? userAccounts
+            : userAccounts
+                .Where(account => servedDepartmentIds.Contains(departmentIdsByPersonId[account.PersonId!]))
+                .ToList();
+        if (served.Count == 0)
+        {
+            served = userAccounts;
+        }
+
+        return served
+            .OrderBy(account => StableHash.GetIndex(
+                OwnershipConditionMailboxDelegateHashDomain,
+                Math.Max(1, served.Count),
+                mailbox.Id,
+                account.Id))
+            .ThenBy(account => account.Id, StringComparer.Ordinal)
+            .Take(SharedMailboxDelegateCount)
+            .ToList();
+    }
+
+    private DirectoryAccount CreateOwnershipConditionAccount(
+        AccountOwnershipConditionContext context,
+        Person? holder,
+        string commonName,
+        DirectoryOrganizationalUnit targetOu,
+        SecondaryAccountBlueprint blueprint)
+        => CreateSecondaryDirectoryAccount(
+            context.Company,
+            holder,
+            blueprint,
+            targetOu,
+            EnsureUniqueAccountDistinguishedName(commonName, targetOu.DistinguishedName, context.IssuedDistinguishedNames),
+            context.RootDomain,
+            context.IssuedPasswords,
+            context.IssuedAccountUpns,
+            context.IssuedAccountMail,
+            context.IssuedSamAccountNames);
+
+    /// <summary>
+    /// Takes the next person no condition has used yet, optionally the next one that satisfies a
+    /// condition's own requirement, or <see langword="null"/> when the company has none left.
+    /// </summary>
+    private static Person? TakeOwnershipConditionCandidate(
+        List<Person> candidates,
+        Func<Person, bool>? requirement = null)
+    {
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (requirement is not null && !requirement(candidates[index]))
+            {
+                continue;
+            }
+
+            var candidate = candidates[index];
+            candidates.RemoveAt(index);
+            return candidate;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Issues the name attributes of a holder the directory no longer keeps a person record for.
+    /// The name never reproduces one held by a person the world already contains, so the object's
+    /// name attributes point at nobody the directory can offer.
+    /// </summary>
+    private static (string FirstName, string LastName, string DisplayName)? TakeFormerHolderName(
+        AccountOwnershipConditionContext context,
+        int ordinal)
+    {
+        var firstNames = context.FormerHolderFirstNames;
+        var lastNames = context.FormerHolderLastNames;
+        if (firstNames.Count == 0 || lastNames.Count == 0)
+        {
+            return null;
+        }
+
+        var ordinalText = ordinal.ToString(CultureInfo.InvariantCulture);
+        var firstSeed = StableHash.GetIndex(
+            OwnershipConditionFormerHolderFirstNameHashDomain,
+            firstNames.Count,
+            context.Company.Id,
+            ordinalText);
+        var lastSeed = StableHash.GetIndex(
+            OwnershipConditionFormerHolderLastNameHashDomain,
+            lastNames.Count,
+            context.Company.Id,
+            ordinalText);
+
+        for (var firstOffset = 0; firstOffset < firstNames.Count; firstOffset++)
+        {
+            var firstName = firstNames[(firstSeed + firstOffset) % firstNames.Count];
+            for (var lastOffset = 0; lastOffset < lastNames.Count; lastOffset++)
+            {
+                var lastName = lastNames[(lastSeed + lastOffset) % lastNames.Count];
+                var displayName = $"{firstName} {lastName}";
+                if (context.ReservedHolderDisplayNames.Add(displayName))
+                {
+                    return (firstName, lastName, displayName);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Issues a distinguished name no other account holds. A distinguished name states where an
+    /// object sits in a directory, so where the common name is already taken in that container the
+    /// issued name carries a numeral, the way a directory itself resolves the collision.
+    /// </summary>
+    private static string EnsureUniqueAccountDistinguishedName(
+        string commonName,
+        string containerDistinguishedName,
+        ISet<string> issuedDistinguishedNames)
+    {
+        var candidate = $"CN={EscapeDn(commonName)},{containerDistinguishedName}";
+        if (issuedDistinguishedNames.Add(candidate))
+        {
+            return candidate;
+        }
+
+        for (var suffix = 2; suffix <= 9999; suffix++)
+        {
+            candidate = $"CN={EscapeDn(commonName)}{suffix.ToString(CultureInfo.InvariantCulture)},{containerDistinguishedName}";
+            if (issuedDistinguishedNames.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"Unable to issue a unique distinguished name for common name '{commonName}' in container "
+            + $"'{containerDistinguishedName}': all 9999 disambiguated candidates are already in use.");
+    }
+
+    private static void AddIfNotNull(List<DirectoryAccount> results, DirectoryAccount? account)
+    {
+        if (account is not null)
+        {
+            results.Add(account);
+        }
+    }
+
+    /// <summary>
+    /// The state the account ownership conditions of one company share: the issuance registries
+    /// every object must pass through, the people no condition has used yet, and the pools a former
+    /// holder's name is drawn from.
+    /// </summary>
+    private sealed record AccountOwnershipConditionContext
+    {
+        public required SyntheticEnterpriseWorld World { get; init; }
+        public required Company Company { get; init; }
+        public required string RootDomain { get; init; }
+        public required DirectoryOrganizationalUnit EmployeesOu { get; init; }
+        public required DirectoryOrganizationalUnit ServiceOu { get; init; }
+        public required IReadOnlyDictionary<string, DirectoryAccount> PrimaryAccountsByPersonId { get; init; }
+        public required List<Person> Candidates { get; init; }
+        public required IReadOnlyList<Person> CompanyPeople { get; init; }
+        public required IReadOnlyList<Department> Departments { get; init; }
+        public required HashSet<string> IssuedDistinguishedNames { get; init; }
+        public required HashSet<string> IssuedPasswords { get; init; }
+        public required ISet<string> IssuedAccountUpns { get; init; }
+        public required ISet<string> IssuedAccountMail { get; init; }
+        public required ISet<string> IssuedSamAccountNames { get; init; }
+        public required IReadOnlyList<string> FormerHolderFirstNames { get; init; }
+        public required IReadOnlyList<string> FormerHolderLastNames { get; init; }
+        public required HashSet<string> ReservedHolderDisplayNames { get; init; }
     }
 
     private AccountLifecycle CreateAccountLifecycle(
@@ -3442,6 +4542,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Office> offices,
         IReadOnlyList<ExternalOrganization> externalOrganizations,
         string rootDomain,
+        ISet<string> issuedPersonUpns,
         CatalogSet catalogs)
     {
         var results = new List<Person>();
@@ -3463,9 +4564,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             .ToArray();
         var firstNames = BuildExternalFirstNamePool(catalogs, nameCountries, employees);
         var lastNames = BuildExternalLastNamePool(catalogs, nameCountries, employees);
-        var issuedPersonUpns = new HashSet<string>(
-            employees.Select(employee => employee.UserPrincipalName).Where(value => !string.IsNullOrWhiteSpace(value)),
-            StringComparer.OrdinalIgnoreCase);
         var issuedDisplayNames = new HashSet<string>(
             employees.Select(employee => employee.DisplayName).Where(value => !string.IsNullOrWhiteSpace(value)),
             StringComparer.OrdinalIgnoreCase);
@@ -3832,6 +4930,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
+        ISet<string> issuedAccountMail,
         ISet<string> issuedSamAccountNames,
         string rootDomain)
     {
@@ -3954,6 +5053,13 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 30,
                 1095,
                 accountType == "ManagedServiceProvider" ? 7 : 21);
+            var employerSuffix = employer is null ? "." : $" of {employer.Name}.";
+            var description = accountType switch
+            {
+                "ManagedServiceProvider" => $"Managed service provider operator account for {person.DisplayName}{employerSuffix}",
+                "Guest" => $"Guest collaboration account for {person.DisplayName}{employerSuffix}",
+                _ => $"Contractor account for {person.DisplayName}{employerSuffix}"
+            };
 
             results.Add(new DirectoryAccount
             {
@@ -3962,9 +5068,14 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 PersonId = person.Id,
                 AccountType = accountType,
                 DisplayName = person.DisplayName,
+                GivenName = person.FirstName,
+                Surname = person.LastName,
+                Description = description,
                 SamAccountName = samAccountName,
                 UserPrincipalName = upn,
-                Mail = accountType == "Guest" ? null : upn,
+                Mail = accountType == "Guest"
+                    ? null
+                    : EnsureUniqueAccountMail(upn, upn, issuedAccountMail, issuedAccountUpns),
                 Domain = rootDomain,
                 DistinguishedName = $"CN={EscapeDn(person.DisplayName)},{targetOu.DistinguishedName}",
                 OuId = targetOu.Id,
@@ -4352,7 +5463,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string? parentOuId,
         string distinguishedName,
         string purpose,
-        string environmentRole = "Source")
+        string environmentRole = "Source",
+        bool daclInheritanceProtected = false)
     {
         return new DirectoryOrganizationalUnit
         {
@@ -4362,7 +5474,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             ParentOuId = parentOuId,
             DistinguishedName = distinguishedName,
             Purpose = purpose,
-            EnvironmentRole = environmentRole
+            EnvironmentRole = environmentRole,
+            DaclInheritanceProtected = daclInheritanceProtected
         };
     }
 
@@ -4892,6 +6005,99 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return $@"{rootHive}\Software\Policies\{vendorNode}\{Slug(policyName)}\{Slug(settingCategory)}\{Slug(settingName)}";
     }
 
+    /// <summary>
+    /// Emits the explicit access control entries held on the security descriptors of organizational
+    /// unit objects. Only explicit entries are emitted, which is what a directory collector reads:
+    /// an entry that reaches a descendant by inheritance is stored once, on the object it is set on,
+    /// and is not repeated further down. Effective access on any given organizational unit is
+    /// obtained by walking <see cref="DirectoryOrganizationalUnit.ParentOuId"/> upwards, honouring
+    /// each entry's <see cref="AccessControlEvidenceRecord.InheritanceScope"/> and stopping at the
+    /// first ancestor-or-self whose <see cref="DirectoryOrganizationalUnit.DaclInheritanceProtected"/>
+    /// is set.
+    /// </summary>
+    private void CreateDirectoryObjectSecurity(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<DirectoryOrganizationalUnit> ous)
+    {
+        var entries = new (string OuName, string OuPurpose, string GroupName, string RightName, string AccessType, string InheritanceScope, string Notes)[]
+        {
+            (
+                "Endpoints",
+                "Managed Computers",
+                BackupOperatorsGroupName(),
+                "GenericRead",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                "Delegated read of endpoint objects, set once at the subtree root and inheritable downwards"),
+            (
+                "Endpoints",
+                "Managed Computers",
+                GroupPolicyEditorsGroupName(),
+                "WriteProperty",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectOnly,
+                "Applies to the Endpoints organizational unit object itself and to no descendant"),
+            (
+                "Servers",
+                "Managed Servers",
+                ServerRemoteDesktopAdminsGroupName(),
+                "ReadProperty",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                "Delegated read of server objects, inheritable from the Servers organizational unit downwards"),
+            (
+                "Production",
+                "Production Servers",
+                SqlAdminsGroupName(),
+                "CreateChild",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                "Set directly on Production because that organizational unit's access control list is protected from inheritance"),
+            (
+                "Production",
+                "Production Servers",
+                B2BGuestsGroupName(),
+                "GenericRead",
+                "Deny",
+                AccessControlInheritanceScope.ThisObjectOnly,
+                "Guest principals denied read on the Production organizational unit object itself")
+        };
+
+        foreach (var entry in entries)
+        {
+            var ou = FindOu(ous, company.Id, entry.OuName, entry.OuPurpose);
+            var group = FindGroup(world.Groups, company.Id, entry.GroupName);
+            if (ou is null || group is null)
+            {
+                continue;
+            }
+
+            AddAccessControlEvidence(
+                world,
+                company.Id,
+                group.Id,
+                "Group",
+                nameof(DirectoryOrganizationalUnit),
+                ou.Id,
+                entry.RightName,
+                entry.AccessType,
+                isInherited: false,
+                "ActiveDirectory",
+                notes: entry.Notes,
+                inheritanceScope: entry.InheritanceScope);
+        }
+    }
+
+    private static DirectoryOrganizationalUnit? FindOu(
+        IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        string companyId,
+        string name,
+        string purpose)
+        => ous.FirstOrDefault(ou => ou.CompanyId == companyId
+                                    && string.Equals(ou.Name, name, StringComparison.OrdinalIgnoreCase)
+                                    && string.Equals(ou.Purpose, purpose, StringComparison.OrdinalIgnoreCase));
+
     private void AddAccessControlEvidence(
         SyntheticEnterpriseWorld world,
         string companyId,
@@ -4904,20 +6110,24 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         bool isInherited,
         string sourceSystem,
         string? inheritanceSourceId = null,
-        string? notes = null)
+        string? notes = null,
+        string? inheritanceScope = null)
     {
         if (string.IsNullOrWhiteSpace(principalObjectId) || string.IsNullOrWhiteSpace(targetId))
         {
             return;
         }
 
+        // Scope is part of the identity of an entry: the same principal can hold the same right on
+        // the same object once for the object alone and once for its descendants.
         if (world.AccessControlEvidence.Any(evidence =>
                 evidence.CompanyId == companyId
                 && string.Equals(evidence.PrincipalObjectId, principalObjectId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(evidence.TargetType, targetType, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(evidence.TargetId, targetId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(evidence.RightName, rightName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(evidence.AccessType, accessType, StringComparison.OrdinalIgnoreCase)))
+                && string.Equals(evidence.AccessType, accessType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.InheritanceScope, inheritanceScope, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -4936,6 +6146,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             IsDefaultEntry = false,
             SourceSystem = sourceSystem,
             InheritanceSourceId = inheritanceSourceId,
+            InheritanceScope = inheritanceScope,
             Notes = notes
         });
     }
@@ -5270,7 +6481,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             upnLocalPart,
             pattern.Privileged,
             pattern.Privileged ? "Tier1" : null,
-            pattern.PasswordProfile);
+            pattern.PasswordProfile,
+            $"Service account for the {pattern.Prefix} {pattern.Role} workload ({commonName}).");
     }
 
     private sealed record ServiceAccountBlueprint(
@@ -5279,7 +6491,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string UserPrincipalNameLocalPart,
         bool Privileged,
         string? AdministrativeTier,
-        string PasswordProfile);
+        string PasswordProfile,
+        string Description);
 
     private static bool IsLeadershipTitle(string title)
         => !string.IsNullOrWhiteSpace(title)

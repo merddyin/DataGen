@@ -5,6 +5,9 @@ using System.Text.Json;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Plugins;
 using SyntheticEnterprise.Contracts.Scenarios;
+using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Catalogs;
+using SyntheticEnterprise.Core.Generation.Organization;
 using SyntheticEnterprise.Core.Plugins;
 
 public interface IScenarioTemplateRegistry
@@ -906,6 +909,7 @@ public sealed class ScenarioValidator : IScenarioValidator
     private readonly IScenarioDefaultsResolver _resolver;
     private readonly IScenarioPluginProfileHydrator _pluginProfileHydrator;
     private readonly IScenarioPluginContributionResolver _pluginContributionResolver;
+    private readonly Lazy<CatalogSet> _catalogs;
 
     public ScenarioValidator()
         : this(
@@ -929,25 +933,38 @@ public sealed class ScenarioValidator : IScenarioValidator
                         new FileSystemExternalGenerationPluginCatalog(
                             new GenerationPluginManifestValidator(new DataOnlyGenerationPluginSecurityPolicy()),
                             new DataOnlyGenerationPluginSecurityPolicy(),
-                            new AllowListExternalPluginTrustPolicy())))))
+                            new AllowListExternalPluginTrustPolicy())))),
+            new FileSystemCatalogLoader())
     {
     }
 
     public ScenarioValidator(
         IScenarioDefaultsResolver resolver,
         IScenarioPluginProfileHydrator pluginProfileHydrator,
-        IScenarioPluginContributionResolver pluginContributionResolver)
+        IScenarioPluginContributionResolver pluginContributionResolver,
+        ICatalogLoader catalogLoader)
     {
         _resolver = resolver;
         _pluginProfileHydrator = pluginProfileHydrator;
         _pluginContributionResolver = pluginContributionResolver;
+
+        // Primary domains are resolved from the same catalogs generation defaults to, so validation
+        // judges the domains a world would actually be given. Loading is deferred because only a
+        // multi-company scenario can collide.
+        _catalogs = new Lazy<CatalogSet>(catalogLoader.LoadDefault);
     }
 
     public ScenarioValidationResult Validate(object scenario)
     {
+        // Retired options survive only in the raw document: they map to no CLR member, so they are
+        // gone once the scenario is deserialized.
+        var messages = scenario is string scenarioJson
+            ? RetiredScenarioOptionInspector.Inspect(scenarioJson).ToList()
+            : new List<ScenarioValidationMessage>();
+
         var resolved = _resolver.Resolve(scenario);
         var hydration = _pluginProfileHydrator.Hydrate(resolved);
-        var messages = hydration.Messages.ToList();
+        messages.AddRange(hydration.Messages);
         resolved = hydration.Scenario;
         var contributionResolution = _pluginContributionResolver.Resolve(resolved);
 
@@ -1014,6 +1031,38 @@ public sealed class ScenarioValidator : IScenarioValidator
                 "The scenario must include workstations or servers, and the largest company must contain at least as many employees as the requested effective security configuration endpoints."));
         }
 
+        var accountOwnershipConditionCount = resolved.Identity.AccountOwnershipConditionCount;
+        if (accountOwnershipConditionCount < 0
+            || accountOwnershipConditionCount > IdentityProfile.MaximumAccountOwnershipConditionCount)
+        {
+            messages.Add(new ScenarioValidationMessage(
+                "identity-account-ownership-condition-count",
+                ScenarioValidationSeverity.Error,
+                "$.identity.accountOwnershipConditionCount",
+                $"AccountOwnershipConditionCount must be between 0 and {IdentityProfile.MaximumAccountOwnershipConditionCount}."));
+        }
+
+        // The conditions are built from people and shared mailboxes the company already has, and
+        // several of them consume a person each, so the option is only feasible where the largest
+        // company holds enough employees and at least one shared mailbox to attach access to.
+        const int PeoplePerAccountOwnershipCondition = 5;
+        var largestCompanySharedMailboxCount = resolved.Companies
+            .Select(company => company.SharedMailboxCount)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (accountOwnershipConditionCount > 0
+            && (accountOwnershipConditionCount * PeoplePerAccountOwnershipCondition > largestCompanyPopulation
+                || accountOwnershipConditionCount > largestCompanySharedMailboxCount))
+        {
+            messages.Add(new ScenarioValidationMessage(
+                "identity-account-ownership-condition-population",
+                ScenarioValidationSeverity.Error,
+                "$.identity.accountOwnershipConditionCount",
+                $"The largest company must contain at least {PeoplePerAccountOwnershipCondition} employees and one shared mailbox "
+                + "for every requested account ownership condition, because the conditions are built from people and shared "
+                + "mailboxes the company already has."));
+        }
+
         foreach (var company in resolved.Companies)
         {
             if (company.EmployeeCount <= 0)
@@ -1027,6 +1076,7 @@ public sealed class ScenarioValidator : IScenarioValidator
             }
         }
 
+        messages.AddRange(CheckPrimaryDomainsAreDistinct(resolved.Companies));
         messages.AddRange(contributionResolution.Messages);
 
         return new ScenarioValidationResult
@@ -1037,6 +1087,44 @@ public sealed class ScenarioValidator : IScenarioValidator
             AuthoringHints = contributionResolution.AuthoringHints,
             ResolvedScenario = resolved
         };
+    }
+
+    /// <summary>
+    /// A company's primary domain becomes the root of its directory naming context, so two companies
+    /// resolving to one domain would place both directories in the same namespace and mint the same
+    /// distinguished names twice. A distinguished name names a real position in a directory and so
+    /// cannot be disambiguated away; the only honest resolution is for the author to rename a
+    /// company, which is why this is rejected here rather than modelled.
+    /// </summary>
+    private IEnumerable<ScenarioValidationMessage> CheckPrimaryDomainsAreDistinct(
+        IReadOnlyCollection<ScenarioCompanyDefinition> companies)
+    {
+        if (companies.Count < 2)
+        {
+            return Array.Empty<ScenarioValidationMessage>();
+        }
+
+        var catalogs = _catalogs.Value;
+
+        return companies
+            .Select(company => new
+            {
+                company.Name,
+                Domain = CompanyPrimaryDomainResolver.Resolve(
+                    company.Name,
+                    CompanyPrimaryDomainResolver.ResolvePrimaryCountry(company.Countries),
+                    catalogs)
+            })
+            .GroupBy(entry => entry.Domain, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => new ScenarioValidationMessage(
+                "company-primary-domain-collision",
+                ScenarioValidationSeverity.Error,
+                "$.companies[].name",
+                $"Companies {string.Join(", ", group.Select(entry => $"'{entry.Name}'"))} all resolve to primary domain '{group.Key}'. "
+                + "Each company must resolve to its own primary domain, because every directory distinguished name is derived from it. "
+                + "Rename all but one of these companies so their names no longer reduce to the same domain label."))
+            .ToList();
     }
 }
 

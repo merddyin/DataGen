@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.VisualBasic.FileIO;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Models;
@@ -18,7 +18,7 @@ namespace SyntheticEnterprise.Exporting.Tests;
 /// </summary>
 public sealed class EffectiveSecurityConfigurationExportTests
 {
-    private const string ExpectedSchemaVersion = "2.1.0";
+    private const string ExpectedSchemaVersion = "2.2.0";
 
     [Theory]
     [InlineData(ExportSerializationFormat.Json)]

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory)]
     [string]$SourceRoot,
@@ -622,7 +622,7 @@ function Assert-ReleasePublicationAttestationContract {
             [pscustomobject]@{ Name = 'missing'; Attestation = ''; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
             [pscustomobject]@{ Name = 'forged-evidence'; Attestation = (New-ReleasePreflightAttestationEnvelope -Payload (New-ReleasePreflightAttestationPayload -Version '0.11.0' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash ('0' * 64) -KeyId $parsedAttestation.KeyId) -Signature $parsedAttestation.Signature); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
             [pscustomobject]@{ Name = 'modified-source'; Attestation = (New-ReleasePreflightAttestationEnvelope -Payload (New-ReleasePreflightAttestationPayload -Version '0.11.0' -SourceCommit ('f' * 40) @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId) -Signature $parsedAttestation.Signature); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
-            [pscustomobject]@{ Name = 'modified-version'; Attestation = (New-ReleasePreflightAttestationPayload -Version '0.11.1' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId | ForEach-Object { New-ReleasePreflightAttestationEnvelope -Payload $_ -Signature $parsedAttestation.Signature }); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
+            [pscustomobject]@{ Name = 'modified-version'; Attestation = (New-ReleasePreflightAttestationPayload -Version '0.13.0' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc $completedAt -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId | ForEach-Object { New-ReleasePreflightAttestationEnvelope -Payload $_ -Signature $parsedAttestation.Signature }); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
             [pscustomobject]@{ Name = 'modified-completion'; Attestation = (New-ReleasePreflightAttestationPayload -Version '0.11.0' -SourceCommit $sourceCommit @attestationClaimArguments -CompletedAtUtc '2026-08-14T12:00:01Z' -EvidenceHash $parsedAttestation.EvidenceHash -KeyId $parsedAttestation.KeyId | ForEach-Object { New-ReleasePreflightAttestationEnvelope -Payload $_ -Signature $parsedAttestation.Signature }); Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
             [pscustomobject]@{ Name = 'wrong-key'; Attestation = $wrongKeyAttestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
             [pscustomobject]@{ Name = 'missing-g-result-claim'; Attestation = $missingClaimAttestation; Version = '0.11.0'; Source = $sourceCommit; Now = '2026-08-14T13:00:00Z'; PublicCertificatePath = $publicCertificatePath; ShouldPass = $false },
@@ -963,8 +963,8 @@ function Assert-ReleaseVersionContract {
         [string]$RepositoryRoot
     )
 
-    $expectedVersion = '0.11.1'
-    $expectedAssemblyVersion = '0.11.1.0'
+    $expectedVersion = '0.13.0'
+    $expectedAssemblyVersion = '0.13.0.0'
     $propsPath = Join-Path $RepositoryRoot 'Directory.Build.props'
     $packageScriptPath = Join-Path $RepositoryRoot 'scripts\package-module.ps1'
     $websitePackagePath = Join-Path $RepositoryRoot 'website\package.json'
@@ -2384,7 +2384,7 @@ try {
         throw "The packaged module does not contain '$packagedCatalogPath'."
     }
 
-    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.11.1\SyntheticEnterprise.PowerShell.psd1'
+    $versionedManifestPath = Join-Path $outputRoot 'module\SyntheticEnterprise.PowerShell\0.13.0\SyntheticEnterprise.PowerShell.psd1'
     if (-not (Test-Path -LiteralPath $versionedManifestPath -PathType Leaf)) {
         throw "The default package version did not produce '$versionedManifestPath'."
     }

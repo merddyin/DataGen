@@ -22,6 +22,7 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
         AppendMetricWarning(warnings, metrics, "max_person_display_name_repeat_over_limit", "a person display name is repeating more often than the realism limit allows.");
         AppendMetricWarning(warnings, metrics, "duplicate_person_upns", "duplicate person user principal names were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_account_upns", "duplicate directory account user principal names were generated.");
+        AppendMetricWarning(warnings, metrics, "duplicate_account_mail", "duplicate directory account mail addresses were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_account_sam_account_names", "duplicate directory account sAMAccountName values were generated.");
         AppendMetricWarning(warnings, metrics, "duplicate_generated_passwords", "duplicate generated passwords were detected.");
         AppendMetricWarning(warnings, metrics, "accounts_missing_temporal_identity_evidence", "accounts are missing temporal identity evidence such as last logon or created/modified timestamps.");
@@ -97,7 +98,8 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             ["max_person_display_name_repeat_over_limit"] = Math.Max(0, CountMaxRepeat(world.People.Select(person => person.DisplayName)) - 3),
             ["duplicate_person_upns"] = CountDuplicateValues(world.People.Select(person => person.UserPrincipalName)),
             ["duplicate_account_upns"] = CountDuplicateValues(world.Accounts.Select(account => account.UserPrincipalName)),
-            ["duplicate_account_sam_account_names"] = CountDuplicateValues(world.Accounts.Select(account => account.SamAccountName)),
+            ["duplicate_account_mail"] = CountDuplicateAccountMail(world),
+            ["duplicate_account_sam_account_names"] = CountDuplicateSamAccountNamesPerDomain(world),
             ["duplicate_generated_passwords"] = CountDuplicateValues(world.Accounts.Select(account => account.GeneratedPassword)),
             ["accounts_missing_temporal_identity_evidence"] = CountAccountsMissingTemporalEvidence(world),
             ["workstations_missing_identity_evidence"] = CountWorkstationsMissingIdentityEvidence(world),
@@ -591,6 +593,42 @@ public sealed class WorldQualityAuditService : IWorldQualityAuditService
             return !hasScope || !hasAssignment;
         });
     }
+
+    /// <summary>
+    /// Counts mail addresses shared by more than one account, and mail addresses that collide with
+    /// a different account's user principal name. An account carrying its own user principal name
+    /// as its mail address is normal and is not a collision.
+    /// </summary>
+    private static int CountDuplicateAccountMail(SyntheticEnterpriseWorld world)
+    {
+        var duplicates = CountDuplicateValues(world.Accounts.Select(account => account.Mail));
+        var upnOwners = world.Accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account.UserPrincipalName))
+            .GroupBy(account => account.UserPrincipalName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Select(account => account.Id).ToArray(), StringComparer.OrdinalIgnoreCase);
+
+        var crossCollisions = world.Accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account.Mail))
+            .Select(account => (account.Id, Mail: account.Mail!))
+            .Where(entry => upnOwners.TryGetValue(entry.Mail, out var owners)
+                            && owners.Any(ownerId => !string.Equals(ownerId, entry.Id, StringComparison.OrdinalIgnoreCase)))
+            .Select(entry => entry.Mail)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        return duplicates + crossCollisions;
+    }
+
+    /// <summary>
+    /// Counts sAMAccountName values shared by more than one account within the same directory
+    /// domain. The attribute carries no domain component and is unique per domain, so two
+    /// domains legitimately both hold an account named Administrator. The pipe separator cannot
+    /// occur in either a domain label or a sAMAccountName, so the composed key is unambiguous.
+    /// </summary>
+    private static int CountDuplicateSamAccountNamesPerDomain(SyntheticEnterpriseWorld world)
+        => CountDuplicateValues(world.Accounts
+            .Where(account => !string.IsNullOrWhiteSpace(account.SamAccountName))
+            .Select(account => $"{account.Domain ?? string.Empty}|{account.SamAccountName}"));
 
     private static int CountDuplicateValues(IEnumerable<string?> values)
         => values

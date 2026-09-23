@@ -38,8 +38,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             var companyContext = BuildCompanyContext(world, company);
             var deviationProfile = ResolveDeviationProfile(context.Scenario);
             ProjectCanonicalConfigurationItems(world, companyContext, context.Scenario.Cmdb, ciBySourceKey);
+            var observedAccountHolders = ProjectDirectoryAccountConfigurationItems(world, companyContext, ciBySourceKey);
             ProjectCanonicalRelationships(world, companyContext, ciBySourceKey, context.Scenario.Cmdb);
-            GenerateSourceViews(world, companyContext, context.Scenario.Cmdb, deviationProfile);
+            GenerateSourceViews(world, companyContext, context.Scenario.Cmdb, deviationProfile, observedAccountHolders);
         }
     }
 
@@ -544,6 +545,103 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         }
     }
 
+    /// <summary>
+    /// Projects one configuration item per directory account the company holds. The item describes
+    /// the account object; it never asserts anything the object does not already say. The owner
+    /// columns carry the person identifier the account itself is linked to, verbatim, so a consumer
+    /// resolves it against its own person records; an account with no link leaves them empty rather
+    /// than borrowing an owner from its department, its team or the platform.
+    /// </summary>
+    /// <returns>
+    /// The owner text each account object carries in its own name attributes, keyed by the
+    /// identifier of the configuration item that describes it, for the source views to observe.
+    /// </returns>
+    private IReadOnlyDictionary<string, string> ProjectDirectoryAccountConfigurationItems(
+        SyntheticEnterpriseWorld world,
+        CompanyContext companyContext,
+        IDictionary<string, ConfigurationItem> ciBySourceKey)
+    {
+        var observedHolderByCiId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var companyAccounts = world.Accounts
+            .Where(account => string.Equals(account.CompanyId, companyContext.Company.Id, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (companyAccounts.Count == 0)
+        {
+            return observedHolderByCiId;
+        }
+
+        // An invited account names its sponsoring account, so the sponsor is resolved through the
+        // accounts the company holds rather than through any identifier minted here.
+        var accountsById = companyAccounts
+            .GroupBy(account => account.Id, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var account in companyAccounts)
+        {
+            var criticality = ResolveDirectoryAccountCriticality(account);
+            var owningDepartmentId = ResolvePersonDepartmentId(companyContext, account.PersonId);
+
+            // The account identifier is unique across the world, so it is unique within the company:
+            // AddConfigurationItem keys on it and leaves an already described account alone.
+            AddConfigurationItem(
+                world,
+                ciBySourceKey,
+                "DirectoryAccount",
+                account.Id,
+                new ConfigurationItem
+                {
+                    Id = _idFactory.Next("CI"),
+                    CompanyId = account.CompanyId,
+                    CiKey = $"directory-account:{account.Id}",
+                    Name = account.SamAccountName,
+                    DisplayName = account.UserPrincipalName,
+                    CiType = "Identity",
+                    CiClass = ResolveDirectoryAccountCiClass(account),
+                    SourceEntityType = "DirectoryAccount",
+                    SourceEntityId = account.Id,
+                    Environment = "Production",
+
+                    // The enabled state of the object is the whole of its status. A retained
+                    // disabled object is still in the directory, so it is described as disabled
+                    // rather than removed.
+                    OperationalStatus = account.Enabled ? "Active" : "Disabled",
+                    LifecycleStatus = account.Enabled ? "InService" : "Retired",
+
+                    // The raw person identifier the directory object carries, unchanged.
+                    BusinessOwnerPersonId = account.PersonId,
+                    TechnicalOwnerPersonId = ResolveDirectoryAccountSponsorPersonId(accountsById, account),
+
+                    // A directory holds no support group for an account object, so none is claimed.
+                    SupportTeamId = null,
+                    OwningDepartmentId = owningDepartmentId,
+                    OwningLobId = companyContext.DepartmentsById.GetValueOrDefault(owningDepartmentId ?? string.Empty)?.BusinessUnitId,
+                    ServiceTier = ResolveDirectoryAccountServiceTier(criticality),
+                    ServiceClassification = ResolveDirectoryAccountServiceClassification(account),
+                    BusinessCriticality = criticality,
+                    InstallDate = account.WhenCreated,
+                    LastReviewedAt = _clock.UtcNow.AddDays(-_randomSource.Next(10, 240)),
+
+                    // The description attribute the object carries, copied as it stands. Where that
+                    // prose is the only record of who owns the object, it stays prose: nothing is
+                    // read out of it into an owner column.
+                    Notes = account.Description
+                });
+
+            if (!ciBySourceKey.TryGetValue(BuildCiSourceKey("DirectoryAccount", account.Id), out var item))
+            {
+                continue;
+            }
+
+            var observedHolder = ResolveObservedAccountHolder(account);
+            if (!string.IsNullOrWhiteSpace(observedHolder))
+            {
+                observedHolderByCiId[item.Id] = observedHolder;
+            }
+        }
+
+        return observedHolderByCiId;
+    }
+
     private void ProjectCanonicalRelationships(
         SyntheticEnterpriseWorld world,
         CompanyContext companyContext,
@@ -709,7 +807,12 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         }
     }
 
-    private void GenerateSourceViews(SyntheticEnterpriseWorld world, CompanyContext companyContext, CmdbProfile profile, string deviationProfile)
+    private void GenerateSourceViews(
+        SyntheticEnterpriseWorld world,
+        CompanyContext companyContext,
+        CmdbProfile profile,
+        string deviationProfile,
+        IReadOnlyDictionary<string, string> observedHolderByCiId)
     {
         var companyItems = world.ConfigurationItems.Where(item => item.CompanyId == companyContext.Company.Id).ToList();
         var companyRelationships = world.ConfigurationItemRelationships.Where(item => item.CompanyId == companyContext.Company.Id).ToList();
@@ -717,21 +820,21 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         foreach (var item in companyItems)
         {
-            CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "CMDB", sourceRecordIdBySystemAndCiId);
+            CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "CMDB", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
 
             if (profile.IncludeAutoDiscoveryRecords)
             {
-                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "AutoDiscovery", sourceRecordIdBySystemAndCiId);
+                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "AutoDiscovery", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
             }
 
             if (profile.IncludeServiceCatalogRecords)
             {
-                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "ServiceCatalog", sourceRecordIdBySystemAndCiId);
+                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "ServiceCatalog", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
             }
 
             if (profile.IncludeSpreadsheetImportRecords)
             {
-                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "SpreadsheetImport", sourceRecordIdBySystemAndCiId);
+                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "SpreadsheetImport", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
             }
         }
 
@@ -776,14 +879,15 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         string deviationProfile,
         ConfigurationItem item,
         string sourceSystem,
-        IDictionary<string, string> sourceRecordIdBySystemAndCiId)
+        IDictionary<string, string> sourceRecordIdBySystemAndCiId,
+        IReadOnlyDictionary<string, string> observedHolderByCiId)
     {
         if (!ShouldIncludeInSource(item, sourceSystem, deviationProfile))
         {
             return;
         }
 
-        var observed = BuildObservedRecord(item, companyContext, sourceSystem, deviationProfile);
+        var observed = BuildObservedRecord(item, companyContext, sourceSystem, deviationProfile, observedHolderByCiId);
         world.CmdbSourceRecords.Add(observed);
         world.CmdbSourceLinks.Add(new CmdbSourceLink
         {
@@ -862,9 +966,15 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         ConfigurationItem item,
         CompanyContext companyContext,
         string sourceSystem,
-        string deviationProfile)
+        string deviationProfile,
+        IReadOnlyDictionary<string, string> observedHolderByCiId)
     {
-        var businessOwner = ResolvePersonDisplayName(companyContext, item.BusinessOwnerPersonId);
+        // A collector reading a directory account fills its owner column in from the name
+        // attributes the object carries, which are not always the name of the person the object is
+        // linked to. Every other class has its canonical owner read back by name.
+        var businessOwner = observedHolderByCiId.TryGetValue(item.Id, out var observedHolder)
+            ? observedHolder
+            : ResolvePersonDisplayName(companyContext, item.BusinessOwnerPersonId);
         var technicalOwner = ResolvePersonDisplayName(companyContext, item.TechnicalOwnerPersonId);
         var supportGroup = ResolveTeamName(companyContext, item.SupportTeamId);
         var location = ResolveLocationDisplayName(companyContext, item.LocationId);
@@ -1000,6 +1110,16 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             "SaaSApplication" => "SAS",
             "HybridApplication" => "HYB",
             "InstalledSoftware" => "SW",
+            "UserAccount" => "USR",
+            "SecondaryAccount" => "SEC",
+            "PrivilegedAccount" => "ADM",
+            "ServiceAccount" => "SVC",
+            "SharedMailboxAccount" => "SMB",
+            "BuiltInAccount" => "BIA",
+            "MachineAccount" => "MAC",
+            "GuestAccount" => "GST",
+            "ContractorAccount" => "CTR",
+            "ManagedServiceProviderAccount" => "MSP",
             _ => new string(item.CiClass.Where(char.IsLetterOrDigit).Take(3).ToArray()).ToUpperInvariant() is { Length: > 0 } code ? code : "CI"
         };
 
@@ -1058,6 +1178,10 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                 "Data" => 0.74,
                 "Infrastructure" => 0.68,
                 "Software" => 0.52,
+
+                // A configuration database holds the account objects somebody chose to record,
+                // which is rarely all of them.
+                "Identity" => 0.55,
                 _ => 0.65
             },
             "AutoDiscovery" => item.CiType switch
@@ -1067,6 +1191,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                 "Platform" => 0.55,
                 "Application" => 0.34,
                 "Software" => 0.85,
+
+                // A directory read returns nearly every account object it can see.
+                "Identity" => 0.92,
                 _ => 0.20
             },
             "ServiceCatalog" => item.CiType switch
@@ -1075,6 +1202,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                 "Data" => 0.28,
                 "Infrastructure" => 0.18,
                 "Software" => 0.10,
+                "Identity" => 0.06,
                 _ => 0.12
             },
             "SpreadsheetImport" => item.CiType switch
@@ -1082,6 +1210,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
                 "Application" or "Platform" => 0.42,
                 "Infrastructure" => 0.26,
                 "Data" => 0.24,
+                "Identity" => 0.14,
                 _ => 0.18
             },
             _ => 0.0
@@ -1678,6 +1807,107 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         }
 
         return site.Platform.Contains("Teams", StringComparison.OrdinalIgnoreCase) ? "Low" : "Medium";
+    }
+
+    private static string ResolveDirectoryAccountCiClass(DirectoryAccount account)
+        => account.AccountType switch
+        {
+            "User" => "UserAccount",
+            "Secondary" => "SecondaryAccount",
+            "Privileged" => "PrivilegedAccount",
+            "Service" => "ServiceAccount",
+            "Shared" => "SharedMailboxAccount",
+            "BuiltIn" => "BuiltInAccount",
+            "Device" => "MachineAccount",
+            "Guest" => "GuestAccount",
+            "Contractor" => "ContractorAccount",
+            "ManagedServiceProvider" => "ManagedServiceProviderAccount",
+            _ => "DirectoryAccount"
+        };
+
+    private static string ResolveDirectoryAccountServiceClassification(DirectoryAccount account)
+    {
+        if (account.Privileged)
+        {
+            return "PrivilegedIdentity";
+        }
+
+        return account.AccountType switch
+        {
+            "Service" => "ServiceIdentity",
+            "Device" => "MachineIdentity",
+            "Shared" => "SharedIdentity",
+            "BuiltIn" => "BuiltInIdentity",
+            "Guest" or "Contractor" or "ManagedServiceProvider" => "ExternalIdentity",
+            _ => "EndUserIdentity"
+        };
+    }
+
+    /// <summary>
+    /// Reads the criticality of an account object from the object itself: what it is, whether it is
+    /// privileged, the administrative tier it sits in and whether it is still enabled.
+    /// </summary>
+    private static string ResolveDirectoryAccountCriticality(DirectoryAccount account)
+    {
+        if (!account.Enabled)
+        {
+            return "Low";
+        }
+
+        if (account.Privileged)
+        {
+            return string.Equals(account.AdministrativeTier, "Tier0", StringComparison.OrdinalIgnoreCase)
+                ? "MissionCritical"
+                : "High";
+        }
+
+        return account.AccountType switch
+        {
+            "Service" or "Shared" or "BuiltIn" => "Medium",
+            _ => "Low"
+        };
+    }
+
+    private static string ResolveDirectoryAccountServiceTier(string criticality)
+        => criticality switch
+        {
+            "MissionCritical" or "High" => "Tier1",
+            "Medium" => "Tier2",
+            _ => "Tier3"
+        };
+
+    /// <summary>
+    /// The person behind the account that sponsored an invited account. It is the only party a
+    /// directory records as answerable for an object it did not create for one of its own people,
+    /// and it is copied from the sponsoring account rather than chosen here. Every other account
+    /// class, and any sponsor the directory no longer holds a person record for, leaves this empty.
+    /// </summary>
+    private static string? ResolveDirectoryAccountSponsorPersonId(
+        IReadOnlyDictionary<string, DirectoryAccount> accountsById,
+        DirectoryAccount account)
+        => !string.IsNullOrWhiteSpace(account.InvitedByAccountId)
+           && accountsById.TryGetValue(account.InvitedByAccountId, out var sponsor)
+            ? sponsor.PersonId
+            : null;
+
+    /// <summary>
+    /// The owner text an account object carries in its own name attributes. An object with no name
+    /// attributes — a service, machine, shared or built-in object — names nobody, and the absence is
+    /// reported as such.
+    /// </summary>
+    private static string? ResolveObservedAccountHolder(DirectoryAccount account)
+    {
+        var givenName = account.GivenName?.Trim();
+        var surname = account.Surname?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(givenName) && !string.IsNullOrWhiteSpace(surname))
+        {
+            return $"{givenName} {surname}";
+        }
+
+        return string.IsNullOrWhiteSpace(givenName)
+            ? string.IsNullOrWhiteSpace(surname) ? null : surname
+            : givenName;
     }
 
     private string ResolveTimeZone(CompanyContext context, string? officeId)

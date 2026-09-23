@@ -410,7 +410,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "distinguished_name",
                     "parent_ou_id",
                     "purpose",
-                    "environment_role"
+                    "environment_role",
+                    "dacl_inheritance_protected"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.OrganizationalUnits,
                 RowProjector = ou => new Dictionary<string, object?>
@@ -421,7 +422,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["distinguished_name"] = ou.DistinguishedName,
                     ["parent_ou_id"] = ou.ParentOuId,
                     ["purpose"] = ou.Purpose,
-                    ["environment_role"] = ou.EnvironmentRole
+                    ["environment_role"] = ou.EnvironmentRole,
+                    ["dacl_inheritance_protected"] = ou.DaclInheritanceProtected
                 },
                 SortKeySelector = ou => ou.Id
             },
@@ -576,7 +578,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "is_default_entry",
                     "source_system",
                     "inheritance_source_id",
-                    "notes"
+                    "notes",
+                    "inheritance_scope"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.AccessControlEvidence,
                 RowProjector = evidence => new Dictionary<string, object?>
@@ -593,7 +596,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["is_default_entry"] = evidence.IsDefaultEntry,
                     ["source_system"] = evidence.SourceSystem,
                     ["inheritance_source_id"] = evidence.InheritanceSourceId,
-                    ["notes"] = evidence.Notes
+                    ["notes"] = evidence.Notes,
+                    ["inheritance_scope"] = evidence.InheritanceScope
                 },
                 SortKeySelector = evidence => evidence.Id
             },
@@ -866,7 +870,10 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "last_access_review_at",
                     "access_review_status",
                     "previous_invited_by_account_id",
-                    "sponsor_last_changed_at"
+                    "sponsor_last_changed_at",
+                    "given_name",
+                    "surname",
+                    "description"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.Accounts,
                 RowProjector = account => new Dictionary<string, object?>
@@ -876,6 +883,9 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["person_id"] = account.PersonId,
                     ["account_type"] = account.AccountType,
                     ["display_name"] = account.DisplayName,
+                    ["given_name"] = account.GivenName,
+                    ["surname"] = account.Surname,
+                    ["description"] = account.Description,
                     ["sam_account_name"] = account.SamAccountName,
                     ["user_principal_name"] = account.UserPrincipalName,
                     ["mail"] = account.Mail,

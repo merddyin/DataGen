@@ -1,13 +1,32 @@
-# DataGen
+﻿# DataGen
 
 DataGen is a synthetic enterprise data generation platform. It procedurally builds realistic enterprise datasets that teams can use for labs, validation, demos, exports, discovery-tool testing, and downstream integration work.
 
 ## Changelog
 
-### v0.11.1
+### v0.13.0
 
+- Adds two Windows policy objects per company — `Windows Security Template Baseline` and `Windows Advanced Audit Policy Template` — carrying canonical `UserRight:`, `Audit:`, `FileACL:`, and `RegistryACL:` policy settings: 38 privilege-rights assignments (5 deny, 33 grant), 34 advanced audit subcategories, and three file and two registry security descriptors.
+- Adds an opt-in per-endpoint side: each selected Windows endpoint receives a `LocalSecurityPolicy` object carrying the same canonical keys, with each value built from the template's own value for that key so the relationship between a machine and the template assigned to it is exact rather than incidental.
+- Emits every value in the shape the collection method that produces it emits: the template baselines carry audit coverage in the `Success and Failure` form that `auditpol` and a Group Policy audit backup's `audit.csv` write, and principals use the display names a collection resolves them to rather than raw SIDs.
+- Adds the `infrastructure.effectiveSecurityConfigurationEndpointCount` scenario option, bounded between 0 and 250 and defaulting to 0, with range and population-feasibility validation; the shipped example scenarios enable it so demo datasets carry these families.
+- Emits effective configuration only for Windows endpoints, because a local security policy is a Windows object; a company holding fewer Windows endpoints than requested reports on every endpoint it has rather than inventing endpoints.
+- Leaves the pre-existing friendly-named Windows baselines exactly as they were; the new policy objects are separate and additive, and nothing previously emitted has moved.
+- Emits both real spellings of a combined audit value, each against the collection route that produces it: `Success and Failure` from a Group Policy backup's `audit.csv`, and `Success, Failure` from a Group Policy report export, carried on a separate `Domain Controller Audit Baseline` policy object per company rather than by restating one configuration twice. A row's recorded source always follows its spelling, and both objects key a shared subcategory identically.
+- Adds raw account name evidence — `given_name`, `surname`, and `description` — populated per account class: person-backed accounts carry the person's names, while built-in, service, shared-mailbox, and machine accounts carry none, because a service account has no given name and inventing one would fabricate a fact.
+- Scopes identifier issuance the way each attribute is really scoped: principal name, mail, and password issuance across the whole generated world, and `sAMAccountName` per root domain, because that attribute carries no domain component precisely for being unique within one. Mailbox uniqueness follows from world-scoped principal names rather than being enforced separately, since a mailbox-enabled account takes its own principal name as its mail value.
+- Adds the `identity.accountOwnershipConditionCount` scenario option, bounded at 25 and defaulting to 0, emitting seven account objects plus one set of shared-mailbox memberships per unit per company: a held secondary, a conflicting holder, a second primary, a disabled retained object, an unlinked named object, an ownerless service account, a free-text owner, and shared access. The conflicting holder, the second primary, and the unlinked named object are deliberately negative cases; shared access is real group memberships to mailboxes the company already has, not a multi-owner field. Primary accounts are untouched and the person count is unchanged.
+- Adds directory object security on organizational units: `access_control_evidence.inheritance_scope` records how far an entry reaches, and `organizational_units.dacl_inheritance_protected` records the `SE_DACL_PROTECTED` bit of the unit's own security descriptor, which is independent of Group Policy link inheritance blocking. Only explicit entries are emitted, so effective access is derived by walking the parent chain; these are distinct from the file and registry security descriptors shipped as policy settings.
+- Adds configuration items for directory accounts, one per account, carrying canonical ownership as the resolved person link and observed ownership as the name a discovery source read off the object. The two agree for an ordinary user account, are both empty for an object with no name attributes, and genuinely disagree for a conflicting-holder object, because that disagreement is a property of the object. No owner is invented for an object that states none, and no account item claims a support team.
+- Rejects a scenario whose companies resolve to one primary domain with a `company-primary-domain-collision` error naming every company in the colliding group and the domain they resolved to; such a world previously generated colliding distinguished names, and renaming a distinguished name to dodge the collision would fabricate the fact the rejection exists to prevent.
+- Advances the normalized export schema from `2.1.0` to `2.2.0` for five added columns — `accounts.given_name`, `accounts.surname`, `accounts.description`, `organizational_units.dacl_inheritance_protected`, and `access_control_evidence.inheritance_scope` — each appended at the end of its table, so no existing column changes position and adapters reading by column name or by column index are both unaffected.
+- Adds no column for the policy families themselves: endpoint policies travel through the existing `source_entity_type` and `source_entity_id` columns on `policies`, and canonical keys travel through the existing `policy_path` column on `policy_settings`.
+- Carries endpoint policy attachment through layer regeneration, so regenerating the infrastructure layer leaves each endpoint policy pointing at the endpoint it describes.
+- Removes an access-control evidence record that named `BlockInheritance` as a right; block inheritance is a container property already carried on `EnvironmentContainer.BlocksPolicyInheritance`, and no collection method produces an access-control entry with that right name.
+- Retires the `identity.legacyDirectoryIdentifierVariantCount` scenario option in favour of `identity.accountOwnershipConditionCount`; it existed only in unreleased work and was never published, so no released version is affected.
+- Rejects a scenario that still sets a retired option instead of dropping it silently: scenario validation reports a `retired-scenario-option` error naming the option, the version that retired it, and its replacement, and scenario loading refuses the document. Unknown properties that are not registered as retired are still accepted, so forward-compatible and third-party fields keep working.
 - Repairs the portable release preflight so Git, tar, and .NET are resolved to validated full executable paths on the current host instead of assuming Windows installation paths.
-- Retains the v0.11.0 management-intelligence contract and prepares deterministic multi-company output for Cartograph's governed Duckburg regeneration.
+- Retains the v0.11.0 management-intelligence contract and its deterministic multi-company output.
 
 ### v0.11.0
 
@@ -269,8 +288,8 @@ Get-Command -Module SyntheticEnterprise.PowerShell | Sort-Object Name
 If you want a release-style module bundle with a real manifest, package it first:
 
 ```powershell
-.\scripts\package-module.ps1 -Version 0.11.1 -Configuration Release
-Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.11.1\SyntheticEnterprise.PowerShell.psd1 -Force
+.\scripts\package-module.ps1 -Version 0.13.0 -Configuration Release
+Import-Module .\artifacts\module\SyntheticEnterprise.PowerShell\0.13.0\SyntheticEnterprise.PowerShell.psd1 -Force
 ```
 
 ### Generate a first world
@@ -430,7 +449,7 @@ The release workflow creates both the versioned module bundle and a PowerShell G
 Release publication is manual and requires fresh evidence from the prepared Windows workstation. Hosted CI continuously gates the portable publisher-metadata contract; it cannot exercise the real cross-filesystem path because GitHub-hosted runners do not provide the prepared `D:` NTFS and `G:` ReFS volumes. From a clean, committed `main` checkout on that workstation, use a fresh empty output directory and retain its evidence files:
 
 ```powershell
-$evidenceRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('DataGenReleaseEvidence-v0.11.0-' + [Guid]::NewGuid().ToString('N'))))
+$evidenceRoot = [IO.Path]::GetFullPath((Join-Path ([IO.Path]::GetTempPath()) ('DataGenReleaseEvidence-v0.13.0-' + [Guid]::NewGuid().ToString('N'))))
 .\scripts\invoke-release-preflight.ps1 `
   -OutputRoot $evidenceRoot `
   -CreateReleaseAttestation
@@ -443,7 +462,7 @@ The output includes `source-archive.tar`, `source-snapshot`, `source-manifest.js
 ```powershell
 $attestation = (Get-Content "$evidenceRoot\release-preflight-attestation.txt" -Raw).Trim()
 gh workflow run release-module.yml --ref main `
-  -f version=0.11.0 `
+  -f version=0.13.0 `
   -f "publisher_metadata_attestation=$attestation" `
   -f publish_to_psgallery=true `
   -f create_github_release=true

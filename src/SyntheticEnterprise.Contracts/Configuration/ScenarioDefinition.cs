@@ -84,6 +84,26 @@ public record IdentityProfile
     public double ManagedServiceProviderRatio { get; init; } = 0.01;
     public double GuestUserRatio { get; init; } = 0.025;
     public double StaleAccountRate { get; init; } = 0.03;
+
+    /// <summary>
+    /// Upper bound on <see cref="AccountOwnershipConditionCount"/>. Each unit adds a fixed
+    /// group of directory objects to every company, so the option is bounded rather than
+    /// open-ended.
+    /// </summary>
+    public const int MaximumAccountOwnershipConditionCount = 25;
+
+    /// <summary>
+    /// Number of times each documented account ownership condition is emitted per company: a
+    /// second account a person genuinely holds, an account whose name attributes were never
+    /// corrected when its holder changed, a duplicate object for one holder, a disabled object
+    /// retained after it was superseded, a hand-made object that was never linked to an employee
+    /// record, an account no owner is recorded for, a shared mailbox several named people hold
+    /// access to, and an account whose only ownership record is prose. Zero, the default, emits
+    /// none. A company that cannot supply the people or the shared mailbox a condition needs
+    /// emits that condition fewer times; people and mailboxes are never invented to reach the
+    /// count.
+    /// </summary>
+    public int AccountOwnershipConditionCount { get; init; }
 }
 
 public record ApplicationProfile

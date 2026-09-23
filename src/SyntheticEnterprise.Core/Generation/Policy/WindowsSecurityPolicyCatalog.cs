@@ -1,4 +1,4 @@
-namespace SyntheticEnterprise.Core.Generation.Policy;
+﻿namespace SyntheticEnterprise.Core.Generation.Policy;
 
 /// <summary>
 /// Windows security-policy token vocabulary shared by every generator that emits
@@ -91,6 +91,14 @@ internal static class WindowsSecurityPolicyCatalog
 
     /// <summary>Setting category that resolves a row to the <c>AuditCsv</c> source.</summary>
     internal const string AuditPolicyCategory = "AuditPolicy";
+
+    /// <summary>
+    /// Setting category for an audit row whose evidence came from a Group Policy report
+    /// export rather than from a backup's <c>audit.csv</c>. Rows in this category carry the
+    /// combined value as a report reader renders the numeric code, and resolve to the
+    /// <c>GPO</c> source, so the value spelling and the recorded provenance agree.
+    /// </summary>
+    internal const string AuditPolicyReportCategory = "AuditPolicyReport";
 
     /// <summary>Setting category for a <c>[File Security]</c> security-template row.</summary>
     internal const string FileSecurityCategory = "FileSecurity";
