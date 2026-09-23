@@ -40,7 +40,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             ProjectCanonicalConfigurationItems(world, companyContext, context.Scenario.Cmdb, ciBySourceKey);
             var observedAccountHolders = ProjectDirectoryAccountConfigurationItems(world, companyContext, ciBySourceKey);
             ProjectCanonicalRelationships(world, companyContext, ciBySourceKey, context.Scenario.Cmdb);
-            GenerateSourceViews(world, companyContext, context.Scenario.Cmdb, deviationProfile, observedAccountHolders);
+            GenerateSourceViews(world, companyContext, context.Scenario.Cmdb, deviationProfile, observedAccountHolders, ciBySourceKey);
         }
     }
 
@@ -812,29 +812,30 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         CompanyContext companyContext,
         CmdbProfile profile,
         string deviationProfile,
-        IReadOnlyDictionary<string, string> observedHolderByCiId)
+        IReadOnlyDictionary<string, string> observedHolderByCiId,
+        IDictionary<string, ConfigurationItem> ciBySourceKey)
     {
         var companyItems = world.ConfigurationItems.Where(item => item.CompanyId == companyContext.Company.Id).ToList();
         var companyRelationships = world.ConfigurationItemRelationships.Where(item => item.CompanyId == companyContext.Company.Id).ToList();
-        var sourceRecordIdBySystemAndCiId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var recordBySystemAndCiId = new Dictionary<string, CmdbSourceRecord>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var item in companyItems)
         {
-            CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "CMDB", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
+            CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "CMDB", recordBySystemAndCiId, observedHolderByCiId, ciBySourceKey);
 
             if (profile.IncludeAutoDiscoveryRecords)
             {
-                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "AutoDiscovery", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
+                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "AutoDiscovery", recordBySystemAndCiId, observedHolderByCiId, ciBySourceKey);
             }
 
             if (profile.IncludeServiceCatalogRecords)
             {
-                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "ServiceCatalog", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
+                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "ServiceCatalog", recordBySystemAndCiId, observedHolderByCiId, ciBySourceKey);
             }
 
             if (profile.IncludeSpreadsheetImportRecords)
             {
-                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "SpreadsheetImport", sourceRecordIdBySystemAndCiId, observedHolderByCiId);
+                CreateSourceRecordIfIncluded(world, companyContext, profile, deviationProfile, item, "SpreadsheetImport", recordBySystemAndCiId, observedHolderByCiId, ciBySourceKey);
             }
         }
 
@@ -842,11 +843,14 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         {
             foreach (var sourceSystem in EnumerateSourceSystems(profile))
             {
-                if (!sourceRecordIdBySystemAndCiId.TryGetValue(BuildSourceRecordKey(sourceSystem, relationship.SourceConfigurationItemId), out var sourceRecordId)
-                    || !sourceRecordIdBySystemAndCiId.TryGetValue(BuildSourceRecordKey(sourceSystem, relationship.TargetConfigurationItemId), out var targetRecordId))
+                if (!recordBySystemAndCiId.TryGetValue(BuildSourceRecordKey(sourceSystem, relationship.SourceConfigurationItemId), out var sourceRecord)
+                    || !recordBySystemAndCiId.TryGetValue(BuildSourceRecordKey(sourceSystem, relationship.TargetConfigurationItemId), out var targetRecord))
                 {
                     continue;
                 }
+
+                var sourceRecordId = sourceRecord.Id;
+                var targetRecordId = targetRecord.Id;
 
                 if (!ShouldIncludeRelationshipInSource(relationship, sourceSystem, deviationProfile))
                 {
@@ -879,8 +883,9 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         string deviationProfile,
         ConfigurationItem item,
         string sourceSystem,
-        IDictionary<string, string> sourceRecordIdBySystemAndCiId,
-        IReadOnlyDictionary<string, string> observedHolderByCiId)
+        IDictionary<string, CmdbSourceRecord> recordBySystemAndCiId,
+        IReadOnlyDictionary<string, string> observedHolderByCiId,
+        IDictionary<string, ConfigurationItem> ciBySourceKey)
     {
         if (!ShouldIncludeInSource(item, sourceSystem, deviationProfile))
         {
@@ -888,18 +893,153 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         }
 
         var observed = BuildObservedRecord(item, companyContext, sourceSystem, deviationProfile, observedHolderByCiId);
+        var unreconciled = TryAddUnreconciledConfigurationItem(world, ciBySourceKey, recordBySystemAndCiId, item, observed, sourceSystem);
+        if (unreconciled is not null)
+        {
+            observed = observed with { MatchStatus = "Unreconciled" };
+        }
+
         world.CmdbSourceRecords.Add(observed);
         world.CmdbSourceLinks.Add(new CmdbSourceLink
         {
             Id = _idFactory.Next("CMSL"),
             CompanyId = item.CompanyId,
             SourceRecordId = observed.Id,
-            ConfigurationItemId = item.Id,
-            LinkType = "Matched",
+            ConfigurationItemId = (unreconciled ?? item).Id,
+            LinkType = unreconciled is null ? "Matched" : "Duplicate",
             MatchMethod = "SyntheticProjection",
             Confidence = observed.Confidence
         });
-        sourceRecordIdBySystemAndCiId[BuildSourceRecordKey(sourceSystem, item.Id)] = observed.Id;
+        recordBySystemAndCiId[BuildSourceRecordKey(sourceSystem, item.Id)] = observed;
+    }
+
+    /// <summary>
+    /// A configuration management database matches an incoming record to the item it already holds
+    /// by the identity the record states. When a source states a different identity for the same
+    /// thing - the fully qualified name of a host the database holds by its short name, the vendor
+    /// qualified product name of an application the database holds by its own - the match fails and
+    /// the database ends up holding a second item for that thing, carrying the values that source
+    /// reported. Nothing about the underlying entity changes, so both items still name it through
+    /// <see cref="ConfigurationItem.SourceEntityType"/> and <see cref="ConfigurationItem.SourceEntityId"/>,
+    /// and a rollup over either item's attributes has two disagreeing rows to resolve.
+    /// </summary>
+    /// <remarks>
+    /// Three conditions hold the shape to what can be stated honestly. The database must already
+    /// hold the thing through its own CMDB record, so the disagreement is always traceable to two
+    /// distinct source records rather than to one record and an unrecorded assumption; that record
+    /// must state a criticality, so the value the duplicate disagrees with was actually reported;
+    /// and the incoming record must state one too, because every configuration item this generator
+    /// emits states a criticality and inventing one for a record that reported none would be
+    /// filling a column rather than reporting a fact.
+    ///
+    /// Matching is by the identity a record states, not by which system filed it, so a second
+    /// source stating the same identity matches the item the first one left behind and files
+    /// another record against it. A database does not accumulate one item per importer.
+    /// </remarks>
+    private ConfigurationItem? TryAddUnreconciledConfigurationItem(
+        SyntheticEnterpriseWorld world,
+        IDictionary<string, ConfigurationItem> ciBySourceKey,
+        IDictionary<string, CmdbSourceRecord> recordBySystemAndCiId,
+        ConfigurationItem item,
+        CmdbSourceRecord observed,
+        string sourceSystem)
+    {
+        if (string.Equals(sourceSystem, "CMDB", StringComparison.OrdinalIgnoreCase))
+        {
+            // The CMDB record is the database's own row for the item. It cannot fail to match it.
+            return null;
+        }
+
+        if (string.Equals(observed.Name, item.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.SourceEntityType) || string.IsNullOrWhiteSpace(item.SourceEntityId))
+        {
+            return null;
+        }
+
+        // The identity the record states is what the database matches on, so a record that states
+        // an identity the database already holds an item under matches that item.
+        var recordedIdentityOrigin = $"Recorded:{Slug(observed.Name)}";
+        var recordedIdentityKey = BuildCiSourceKey(item.SourceEntityType!, item.SourceEntityId!, recordedIdentityOrigin);
+        if (ciBySourceKey.TryGetValue(recordedIdentityKey, out var alreadyHeld))
+        {
+            return alreadyHeld;
+        }
+
+        if (string.IsNullOrWhiteSpace(observed.ObservedBusinessCriticality))
+        {
+            return null;
+        }
+
+        if (!recordBySystemAndCiId.TryGetValue(BuildSourceRecordKey("CMDB", item.Id), out var canonicalRecord)
+            || string.IsNullOrWhiteSpace(canonicalRecord.ObservedBusinessCriticality))
+        {
+            return null;
+        }
+
+        var duplicate = new ConfigurationItem
+        {
+            Id = _idFactory.Next("CI"),
+            CompanyId = item.CompanyId,
+            CiKey = $"{item.CiKey}#{Slug(observed.Name)}",
+            Name = observed.Name,
+            DisplayName = observed.DisplayName,
+            CiType = observed.CiType,
+            CiClass = observed.CiClass,
+            SourceEntityType = item.SourceEntityType,
+            SourceEntityId = item.SourceEntityId,
+
+            // Only what the record reported. The owner columns hold person and team identifiers,
+            // and an unmatched record carries owner text that was never resolved to either, so they
+            // stay empty rather than borrowing the identifiers the matched item holds.
+            Manufacturer = observed.ObservedManufacturer,
+            Vendor = observed.ObservedVendor,
+            Model = observed.ObservedModel,
+            Version = observed.ObservedVersion,
+            SerialNumber = observed.ObservedSerialNumber,
+            AssetTag = observed.ObservedAssetTag,
+            BusinessCriticality = observed.ObservedBusinessCriticality,
+            Notes = null
+        };
+
+        // Columns the record did not fill keep the value a database records when nothing filled
+        // them, rather than the value the matched item holds: the two items never met, so nothing
+        // could have carried a value across.
+        if (!string.IsNullOrWhiteSpace(observed.ObservedEnvironment))
+        {
+            duplicate = duplicate with { Environment = observed.ObservedEnvironment! };
+        }
+
+        if (!string.IsNullOrWhiteSpace(observed.ObservedOperationalStatus))
+        {
+            duplicate = duplicate with { OperationalStatus = observed.ObservedOperationalStatus! };
+        }
+
+        if (!string.IsNullOrWhiteSpace(observed.ObservedLifecycleStatus))
+        {
+            duplicate = duplicate with { LifecycleStatus = observed.ObservedLifecycleStatus! };
+        }
+
+        if (!string.IsNullOrWhiteSpace(observed.ObservedServiceTier))
+        {
+            duplicate = duplicate with { ServiceTier = observed.ObservedServiceTier! };
+        }
+
+        if (!string.IsNullOrWhiteSpace(observed.ObservedServiceClassification))
+        {
+            duplicate = duplicate with { ServiceClassification = observed.ObservedServiceClassification! };
+        }
+
+        return AddConfigurationItem(
+            world,
+            ciBySourceKey,
+            item.SourceEntityType!,
+            item.SourceEntityId!,
+            duplicate,
+            origin: recordedIdentityOrigin);
     }
 
     private void GenerateOrphanedSourceRecords(
@@ -986,6 +1126,8 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         var observedServiceClassification = item.ServiceClassification;
         var observedCriticality = item.BusinessCriticality;
         var observedMaintenanceWindow = FormatMaintenanceWindow(item.MaintenanceWindow);
+        var observedName = item.Name;
+        var observedDisplayName = item.DisplayName;
 
         if (ShouldApplyDeviation(sourceSystem, deviationProfile, "MissingBusinessOwner"))
         {
@@ -1005,6 +1147,17 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         if (ShouldApplyDeviation(sourceSystem, deviationProfile, "MissingCriticality"))
         {
             observedCriticality = null;
+        }
+
+        // Criticality is a judgement, not a measurement, and the systems outside the configuration
+        // database make it from what they can see. A sheet or a catalog entry a service owner keeps
+        // states the band that owner argued for; a discovery scan has no business context at all
+        // and files what its defaults say. Either way the band a source states is its own, and need
+        // not be the one the database holds.
+        if (!string.IsNullOrWhiteSpace(observedCriticality)
+            && ShouldApplyDeviation(sourceSystem, deviationProfile, "MisjudgedCriticality"))
+        {
+            observedCriticality = ShiftBusinessCriticality(observedCriticality!, sourceSystem);
         }
 
         if (ShouldApplyDeviation(sourceSystem, deviationProfile, "MissingServiceTier"))
@@ -1045,6 +1198,17 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             observedOperationalStatus = "Retired";
         }
 
+        // Systems outside the configuration database call a thing by the name their own view of it
+        // supplies: a scan resolves a host to its fully qualified name, a catalog lists a product
+        // under its vendor's name for it. Both name the same thing; neither is the spelling the
+        // database holds.
+        if (TryResolveAlternateRecordedIdentity(item, out var alternateIdentity)
+            && ShouldApplyDeviation(sourceSystem, deviationProfile, "DivergentRecordedIdentity"))
+        {
+            observedName = alternateIdentity;
+            observedDisplayName = alternateIdentity;
+        }
+
         return new CmdbSourceRecord
         {
             Id = _idFactory.Next("CMS"),
@@ -1053,8 +1217,8 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             SourceRecordId = BuildObservedSourceRecordId(sourceSystem, item),
             CiType = item.CiType,
             CiClass = observedCiClass,
-            Name = item.Name,
-            DisplayName = item.DisplayName,
+            Name = observedName,
+            DisplayName = observedDisplayName,
             ObservedManufacturer = item.Manufacturer,
             ObservedVendor = item.Vendor,
             ObservedModel = item.Model,
@@ -1298,11 +1462,89 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             "PlatformAsApplication" => sourceSystem == "ServiceCatalog" ? 0.16 : 0.05,
             "WrongEnvironment" => sourceSystem == "SpreadsheetImport" ? 0.20 : 0.06,
             "WrongStatus" => sourceSystem == "SpreadsheetImport" ? 0.18 : 0.03,
+
+            // The configuration database's own record states the band the database holds, so it
+            // cannot disagree with itself; every other source states its own judgement.
+            "MisjudgedCriticality" => sourceSystem switch
+            {
+                "SpreadsheetImport" => 0.38,
+                "ServiceCatalog" => 0.30,
+                "AutoDiscovery" => 0.16,
+                _ => 0.0
+            },
+
+            // Likewise for the identity a source states: the database's own record spells the name
+            // the database holds.
+            "DivergentRecordedIdentity" => sourceSystem switch
+            {
+                "SpreadsheetImport" => 0.24,
+                "ServiceCatalog" => 0.18,
+                "AutoDiscovery" => 0.12,
+                _ => 0.0
+            },
             _ => 0.0
         };
 
         return _randomSource.NextDouble() <= Math.Min(0.95, baseRate * multiplier);
     }
+
+    /// <summary>
+    /// The second name the item itself already holds for the same thing, if it holds one: the fully
+    /// qualified name of a host recorded by its short name, or the vendor-qualified product name of
+    /// an application recorded under its own. Nothing is composed that the item does not already
+    /// state, so where an item holds no second name for itself no source can state one.
+    /// </summary>
+    /// <remarks>
+    /// Identity objects are left out on purpose. A directory read returns an immutable object
+    /// identifier alongside the name, so a directory account matches on that identifier however it
+    /// is spelled, and a second account item could never arise this way.
+    /// </remarks>
+    private static bool TryResolveAlternateRecordedIdentity(ConfigurationItem item, out string identity)
+    {
+        if (string.Equals(item.CiType, "Infrastructure", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(item.Fqdn)
+            && !string.Equals(item.Fqdn, item.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            identity = item.Fqdn!;
+            return true;
+        }
+
+        if (string.Equals(item.CiType, "Application", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(item.Vendor)
+            && !item.Name.StartsWith(item.Vendor!, StringComparison.OrdinalIgnoreCase))
+        {
+            identity = $"{item.Vendor} {item.Name}";
+            return true;
+        }
+
+        identity = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Moves a criticality band the way the source that states it leans. A sheet or a catalog entry
+    /// a service owner keeps argues its own service upward, sometimes straight to the top band; a
+    /// discovery scan, which knows nothing about the business, files toward the bottom. A band
+    /// already at the end a source leans towards is the band that source states, so it is returned
+    /// unchanged rather than turned around into a move the source had no reason to make.
+    /// </summary>
+    private string ShiftBusinessCriticality(string criticality, string sourceSystem)
+    {
+        var ladder = BusinessCriticalityLadder;
+        var index = Array.FindIndex(ladder, value => string.Equals(value, criticality, StringComparison.OrdinalIgnoreCase));
+        if (index < 0)
+        {
+            return criticality;
+        }
+
+        var upward = !string.Equals(sourceSystem, "AutoDiscovery", StringComparison.OrdinalIgnoreCase);
+        var roll = _randomSource.NextDouble();
+        var distance = roll <= 0.55 ? 1 : roll <= 0.85 ? 2 : ladder.Length - 1;
+
+        return ladder[Math.Clamp(upward ? index + distance : index - distance, 0, ladder.Length - 1)];
+    }
+
+    private static readonly string[] BusinessCriticalityLadder = ["Low", "Medium", "High", "MissionCritical"];
 
     private static bool IsDeviationProfile(string? deviationProfile, string name)
         => string.Equals(deviationProfile, name, StringComparison.OrdinalIgnoreCase)
@@ -1344,17 +1586,31 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
         return TryResolveCi(ciBySourceKey, normalizedType, repositoryId, out item);
     }
 
-    private void AddConfigurationItem(
+    /// <summary>
+    /// Records one configuration item for a source entity and returns it, or returns null when that
+    /// entity has already been described from the same origin.
+    /// </summary>
+    /// <remarks>
+    /// The projection passes over an entity from several directions - a server is reached as a
+    /// server and again as the host of something installed on it - so without a guard the same
+    /// entity would be described twice by accident, and every count taken over the table would be
+    /// wrong. <paramref name="origin"/> names the identity the description was filed under, so that
+    /// guard still collapses every repeated canonical projection of one entity, while a description
+    /// a source genuinely filed under an identity the database does not already hold can stand as
+    /// its own item.
+    /// </remarks>
+    private ConfigurationItem? AddConfigurationItem(
         SyntheticEnterpriseWorld world,
         IDictionary<string, ConfigurationItem> ciBySourceKey,
         string sourceType,
         string sourceId,
-        ConfigurationItem item)
+        ConfigurationItem item,
+        string origin = CanonicalOrigin)
     {
-        var key = BuildCiSourceKey(sourceType, sourceId);
+        var key = BuildCiSourceKey(sourceType, sourceId, origin);
         if (ciBySourceKey.ContainsKey(key))
         {
-            return;
+            return null;
         }
 
         item = item with
@@ -1365,6 +1621,7 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
 
         world.ConfigurationItems.Add(item);
         ciBySourceKey[key] = item;
+        return item;
     }
 
     private void AddRelationship(
@@ -2021,8 +2278,10 @@ public sealed class BasicCmdbGenerator : ICmdbGenerator
             ? null
             : $"{window.DayOfWeek} {window.StartTimeLocal} ({window.DurationMinutes}m {window.TimeZone})";
 
-    private static string BuildCiSourceKey(string sourceType, string sourceId)
-        => $"{sourceType}:{sourceId}";
+    private const string CanonicalOrigin = "Canonical";
+
+    private static string BuildCiSourceKey(string sourceType, string sourceId, string origin = CanonicalOrigin)
+        => $"{origin}|{sourceType}:{sourceId}";
 
     private static string BuildSourceRecordKey(string sourceSystem, string configurationItemId)
         => $"{sourceSystem}:{configurationItemId}";

@@ -220,7 +220,11 @@ public sealed class IdentityInfrastructureGenerationTests
                 }
                 else if (string.Equals(account.IdentityProvider, "EntraID", StringComparison.OrdinalIgnoreCase))
                 {
-                    Assert.Equal(account.DistinguishedName, account.DisplayName, ignoreCase: true);
+                    // A cloud-only device object sits in no directory tree and so states no
+                    // distinguished name. The field carried the hostname until v0.13.0, which named
+                    // no directory position and collided across companies whose names share a
+                    // hostname token.
+                    Assert.True(string.IsNullOrWhiteSpace(account.DistinguishedName));
                 }
             });
         Assert.DoesNotContain(result.World.GroupMemberships, membership => membership.MemberObjectType == "Device");

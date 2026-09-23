@@ -92,6 +92,78 @@ public sealed class WorldInvariantValidatorTests
     }
 
     [Fact]
+    public void Validate_Judges_An_Account_Value_That_Is_Not_A_Distinguished_Name()
+    {
+        // Until v0.13.0 cloud-joined device accounts carried a bare hostname here, so the check
+        // filtered to values holding an attribute=value pair in order to skip them. Those accounts
+        // now carry nothing, the filter is gone, and a value that is not a distinguished name is
+        // once again a defect this reports rather than one it steps around.
+        var validator = new WorldInvariantValidator();
+        var world = new SyntheticEnterpriseWorld();
+        world.Accounts.AddRange(
+        [
+            new DirectoryAccount
+            {
+                Id = "A-1",
+                CompanyId = "COMP-1",
+                AccountType = "Device",
+                SamAccountName = "PAW-DOMAIN-001",
+                UserPrincipalName = "PAW-DOMAIN-001@duckburg.test",
+                DistinguishedName = "PAW-DOMAIN-001"
+            },
+            new DirectoryAccount
+            {
+                Id = "A-2",
+                CompanyId = "COMP-2",
+                AccountType = "Device",
+                SamAccountName = "PAW-DOMAIN-001b",
+                UserPrincipalName = "PAW-DOMAIN-001@mouseton.test",
+                DistinguishedName = "PAW-DOMAIN-001"
+            }
+        ]);
+
+        var result = validator.Validate(world);
+
+        Assert.Single(
+            result.Errors,
+            error => error.Contains("duplicate directory account distinguished names", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Validate_Ignores_Accounts_That_State_No_Distinguished_Name()
+    {
+        var validator = new WorldInvariantValidator();
+        var world = new SyntheticEnterpriseWorld();
+        world.Accounts.AddRange(
+        [
+            new DirectoryAccount
+            {
+                Id = "A-1",
+                CompanyId = "COMP-1",
+                AccountType = "Device",
+                IdentityProvider = "EntraID",
+                SamAccountName = "PAW-DOMAIN-001",
+                UserPrincipalName = "PAW-DOMAIN-001@duckburg.test",
+                DistinguishedName = string.Empty
+            },
+            new DirectoryAccount
+            {
+                Id = "A-2",
+                CompanyId = "COMP-2",
+                AccountType = "Device",
+                IdentityProvider = "EntraID",
+                SamAccountName = "PAW-DOMAIN-001b",
+                UserPrincipalName = "PAW-DOMAIN-001@mouseton.test",
+                DistinguishedName = string.Empty
+            }
+        ]);
+
+        var result = validator.Validate(world);
+
+        Assert.DoesNotContain(result.Errors, error => error.Contains("distinguished name", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Validate_Accepts_Accounts_Whose_Distinguished_Names_Are_Distinct()
     {
         var validator = new WorldInvariantValidator();

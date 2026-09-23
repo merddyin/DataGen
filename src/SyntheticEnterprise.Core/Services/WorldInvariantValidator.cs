@@ -43,20 +43,15 @@ public sealed class WorldInvariantValidator : IWorldInvariantValidator
     /// counting them again would report every domain-joined asset as a duplicate of itself, and
     /// organizational units and groups are left for a separate fix because department names repeat
     /// across business units today and their distinguished names are not yet qualified by one.
+    /// Every account value is now read as issued: an object that sits in no directory tree carries
+    /// an empty distinguished name, which <see cref="CountDuplicateValues"/> skips, and nothing is
+    /// filtered out by shape. The shape filter this method used to apply existed only to tolerate
+    /// cloud-joined device accounts carrying a bare hostname in the field, and those now carry
+    /// nothing, so a value that is not a distinguished name would again be a defect to report
+    /// rather than one to step around.
     /// </summary>
     private static IEnumerable<string?> EnumerateAccountDistinguishedNames(SyntheticEnterpriseWorld world)
-        => world.Accounts
-            .Select(account => account.DistinguishedName)
-            .Where(IsDistinguishedName);
-
-    /// <summary>
-    /// A distinguished name is a sequence of <c>attribute=value</c> components. Cloud-joined device
-    /// accounts currently carry a bare hostname in the field, which names no directory position at
-    /// all and so cannot be judged for uniqueness; that is a separate defect, and counting such
-    /// values here would report it as a distinguished-name collision instead.
-    /// </summary>
-    private static bool IsDistinguishedName(string? value)
-        => !string.IsNullOrWhiteSpace(value) && value.Contains('=', StringComparison.Ordinal);
+        => world.Accounts.Select(account => account.DistinguishedName);
 
     private static int CountAccountMailTakenByAnotherAccountUpn(SyntheticEnterpriseWorld world)
     {
