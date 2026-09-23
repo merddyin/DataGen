@@ -1,4 +1,4 @@
-﻿# DataGen
+# DataGen
 
 DataGen is a synthetic enterprise data generation platform. It procedurally builds realistic enterprise datasets that teams can use for labs, validation, demos, exports, discovery-tool testing, and downstream integration work.
 

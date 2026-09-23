@@ -1,4 +1,4 @@
-﻿namespace SyntheticEnterprise.Core.Generation.Policy;
+namespace SyntheticEnterprise.Core.Generation.Policy;
 
 using System.Security.Cryptography;
 using System.Text;

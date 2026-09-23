@@ -1,4 +1,4 @@
-﻿namespace SyntheticEnterprise.Core.Generation.Organization;
+namespace SyntheticEnterprise.Core.Generation.Organization;
 
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;

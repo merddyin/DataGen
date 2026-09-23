@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.VisualBasic.FileIO;
 using SyntheticEnterprise.Contracts.Abstractions;

@@ -1,4 +1,4 @@
-﻿namespace SyntheticEnterprise.Core.Generation.Policy;
+namespace SyntheticEnterprise.Core.Generation.Policy;
 
 /// <summary>
 /// Windows security-policy token vocabulary shared by every generator that emits

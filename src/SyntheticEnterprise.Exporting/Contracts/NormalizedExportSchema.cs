@@ -1,4 +1,4 @@
-﻿namespace SyntheticEnterprise.Exporting.Contracts;
+namespace SyntheticEnterprise.Exporting.Contracts;
 
 public static class NormalizedExportSchema
 {

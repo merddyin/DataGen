@@ -1,4 +1,4 @@
-﻿namespace SyntheticEnterprise.Core.Generation.Identity;
+namespace SyntheticEnterprise.Core.Generation.Identity;
 
 using System.Security.Cryptography;
 using System.Text;
