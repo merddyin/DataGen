@@ -52,7 +52,9 @@ A rebuild alone is enough to change the hash, so treat any pinned hash checked i
 :::warning The hash is also sensitive to where the package sits
 A content hash is not reproducible from the package's contents alone today. Where a plugin declares local data files, the absolute path of each one is part of the digest, so the same bytes inspected at a second location produce a different hash — normalising file timestamps does not change this. And if the plugin root is a build tree rather than a staged package, the recursive inventory takes in MSBuild intermediates under `obj/`, several of which embed absolute paths in their own content.
 
-Two practical consequences. Re-take the approval whenever the package moves, not only when it is rebuilt. And treat a pinned hash as a change detector for one directory on one machine rather than as a value a second party can independently reproduce — if you need someone else to verify that the approved plugin is the one that ran, this control does not yet give you that. Inspect a staged package rather than a build output directory to keep `obj/` out of the digest.
+Two practical consequences. Re-take the approval whenever the package moves, not only when it is rebuilt. And treat a pinned hash as a change detector for one directory on one machine rather than as a value a second party can independently reproduce — if you need someone else to verify that the approved plugin is the one that ran, this control does not yet give you that.
+
+There is no package layout that makes the hash reproducible, so do not spend time looking for one. Inspecting a staged package rather than a build output directory keeps `obj/` out of the inventory, which is worth doing on its own merits — but it does not make the hash location-independent, because a declared local data file contributes its absolute path whatever the surrounding layout. This has been tested: a clean staged package with no `obj/` still hashes differently at a second location.
 :::
 
 Script plugins are not affected by a DataGen upgrade. Their content hash covers the manifest, the entry-point script, and plugin-local data only — there is no compiled package in it.
