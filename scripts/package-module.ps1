@@ -343,7 +343,10 @@ Write-Host "Compressing module package..." -ForegroundColor Cyan
 Assert-SafePackageStagingTree -ScopeRoot $moduleStageRoot -Operation 'archive staging'
 $moduleStagePath = Assert-SafePackageStagingPath -ScopeRoot $moduleStageRoot -CandidatePath $moduleStagePath -Operation 'module'
 $zipPath = Assert-SafePackageStagingPath -ScopeRoot $moduleStageRoot -CandidatePath $zipPath -Operation 'zip'
-Compress-Archive -Path (Join-Path $moduleStagePath '*') -DestinationPath $zipPath -Force
+# Compress only the requested version's staged folder. Compressing the parent swept in
+# every version previously staged in this working tree, which a fresh build agent never
+# has and so never revealed: a local package grew by one stale module per past release.
+Compress-Archive -Path $versionedStagePath -DestinationPath $zipPath -Force
 
 Write-Host ''
 Write-Host "Module package created:" -ForegroundColor Green
