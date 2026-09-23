@@ -1,4 +1,4 @@
-namespace SyntheticEnterprise.Core.Generation.Identity;
+﻿namespace SyntheticEnterprise.Core.Generation.Identity;
 
 using System.Security.Cryptography;
 using System.Text;
@@ -1825,6 +1825,90 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Container", workstationContainerId, "Linked", true, 67, true);
         AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Container", serverContainerId, "Linked", true, 68, true);
         AddPolicyTarget(world, company.Id, auditTemplatePolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
+
+        CreateDomainControllerAuditReportBaseline(
+            world,
+            company,
+            activeDirectoryStoreId,
+            gpoEditorsGroupId);
+    }
+
+    /// <summary>
+    /// Emits a domain controller audit baseline whose evidence came from a Group Policy
+    /// report export rather than from a backup's <c>audit.csv</c>.
+    /// </summary>
+    /// <remarks>
+    /// A real estate collects its Group Policy objects by more than one route, and the two
+    /// routes spell a combined audit value differently: a backup's <c>audit.csv</c> carries
+    /// the words, while a report export carries the numeric code that a reader renders with
+    /// a comma. Both spellings are real, so both appear, each on a policy object whose
+    /// recorded source says which route produced it. This is a separate policy object rather
+    /// than the same settings restated, because restating one configuration in two spellings
+    /// would assert that an estate holds it twice.
+    /// </remarks>
+    private void CreateDomainControllerAuditReportBaseline(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        string? activeDirectoryStoreId,
+        string? gpoEditorsGroupId)
+    {
+        // The report-derived baseline links where a domain controller audit policy really
+        // links. Resolved rather than passed in so the link cannot drift from the container
+        // the rest of the identity layer created.
+        var domainControllerContainerId = string.IsNullOrWhiteSpace(activeDirectoryStoreId)
+            ? null
+            : FindContainer(world, company.Id, "OrganizationalUnit", activeDirectoryStoreId, "Domain Controllers")?.Id;
+
+        var reportPolicy = EnsurePolicy(
+            world,
+            company.Id,
+            "Domain Controller Audit Baseline",
+            "GroupPolicyObject",
+            "ActiveDirectory",
+            "AuditPolicy",
+            "Domain controller audit subcategories as a Group Policy report export renders them.",
+            activeDirectoryStoreId,
+            null);
+
+        var noAuditing = WindowsSecurityPolicyCatalog.AuditValues.NoAuditing;
+        var success = WindowsSecurityPolicyCatalog.AuditValues.Success;
+        var failure = WindowsSecurityPolicyCatalog.AuditValues.Failure;
+        var successCommaFailure = WindowsSecurityPolicyCatalog.AuditValues.SuccessCommaFailure;
+
+        (string Subcategory, string InclusionSetting)[] domainControllerSubcategories =
+        [
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.CredentialValidation, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.KerberosAuthenticationService, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.KerberosServiceTicketOperations, failure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DirectoryServiceAccess, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.DirectoryServiceChanges, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.ComputerAccountManagement, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecurityGroupManagement, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.UserAccountManagement, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.Logon, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SpecialLogon, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.AuditPolicyChange, successCommaFailure),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SensitivePrivilegeUse, noAuditing),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SecurityStateChange, success),
+            (WindowsSecurityPolicyCatalog.AuditSubcategories.SystemIntegrity, successCommaFailure)
+        ];
+
+        foreach (var (subcategory, inclusionSetting) in domainControllerSubcategories)
+        {
+            AddPolicySetting(
+                world,
+                company.Id,
+                reportPolicy.Id,
+                subcategory,
+                WindowsSecurityPolicyCatalog.AuditPolicyReportCategory,
+                "String",
+                inclusionSetting,
+                sourceReference: "Group Policy report export gpreport.xml",
+                policyPath: WindowsSecurityPolicyCatalog.BuildAuditKey(subcategory));
+        }
+
+        AddPolicyTarget(world, company.Id, reportPolicy.Id, "Container", domainControllerContainerId, "Linked", true, 69, true);
+        AddPolicyTarget(world, company.Id, reportPolicy.Id, "Group", gpoEditorsGroupId, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
     }
 
     /// <summary>

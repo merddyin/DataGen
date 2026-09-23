@@ -1,4 +1,4 @@
-namespace SyntheticEnterprise.Core.Generation.Policy;
+﻿namespace SyntheticEnterprise.Core.Generation.Policy;
 
 using System.Security.Cryptography;
 using System.Text;
@@ -178,6 +178,15 @@ internal static class PolicyEmitter
             return "AuditCsv";
         }
 
+        // An audit row collected from a Group Policy report export is evidence from the
+        // report, not from a backup's audit.csv, and carries the combined value spelled the
+        // way a report reader renders it. Recording it as AuditCsv would put a spelling and
+        // a provenance on the same row that contradict each other.
+        if (string.Equals(settingCategory, "AuditPolicyReport", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GPO";
+        }
+
         if (policyPath.Contains("Security Settings", StringComparison.OrdinalIgnoreCase)
             || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
             || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase)
@@ -227,6 +236,7 @@ internal static class PolicyEmitter
             || policyPath.Contains("Account Policies", StringComparison.OrdinalIgnoreCase)
             || string.Equals(settingCategory, "UserRightsAssignment", StringComparison.OrdinalIgnoreCase)
             || string.Equals(settingCategory, "AuditPolicy", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(settingCategory, "AuditPolicyReport", StringComparison.OrdinalIgnoreCase)
             || string.Equals(settingCategory, "FileSecurity", StringComparison.OrdinalIgnoreCase)
             || string.Equals(settingCategory, "RegistryKeys", StringComparison.OrdinalIgnoreCase))
         {

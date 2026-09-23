@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
@@ -13,6 +13,7 @@ public sealed class WindowsSecurityPolicyBaselineTests
 {
     private const string SecurityTemplatePolicyName = "Windows Security Template Baseline";
     private const string AuditTemplatePolicyName = "Windows Advanced Audit Policy Template";
+    private const string DomainControllerAuditPolicyName = "Domain Controller Audit Baseline";
 
     /// <summary>
     /// Display names Windows itself returns for the six SIDs whose curated resolver form
@@ -352,6 +353,60 @@ public sealed class WindowsSecurityPolicyBaselineTests
         }
 
         Assert.Equal(CanonicalRows(Generate()), CanonicalRows(Generate()));
+    }
+
+    [Fact]
+    public void Audit_Combined_Value_Spelling_Matches_The_Collection_Method_That_Produced_It()
+    {
+        var world = Generate();
+
+        var backupRows = SettingsFor(world, AuditTemplatePolicyName);
+        var reportRows = SettingsFor(world, DomainControllerAuditPolicyName);
+        Assert.NotEmpty(backupRows);
+        Assert.NotEmpty(reportRows);
+
+        // A backup's audit.csv writes the words; a report export carries the numeric code a
+        // reader renders with a comma. Emitting either spelling on the other's rows would put
+        // a value and a provenance on one row that contradict each other.
+        Assert.Contains(backupRows, setting =>
+            setting.ConfiguredValue == WindowsSecurityPolicyCatalog.AuditValues.SuccessAndFailure);
+        Assert.DoesNotContain(backupRows, setting =>
+            setting.ConfiguredValue == WindowsSecurityPolicyCatalog.AuditValues.SuccessCommaFailure);
+
+        Assert.Contains(reportRows, setting =>
+            setting.ConfiguredValue == WindowsSecurityPolicyCatalog.AuditValues.SuccessCommaFailure);
+        Assert.DoesNotContain(reportRows, setting =>
+            setting.ConfiguredValue == WindowsSecurityPolicyCatalog.AuditValues.SuccessAndFailure);
+    }
+
+    [Fact]
+    public void Audit_Rows_Record_The_Source_That_Matches_Their_Value_Spelling()
+    {
+        var world = Generate();
+
+        Assert.All(SettingsFor(world, AuditTemplatePolicyName), setting =>
+            Assert.Equal("AuditCsv", setting.Source));
+        Assert.All(SettingsFor(world, DomainControllerAuditPolicyName), setting =>
+            Assert.Equal("GPO", setting.Source));
+    }
+
+    [Fact]
+    public void Both_Audit_Baselines_Use_The_Same_Canonical_Key_Space()
+    {
+        var world = Generate();
+
+        // The two baselines describe different policy objects, so they carry different
+        // subcategories -- but a subcategory they share must key identically, or the
+        // collection route a row came from would change the key rather than only the value.
+        var reportKeys = SettingsFor(world, DomainControllerAuditPolicyName)
+            .ToDictionary(setting => setting.SettingName, setting => setting.PolicyPath);
+        var backupKeys = SettingsFor(world, AuditTemplatePolicyName)
+            .ToDictionary(setting => setting.SettingName, setting => setting.PolicyPath);
+
+        var shared = reportKeys.Keys.Intersect(backupKeys.Keys).ToArray();
+        Assert.NotEmpty(shared);
+        Assert.All(shared, name => Assert.Equal(backupKeys[name], reportKeys[name]));
+        Assert.All(reportKeys.Values, path => Assert.StartsWith("Audit:", path, StringComparison.Ordinal));
     }
 
     private static PolicySettingRecord[] SettingsFor(SyntheticEnterpriseWorld world, string policyName)
