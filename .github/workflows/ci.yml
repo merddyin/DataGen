@@ -43,6 +43,10 @@ jobs:
         shell: pwsh
         run: .\scripts\invoke-release-preflight.ps1 -OutputRoot (Join-Path $env:RUNNER_TEMP 'datagen-release-preflight')
 
+      - name: Validate determinism evidence harness
+        shell: pwsh
+        run: .\tests\DeterminismEvidence.Tests.ps1 -WorkingRoot (Join-Path $env:RUNNER_TEMP 'datagen-determinism-evidence')
+
       - name: Restore solution
         run: dotnet restore .\DataGen.slnx
 

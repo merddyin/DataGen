@@ -46,7 +46,6 @@
     <Compile Include="..\ModuleSurfaceTests.cs" Link="ModuleSurfaceTests.cs" />
     <Compile Include="..\NormalizedAnomalyRecordTests.cs" Link="NormalizedAnomalyRecordTests.cs" />
     <Compile Include="..\ScenarioAuthoringCmdletIntegrationTests.cs" Link="ScenarioAuthoringCmdletIntegrationTests.cs" />
-    <Compile Include="..\SyntheticEnterprise.Tests\*.cs" Link="Recovered\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <UsingTask TaskName="GetIntegrationTestAssetSizes" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
