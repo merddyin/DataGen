@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <GenerateSeededCatalogDatabase>true</GenerateSeededCatalogDatabase>
+    <!-- See VerifyDataGenCatalogOutputCopy in Directory.Build.targets: the Content copy below is
+         timestamp-based and the published artifact's timestamp is deliberately frozen, so the build
+         output copy is reconciled by content hash instead. -->
+    <DataGenCatalogOutputRelativePath>catalogs\catalogs.sqlite</DataGenCatalogOutputRelativePath>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />

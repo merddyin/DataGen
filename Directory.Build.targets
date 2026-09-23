@@ -1,7 +1,8 @@
 <Project>
   <PropertyGroup>
     <DataGenRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</DataGenRepositoryRoot>
-    <DataGenCatalogArtifactPath Condition="'$(DataGenCatalogArtifactPath)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\catalog\catalogs.sqlite'))</DataGenCatalogArtifactPath>
+    <DataGenCanonicalCatalogArtifactPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\catalog\catalogs.sqlite'))</DataGenCanonicalCatalogArtifactPath>
+    <DataGenCatalogArtifactPath Condition="'$(DataGenCatalogArtifactPath)' == ''">$(DataGenCanonicalCatalogArtifactPath)</DataGenCatalogArtifactPath>
     <DataGenCatalogFingerprintPath Condition="'$(DataGenCatalogFingerprintPath)' == ''">$(DataGenCatalogArtifactPath).inputs.sha256</DataGenCatalogFingerprintPath>
     <DataGenCatalogRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)catalogs'))</DataGenCatalogRoot>
     <DataGenPowerShellExecutable Condition="'$(OS)' == 'Windows_NT'">pwsh.exe</DataGenPowerShellExecutable>
@@ -80,10 +81,21 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
                 return false;
             }
 
+            // An interrupted build leaves owned "<artifact>.<guid>.tmp" scratch files and SQLite
+            // rollback residue ("-journal"/"-wal"/"-shm") behind. Nothing else may hold those names
+            // while this mutex is held, so their presence proves the previous build did not finish.
+            // Remove them and force a regeneration rather than trusting whatever is on disk.
+            var interruptedBuildResidue = RemoveInterruptedBuildResidue(artifactPath, fingerprintPath);
+            foreach (var residuePath in interruptedBuildResidue)
+            {
+                Log.LogWarning("Removed interrupted catalog build residue '{0}'; regenerating '{1}'.", residuePath, artifactPath);
+            }
+
             var originalArtifactMetadata = CaptureExistingWindowsDestinationMetadata(artifactPath);
             var originalFingerprintMetadata = CaptureExistingWindowsDestinationMetadata(fingerprintPath);
             var fingerprint = ComputeFingerprint(repositoryRoot, catalogRoot, artifactPath, fingerprintPath);
-            if (File.Exists(artifactPath)
+            if (interruptedBuildResidue.Count == 0
+                && File.Exists(artifactPath)
                 && TryReadIntegrityRecord(fingerprintPath, out var integrityRecord)
                 && integrityRecord.FormatVersion == 1
                 && string.Equals(integrityRecord.InputFingerprint, fingerprint, StringComparison.Ordinal)
@@ -238,6 +250,64 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
     private static bool IsOwnedTemporaryPath(string path, string ownedPath)
         => path.StartsWith(ownedPath + ".", StringComparison.OrdinalIgnoreCase)
             && path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly string[] SqliteWriteResidueSuffixes = { "-journal", "-wal", "-shm" };
+
+    private static List<string> RemoveInterruptedBuildResidue(string artifactPath, string fingerprintPath)
+    {
+        var removed = new List<string>();
+        foreach (var ownedPath in new[] { artifactPath, fingerprintPath })
+        {
+            var directory = Path.GetDirectoryName(ownedPath);
+            if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))
+            {
+                continue;
+            }
+
+            foreach (var candidate in Directory.EnumerateFiles(directory, Path.GetFileName(ownedPath) + ".*.tmp"))
+            {
+                if (IsOwnedTemporaryPath(Path.GetFullPath(candidate), ownedPath))
+                {
+                    TryRemoveResidue(candidate, removed);
+                }
+            }
+
+            foreach (var suffix in SqliteWriteResidueSuffixes)
+            {
+                TryRemoveResidue(ownedPath + suffix, removed);
+            }
+        }
+
+        return removed;
+    }
+
+    private static void TryRemoveResidue(string path, List<string> removed)
+    {
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var fullPath = Path.GetFullPath(path);
+        try
+        {
+            File.SetAttributes(fullPath, FileAttributes.Normal);
+            File.Delete(fullPath);
+        }
+        catch (IOException)
+        {
+            return;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        if (!removed.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+        {
+            removed.Add(fullPath);
+        }
+    }
 
     private static bool IsCatalogCache(string path, string catalogRoot)
     {
@@ -629,5 +699,81 @@ public sealed class EnsureDataGenCatalogArtifact : Microsoft.Build.Utilities.Tas
                                   ForceSecurityMetadataApplication="$(DataGenCatalogForceSecurityMetadataApplication)" />
     <Error Condition="!Exists('$(DataGenCatalogArtifactPath)')" Text="Seeded catalog database was not generated at '$(DataGenCatalogArtifactPath)'." />
     <Error Condition="!Exists('$(DataGenCatalogFingerprintPath)')" Text="Seeded catalog fingerprint was not generated at '$(DataGenCatalogFingerprintPath)'." />
+  </Target>
+
+  <!--
+    The catalog publisher deliberately restores the previous destination's Windows metadata onto the
+    republished artifact, including LastWriteTimeUtc (asserted by the publisher-metadata regression in
+    tests/CleanCheckoutCatalogContract.Tests.ps1). A regenerated catalog therefore keeps the timestamp of
+    the copy it replaced, which silently defeats every timestamp-based copy: CopyToOutputDirectory
+    "PreserveNewest" and Copy/SkipUnchangedFiles both conclude the destination is already current and keep
+    serving stale catalog content to tests. Both targets below compare content, never timestamps.
+  -->
+  <Target Name="RefreshDataGenCatalogWorkingCopy"
+          AfterTargets="GenerateSeededCatalogDatabase"
+          Condition="'$(GenerateSeededCatalogDatabase)' == 'true' and '$(DesignTimeBuild)' != 'true' and Exists('$(DataGenCatalogRoot)\catalogs.sqlite') and '$(DataGenCatalogArtifactPath)' == '$(DataGenCanonicalCatalogArtifactPath)'">
+    <!--
+      The artifact-path guard above matters: tests/CleanCheckoutCatalogContract.Tests.ps1 imports these
+      targets from a probe project that redirects DataGenCatalogArtifactPath elsewhere and invokes
+      GenerateSeededCatalogDatabase directly. Only the canonical artifact may seed the working copy.
+
+      catalogs\catalogs.sqlite is an untracked working copy installed by
+      scripts/build-catalog-artifact.ps1 -InstallToCatalogRoot. It is excluded from the input fingerprint
+      (IsCatalogCache) so that the build does not fingerprint its own output, which also means it can never
+      self-invalidate while it shadows the CSVs it was built from - and FileSystemCatalogLoader prefers
+      catalogs.sqlite over those CSVs. Only ever refresh a copy that already exists; never create one, so a
+      clean checkout stays clean (asserted by tests/CleanCheckoutCatalogContract.Tests.ps1).
+    -->
+    <GetFileHash Files="$(DataGenCatalogArtifactPath)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_DataGenCatalogCanonicalArtifact" />
+    </GetFileHash>
+    <GetFileHash Files="$(DataGenCatalogRoot)\catalogs.sqlite" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_DataGenCatalogWorkingCopy" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_DataGenCatalogWorkingCopyIsStale Condition="'@(_DataGenCatalogCanonicalArtifact->'%(FileHash)')' != '@(_DataGenCatalogWorkingCopy->'%(FileHash)')'">true</_DataGenCatalogWorkingCopyIsStale>
+    </PropertyGroup>
+    <Message Importance="high"
+             Text="Catalog working copy '$(DataGenCatalogRoot)\catalogs.sqlite' was stale and has been refreshed from '$(DataGenCatalogArtifactPath)'."
+             Condition="'$(_DataGenCatalogWorkingCopyIsStale)' == 'true'" />
+    <Copy SourceFiles="$(DataGenCatalogArtifactPath)"
+          DestinationFiles="$(DataGenCatalogRoot)\catalogs.sqlite"
+          SkipUnchangedFiles="false"
+          Condition="'$(_DataGenCatalogWorkingCopyIsStale)' == 'true'" />
+  </Target>
+
+  <Target Name="VerifyDataGenCatalogOutputCopy"
+          AfterTargets="Build"
+          Condition="'$(GenerateSeededCatalogDatabase)' == 'true' and '$(DesignTimeBuild)' != 'true' and '$(DataGenCatalogOutputRelativePath)' != ''">
+    <PropertyGroup>
+      <_DataGenCatalogOutputPath>$([System.IO.Path]::GetFullPath('$(OutDir)$(DataGenCatalogOutputRelativePath)'))</_DataGenCatalogOutputPath>
+      <_DataGenCatalogOutputDirectory>$([System.IO.Path]::GetDirectoryName('$(_DataGenCatalogOutputPath)'))</_DataGenCatalogOutputDirectory>
+    </PropertyGroup>
+    <MakeDir Directories="$(_DataGenCatalogOutputDirectory)" />
+    <Copy SourceFiles="$(DataGenCatalogArtifactPath)"
+          DestinationFiles="$(_DataGenCatalogOutputPath)"
+          SkipUnchangedFiles="false"
+          Condition="!Exists('$(_DataGenCatalogOutputPath)')" />
+    <GetFileHash Files="$(DataGenCatalogArtifactPath)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_DataGenCatalogOutputCanonical" />
+    </GetFileHash>
+    <GetFileHash Files="$(_DataGenCatalogOutputPath)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_DataGenCatalogOutputCurrent" />
+    </GetFileHash>
+    <PropertyGroup>
+      <_DataGenCatalogOutputIsStale Condition="'@(_DataGenCatalogOutputCanonical->'%(FileHash)')' != '@(_DataGenCatalogOutputCurrent->'%(FileHash)')'">true</_DataGenCatalogOutputIsStale>
+    </PropertyGroup>
+    <Message Importance="high"
+             Text="Catalog copy '$(_DataGenCatalogOutputPath)' was stale and has been refreshed from '$(DataGenCatalogArtifactPath)'."
+             Condition="'$(_DataGenCatalogOutputIsStale)' == 'true'" />
+    <Copy SourceFiles="$(DataGenCatalogArtifactPath)"
+          DestinationFiles="$(_DataGenCatalogOutputPath)"
+          SkipUnchangedFiles="false"
+          Condition="'$(_DataGenCatalogOutputIsStale)' == 'true'" />
+    <GetFileHash Files="$(_DataGenCatalogOutputPath)" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Items" ItemName="_DataGenCatalogOutputVerified" />
+    </GetFileHash>
+    <Error Condition="'@(_DataGenCatalogOutputCanonical->'%(FileHash)')' != '@(_DataGenCatalogOutputVerified->'%(FileHash)')'"
+           Text="Catalog copy '$(_DataGenCatalogOutputPath)' does not match the canonical artifact '$(DataGenCatalogArtifactPath)'. Refusing to build against a stale catalog." />
   </Target>
 </Project>

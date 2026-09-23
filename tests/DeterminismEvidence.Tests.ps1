@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot = (Split-Path -Parent $PSScriptRoot),
-    [string]$WorkingRoot = 'E:\Codex\build\datagen-v093-round3-receipt-tests'
+    # Must stay machine-independent: this harness runs unattended in CI, where the caller passes
+    # $env:RUNNER_TEMP. The working root is deleted and recreated on every run.
+    [string]$WorkingRoot = (Join-Path ([IO.Path]::GetTempPath()) 'datagen-determinism-evidence')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -378,6 +380,37 @@ $mutableContract = & $contractPath `
 $mutationChild = Start-GenerationChild -PwshPath $pwshPath -DriverPath $driverPath -CandidatePath $mutableRun -ScenarioPath $mutableScenarioPath -GeneratorPath $generatorPath -RepoRoot $resolvedRepoRoot -InvocationContractPath $mutableContractPath -GitPath $gitPath -DotNetPath $dotnetPath -Mode 'stable' -ApiToken 'mutation-secret' -MutateScenario 'true'
 Complete-GenerationChildFailure -Child $mutationChild -Label 'identity-mutation child generation' -Pattern '*identity changed*'
 Assert-True (-not (Test-Path -LiteralPath (Join-Path $mutableRun $sidecarName))) 'A changed scenario identity must not emit a success sidecar.'
+
+# Two runs that both produced nothing hash identically, so a naive comparison reports a false "match" on
+# the digest of an empty inventory. Generation must refuse to certify an empty payload at all.
+$emptyGeneratorPath = Join-Path $resolvedWorkingRoot 'empty-generation.ps1'
+[IO.File]::WriteAllText(
+    $emptyGeneratorPath,
+    @'
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)][string]$OutputPath,
+    [Parameter(Mandatory)][string]$ScenarioPath,
+    [Parameter(Mandatory)][int]$Seed,
+    [Parameter(Mandatory)][DateTimeOffset]$GeneratedAt,
+    [Parameter(Mandatory)][string]$Mode,
+    [Parameter(Mandatory)][string]$ApiToken,
+    [Parameter(Mandatory)][string]$MutateScenario
+)
+[IO.Directory]::CreateDirectory($OutputPath) | Out-Null
+'@,
+    [Text.UTF8Encoding]::new($false))
+$emptyRun = Join-Path $resolvedWorkingRoot 'candidate-empty-payload'
+$emptyContractPath = Join-Path $resolvedWorkingRoot 'empty.contract.json'
+$emptyContractParameters = @{}
+foreach ($entry in $contractParameters.GetEnumerator()) {
+    $emptyContractParameters[$entry.Key] = $entry.Value
+}
+$emptyContractParameters['ExpectedGenerationScriptPath'] = $emptyGeneratorPath
+& $contractPath @emptyContractParameters -ChallengeLabel 'candidate-1' -OutputPath $emptyContractPath | Out-Null
+$emptyChild = Start-GenerationChild -PwshPath $pwshPath -DriverPath $driverPath -CandidatePath $emptyRun -ScenarioPath $scenarioPath -GeneratorPath $emptyGeneratorPath -RepoRoot $resolvedRepoRoot -InvocationContractPath $emptyContractPath -GitPath $gitPath -DotNetPath $dotnetPath -Mode 'stable' -ApiToken 'dictionary-password-1'
+Complete-GenerationChildFailure -Child $emptyChild -Label 'empty-payload child generation' -Pattern '*produced no payload files*'
+Assert-True (-not (Test-Path -LiteralPath (Join-Path $emptyRun $sidecarName))) 'A run that produced no artifacts must not emit a success sidecar.'
 
 $patternSecretA = Get-GenerationInvocationIdentity -Seed 1130 -GeneratedAt $generatedAt -GenerationArgumentList @('-Password', 'dictionary-a') -SensitiveGenerationArgumentPattern @('^Password$')
 $patternSecretB = Get-GenerationInvocationIdentity -Seed 1130 -GeneratedAt $generatedAt -GenerationArgumentList @('-Password', 'dictionary-b') -SensitiveGenerationArgumentPattern @('^Password$')
