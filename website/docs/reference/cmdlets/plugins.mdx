@@ -33,7 +33,15 @@ Creates a starter plugin package scaffold with the required manifest and baselin
 
 ## `Register-SEGenerationPlugin`
 
-Registers plugin capabilities for reuse.
+Registers plugin capabilities for reuse, storing the approved **content hash** of each one so it can be trusted later with `-UseRegisteredPlugins`.
+
+The stored hash binds the built plugin, not its source. For a binary (`DotNetAssembly`) plugin the hash covers the manifest, the entry-point assembly, plugin-local data, and every file in the entry point's output directory — which includes the DataGen assemblies the build copies beside it.
+
+:::warning Registrations do not survive a DataGen upgrade
+Rebuilding a binary plugin against a different DataGen version changes its content hash, so every approved binary-plugin registration must be re-approved after an upgrade. Re-run `Register-SEGenerationPlugin` as part of taking the new version. See [Binary Plugin Guide](../../sdk/binary-plugin-guide.mdx#an-approval-pins-the-built-artifact-not-the-source).
+:::
+
+Script-plugin registrations are unaffected by a DataGen upgrade; their hash covers only the manifest, the script, and plugin-local data.
 
 ## `Get-SEGenerationPluginRegistration`
 

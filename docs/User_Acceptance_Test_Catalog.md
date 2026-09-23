@@ -428,9 +428,11 @@ The product should be considered acceptable for its current phase if:
 - `Expected Result`:
   - Plugin execution obeys time, payload, and diagnostic limits.
   - Disallowed or tampered assembly plugins are rejected.
+  - A rejection for a stale approved hash explains that a DataGen version change invalidates assembly-plugin approvals, and names re-approval as the remedy.
   - Generation remains stable when plugins emit warnings or diagnostics.
 - `Notes / Risks`:
   - This is secondary to core generation, but still important for extension safety.
+  - An assembly-plugin approval pins the compiled package, which includes the DataGen assemblies the build copies beside the entry point. Every approved assembly plugin must therefore be re-approved after a DataGen upgrade; an approval cannot be carried across versions. Expect to re-run `Register-SEGenerationPlugin` when validating this UAT against a new version.
 
 ## UAT-21: Lab-Population Data Pack Readiness
 

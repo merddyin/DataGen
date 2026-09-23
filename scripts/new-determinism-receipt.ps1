@@ -300,6 +300,11 @@ $validatedCandidates = @(
         }
 
         $payload = Get-CanonicalFileInventory -RootPath $candidateRoot -ExcludeRelativePath @($sidecarName) -RejectReparsePoints
+        if ($payload.fileCount -eq 0) {
+            # Two runs that both produced nothing agree on the hash of an empty inventory. That is not evidence of
+            # determinism, so refuse to report a hash for a candidate with no artifacts rather than pass on it.
+            throw "$context produced no payload files; an empty candidate root is not determinism evidence."
+        }
         Assert-ExpectedValue -Context "$context payload hash" -Expected $payload.aggregateSha256 -Actual (Get-RequiredProperty -Object $output -Name 'payloadSha256' -Context "$context output")
         Assert-ExpectedValue -Context "$context payload file count" -Expected $payload.fileCount -Actual (Get-RequiredProperty -Object $output -Name 'fileCount' -Context "$context output")
         Assert-ExpectedValue -Context "$context payload byte count" -Expected $payload.totalBytes -Actual (Get-RequiredProperty -Object $output -Name 'totalBytes' -Context "$context output")
