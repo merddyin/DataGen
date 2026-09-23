@@ -36,5 +36,18 @@ The product now supports the kinds of deviations teams regularly see in real env
 - discovery-only records
 - service-catalog entries without formal deployment
 - canonical items missing from CMDB-facing views
+- a source judging business criticality differently from the database
+- a source naming a thing differently from the database, by its fully qualified name or its vendor's name for it
+- more than one configuration item held for one host or application, because a record filed under an identity the database could not match became its own item
 
 This is especially valuable when you are validating reconciliation logic or demonstrating why source quality matters.
+
+## More than one item for one thing
+
+A configuration management database routinely holds several items for one host or application. The records arrive from different discovery sources, each naming the thing the way its own view of it supplies, and a record the reconciliation engine fails to match becomes a further item carrying the values that source reported — including its own judgement of business criticality.
+
+Generated worlds carry that shape. Both items name the same underlying entity through `source_entity_type` and `source_entity_id`, so grouping on that pair yields real multi-item groups, and where the items disagree about `business_criticality` each item's value is the band stated by a `cmdb_source_records` row linked to that item: the database's own record on one side, the unmatched record on the other, with `match_status` `Unreconciled` and a `cmdb_source_links.link_type` of `Duplicate`. Nothing about the disagreement is asserted without a record behind it.
+
+Anything that resolves criticality across a group therefore has a genuine multi-value group to resolve. If your consumer maps DataGen's `High`, `Low`, `Medium` and `MissionCritical` into its own vocabulary, resolve the group after that mapping rather than before: an ordering that happens to work on one vocabulary need not work on the other.
+
+The shape follows the deviation profile. A `Clean` profile emits no unmatched records and therefore no duplicate items; `Realistic` and `Aggressive` do.

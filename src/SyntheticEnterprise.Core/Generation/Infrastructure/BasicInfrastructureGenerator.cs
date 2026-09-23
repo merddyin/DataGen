@@ -2101,7 +2101,11 @@ public sealed class BasicInfrastructureGenerator : IInfrastructureGenerator
                 UserPrincipalName = upn,
                 Mail = null,
                 Domain = company.PrimaryDomain,
-                DistinguishedName = hostname,
+
+                // A cloud-only device object sits in no directory tree, so it has no distinguished
+                // name to state. The field stays empty rather than repeating the hostname, which
+                // names no position in a directory and so could never be judged for uniqueness.
+                DistinguishedName = string.Empty,
                 OuId = string.Empty,
                 Enabled = true,
                 Privileged = false,
