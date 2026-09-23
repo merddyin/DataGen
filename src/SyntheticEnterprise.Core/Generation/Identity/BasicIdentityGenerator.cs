@@ -60,6 +60,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
             var companyPeople = world.People.Where(p => p.CompanyId == company.Id).ToList();
             var companyDepartments = world.Departments.Where(d => d.CompanyId == company.Id).ToList();
+            var companyBusinessUnits = world.BusinessUnits.Where(unit => unit.CompanyId == company.Id).ToList();
+            var departmentNaming = DepartmentDirectoryNaming.Build(companyDepartments, companyBusinessUnits);
             var companyTeams = world.Teams.Where(team => team.CompanyId == company.Id).ToList();
             var companyOffices = world.Offices.Where(office => office.CompanyId == company.Id).ToList();
             var rootDomain = BuildRootDomain(company);
@@ -70,7 +72,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             world.IdentityStores.AddRange(identityStores);
 
             var includeEnvironmentDefaults = context.Scenario.Identity.IncludeEnvironmentDefaults;
-            var ous = CreateOus(company, companyDepartments, companyOffices, rootDomain, includeAdministrativeTiers, includeEnvironmentDefaults);
+            var ouPlan = CreateOus(company, companyBusinessUnits, companyDepartments, companyOffices, rootDomain, includeAdministrativeTiers, includeEnvironmentDefaults);
+            var ous = ouPlan.OrganizationalUnits;
             world.OrganizationalUnits.AddRange(ous);
             world.Containers.AddRange(CreateDirectoryContainers(company, identityStores, ous, includeEnvironmentDefaults));
 
@@ -83,9 +86,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             var peopleAccounts = CreateUserAccounts(
                 company,
                 companyPeople,
-                companyDepartments,
                 companyOffices,
                 ous,
+                ouPlan.DepartmentOuByDepartmentId,
                 rootDomain,
                 issuedPasswords,
                 issuedAccountUpns,
@@ -105,10 +108,10 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 world.Accounts.AddRange(privileged);
             }
 
-            var groups = CreateGroups(company, companyDepartments, companyTeams, world.Accounts, ous, includeAdministrativeTiers);
+            var groups = CreateGroups(company, companyDepartments, companyTeams, world.Accounts, ous, departmentNaming, includeAdministrativeTiers);
             world.Groups.AddRange(groups);
 
-            var memberships = CreateMemberships(company, companyDepartments, companyTeams, companyPeople, groups, world.Accounts, includeAdministrativeTiers);
+            var memberships = CreateMemberships(company, companyDepartments, companyTeams, companyPeople, groups, world.Accounts, departmentNaming, includeAdministrativeTiers);
             world.GroupMemberships.AddRange(memberships);
             if (includeEnvironmentDefaults)
             {
@@ -159,7 +162,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                         }
                     }
 
-                    var externalMemberships = CreateExternalMemberships(company, externalPeople, externalAccounts, groups, companyDepartments);
+                    var externalMemberships = CreateExternalMemberships(company, externalPeople, externalAccounts, groups, companyDepartments, departmentNaming);
                     world.GroupMemberships.AddRange(externalMemberships);
                     CreateCrossTenantAccessArtifacts(world, company, externalOrganizations, externalAccounts);
                 }
@@ -171,6 +174,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 companyDefinition,
                 companyPeople,
                 companyDepartments,
+                departmentNaming,
                 ous,
                 rootDomain,
                 context.Scenario.Identity.AccountOwnershipConditionCount,
@@ -182,7 +186,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
             SetManagerRelationships(world, company, companyPeople, peopleAccounts);
 
-            CreateDirectoryPolicies(world, company, includeAdministrativeTiers);
+            CreateDirectoryPolicies(world, company, ouPlan.DepartmentOuByDepartmentId, includeAdministrativeTiers);
             CreateCrossTenantPolicyObjects(world, company);
             CreateTargetEnvironmentGpoSlice(world, company, rootDomain);
             CreateDirectoryObjectSecurity(world, company, ous);
@@ -313,7 +317,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return results;
     }
 
-    private void CreateDirectoryPolicies(SyntheticEnterpriseWorld world, Company company, bool includeAdministrativeTiers)
+    private void CreateDirectoryPolicies(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyDictionary<string, DirectoryOrganizationalUnit> departmentOuByDepartmentId,
+        bool includeAdministrativeTiers)
     {
         var activeDirectoryStore = world.IdentityStores.FirstOrDefault(store =>
             store.CompanyId == company.Id
@@ -396,8 +404,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Group", guestGroup?.Id, "SecurityFilterExclude", false, 2);
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Group", workstationAdmins?.Id, "DelegatedAdministration", false, 1, true, "Permission", "EditSettings");
         AddPolicyTarget(world, company.Id, workstationPolicy.Id, "Container", workstationContainer?.Id, "WmiFilter", false, 1, true, "WmiQuery", "SELECT * FROM Win32_OperatingSystem WHERE ProductType = 1");
-        AddAccessControlEvidence(world, company.Id, allEmployeesGroup?.Id, "Group", "Container", workstationContainer?.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
-        AddAccessControlEvidence(world, company.Id, guestGroup?.Id, "Group", "Container", workstationContainer?.Id, "ApplyGroupPolicy", "Deny", false, "ActiveDirectory", notes: "Guest and external identities explicitly excluded from workstation baseline");
+        // Apply Group Policy is an entry on the policy object's own security descriptor - it is what
+        // security filtering is made of - and is not a right an organizational unit holds. It is
+        // therefore recorded against the policy, alongside the include and exclude filters above.
+        AddAccessControlEvidence(world, company.Id, allEmployeesGroup?.Id, "Group", "Policy", workstationPolicy.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
+        AddAccessControlEvidence(world, company.Id, guestGroup?.Id, "Group", "Policy", workstationPolicy.Id, "ApplyGroupPolicy", "Deny", false, "ActiveDirectory", notes: "Guest and external identities explicitly excluded from workstation baseline");
         AddAccessControlEvidence(world, company.Id, domainAdmins?.Id, "Group", "Container", domainContainer?.Id, "GenericAll", "Allow", false, "ActiveDirectory", notes: "Default domain administrative control retained in the default Users container");
         AddAccessControlEvidence(world, company.Id, domainAdmins?.Id, "Group", "Container", domainControllersContainer?.Id, "ManageDomainControllers", "Allow", false, "ActiveDirectory", notes: "Domain controllers remain in the root Domain Controllers OU");
         AddAccessControlEvidence(world, company.Id, workstationAdmins?.Id, "Group", "Policy", workstationPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
@@ -647,7 +658,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             AddPolicySetting(world, company.Id, pawPolicy.Id, "PowerShellScriptExecution", "AdministrativeTooling", "String", "Restricted");
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Container", pawContainer.Id, "Linked", true, 1, true);
             AddPolicyTarget(world, company.Id, pawPolicy.Id, "Group", pawUsers?.Id, "SecurityFilterInclude", false, 1);
-            AddAccessControlEvidence(world, company.Id, pawUsers?.Id, "Group", "Container", pawContainer.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
+            AddAccessControlEvidence(world, company.Id, pawUsers?.Id, "Group", "Policy", pawPolicy.Id, "ApplyGroupPolicy", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Policy", pawPolicy.Id, "EditSettings", "Allow", false, "ActiveDirectory");
             AddAccessControlEvidence(world, company.Id, tier0Admins?.Id, "Group", "Container", pawContainer.Id, "ResetPassword", "Allow", false, "ActiveDirectory", notes: "Tier-0 delegated recovery on privileged workstation accounts");
         }
@@ -667,7 +678,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             gpoEditors?.Id);
 
         CreateLocationScopedPolicies(world, company, activeDirectoryStore.Id, gpoEditors?.Id);
-        CreateDepartmentScopedPolicies(world, company, activeDirectoryStore.Id, gpoEditors?.Id);
+        CreateDepartmentScopedPolicies(world, company, activeDirectoryStore.Id, departmentOuByDepartmentId, gpoEditors?.Id);
         CreateServerRolePolicies(world, company, activeDirectoryStore.Id, serverAdmins?.Id);
         CreateModernManagementPolicies(world, company, activeDirectoryStore, allEmployeesGroup?.Id, guestGroup?.Id, officeUsers?.Id, workstationAdmins?.Id);
         CreateWindowsBenchmarkPolicies(world, company, activeDirectoryStore.Id, workstationContainer?.Id, serverContainer?.Id, gpoEditors?.Id, workstationAdmins?.Id, serverAdmins?.Id);
@@ -1029,6 +1040,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         SyntheticEnterpriseWorld world,
         Company company,
         string activeDirectoryStoreId,
+        IReadOnlyDictionary<string, DirectoryOrganizationalUnit> departmentOuByDepartmentId,
         string? gpoEditorsGroupId)
     {
         var entraStore = world.IdentityStores.FirstOrDefault(store =>
@@ -1037,11 +1049,19 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         foreach (var department in world.Departments.Where(department => department.CompanyId == company.Id))
         {
+            // Two departments of a company may carry the same name, so the unit is resolved by the
+            // department's identity: naming it would link both to whichever unit was found first and
+            // leave the other department's people with no departmental policy at all.
+            if (!departmentOuByDepartmentId.TryGetValue(department.Id, out var departmentOu))
+            {
+                continue;
+            }
+
             var departmentContainer = world.Containers.FirstOrDefault(container =>
                 container.CompanyId == company.Id
                 && string.Equals(container.ContainerType, "OrganizationalUnit", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(container.Name, department.Name, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(container.Purpose, "Department Users", StringComparison.OrdinalIgnoreCase));
+                && string.Equals(container.SourceEntityType, nameof(DirectoryOrganizationalUnit), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(container.SourceEntityId, departmentOu.Id, StringComparison.OrdinalIgnoreCase));
             if (departmentContainer is null)
             {
                 continue;
@@ -2408,8 +2428,18 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
     }
 
-    private List<DirectoryOrganizationalUnit> CreateOus(
+    /// <summary>
+    /// The organizational units of one company, together with the unit each department's people are
+    /// held in. Two departments of a company may carry the same name, so the department is resolved
+    /// by identity rather than by name.
+    /// </summary>
+    private sealed record OrganizationalUnitPlan(
+        List<DirectoryOrganizationalUnit> OrganizationalUnits,
+        IReadOnlyDictionary<string, DirectoryOrganizationalUnit> DepartmentOuByDepartmentId);
+
+    private OrganizationalUnitPlan CreateOus(
         Company company,
+        IReadOnlyList<BusinessUnit> businessUnits,
         IReadOnlyList<Department> departments,
         IReadOnlyList<Office> offices,
         string rootDomain,
@@ -2499,14 +2529,39 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             result.Add(CreateOu(company, "Tier 2", adminAccounts.Id, $"OU=Tier 2,{adminAccounts.DistinguishedName}", "Tier 2 Administrative Accounts"));
         }
 
+        // A department's organizational unit is placed under the unit of the business unit that owns
+        // it, which is where a real directory holds it: the tree follows the organization chart. Two
+        // business units may each run a department called Legal, and both keep that name; the two
+        // units are told apart by where they sit, 'OU=Legal,OU=Commercial,OU=Employees,...' against
+        // 'OU=Legal,OU=Technology,OU=Employees,...', not by a number added to either name.
+        var departmentOuByDepartmentId = new Dictionary<string, DirectoryOrganizationalUnit>(StringComparer.OrdinalIgnoreCase);
+        var businessUnitOuByBusinessUnitId = new Dictionary<string, DirectoryOrganizationalUnit>(StringComparer.OrdinalIgnoreCase);
+        foreach (var businessUnit in businessUnits)
+        {
+            var businessUnitOu = CreateOu(
+                company,
+                businessUnit.Name,
+                users.Id,
+                $"OU={EscapeDn(businessUnit.Name)},{users.DistinguishedName}",
+                "Business Unit Users");
+            businessUnitOuByBusinessUnitId[businessUnit.Id] = businessUnitOu;
+            result.Add(businessUnitOu);
+        }
+
         foreach (var department in departments)
         {
-            result.Add(CreateOu(
+            var parentOu = !string.IsNullOrWhiteSpace(department.BusinessUnitId)
+                           && businessUnitOuByBusinessUnitId.TryGetValue(department.BusinessUnitId, out var businessUnitOu)
+                ? businessUnitOu
+                : users;
+            var departmentOu = CreateOu(
                 company,
                 department.Name,
-                users.Id,
-                $"OU={EscapeDn(department.Name)},{users.DistinguishedName}",
-                "Department Users"));
+                parentOu.Id,
+                $"OU={EscapeDn(department.Name)},{parentOu.DistinguishedName}",
+                "Department Users");
+            departmentOuByDepartmentId[department.Id] = departmentOu;
+            result.Add(departmentOu);
         }
 
         foreach (var office in offices
@@ -2528,15 +2583,15 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 "Location Users"));
         }
 
-        return result;
+        return new OrganizationalUnitPlan(result, departmentOuByDepartmentId);
     }
 
     private List<DirectoryAccount> CreateUserAccounts(
         Company company,
         IReadOnlyList<Person> people,
-        IReadOnlyList<Department> departments,
         IReadOnlyList<Office> offices,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        IReadOnlyDictionary<string, DirectoryOrganizationalUnit> departmentOuByDepartmentId,
         string rootDomain,
         HashSet<string> issuedPasswords,
         ISet<string> issuedAccountUpns,
@@ -2549,11 +2604,6 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             .Where(o => o.ParentOuId == usersOu.Id && string.Equals(o.Purpose, "Location Users", StringComparison.OrdinalIgnoreCase))
             .GroupBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var departmentOus = ous
-            .Where(o => o.ParentOuId == usersOu.Id && string.Equals(o.Purpose, "Department Users", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var departmentNamesById = departments.ToDictionary(d => d.Id, d => d.Name, StringComparer.OrdinalIgnoreCase);
 
         return people.Select(person =>
         {
@@ -2564,8 +2614,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                            && locationUserOus.TryGetValue(officeCity, out var officeOu)
                 ? officeOu
                 : !string.IsNullOrWhiteSpace(person.DepartmentId)
-                  && departmentNamesById.TryGetValue(person.DepartmentId, out var departmentName) &&
-                  departmentOus.TryGetValue(departmentName, out var departmentOu)
+                  && departmentOuByDepartmentId.TryGetValue(person.DepartmentId, out var departmentOu)
                     ? departmentOu
                     : usersOu;
             var passwordLastSet = _clock.UtcNow.AddDays(-_randomSource.Next(1, 90));
@@ -3163,6 +3212,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         ScenarioCompanyDefinition definition,
         IReadOnlyList<Person> companyPeople,
         IReadOnlyList<Department> companyDepartments,
+        DepartmentDirectoryNaming departmentNaming,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
         string rootDomain,
         int conditionCount,
@@ -3214,6 +3264,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             Candidates = candidates,
             CompanyPeople = companyPeople,
             Departments = companyDepartments,
+            DepartmentNaming = departmentNaming,
             // Scoped the way the world invariant validator judges distinguished names.
             IssuedDistinguishedNames = new HashSet<string>(
                 world.Accounts
@@ -3684,7 +3735,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var servedDepartmentIds = context.World.Groups
             .Where(group => nestedGroupIds.Contains(group.Id))
             .SelectMany(group => context.Departments
-                .Where(department => string.Equals(group.Name, DepartmentUserGroupName(department), StringComparison.OrdinalIgnoreCase)))
+                .Where(department => string.Equals(group.Name, DepartmentUserGroupName(context.DepartmentNaming, department), StringComparison.OrdinalIgnoreCase)))
             .Select(department => department.Id)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
@@ -3858,6 +3909,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         public required List<Person> Candidates { get; init; }
         public required IReadOnlyList<Person> CompanyPeople { get; init; }
         public required IReadOnlyList<Department> Departments { get; init; }
+        public required DepartmentDirectoryNaming DepartmentNaming { get; init; }
         public required HashSet<string> IssuedDistinguishedNames { get; init; }
         public required HashSet<string> IssuedPasswords { get; init; }
         public required ISet<string> IssuedAccountUpns { get; init; }
@@ -3972,6 +4024,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Team> teams,
         IReadOnlyList<DirectoryAccount> accounts,
         IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        DepartmentDirectoryNaming naming,
         bool includeAdministrativeTiers)
     {
         var includeEnvironmentDefaults = accounts.Any(account => account.CompanyId == company.Id && account.AccountType == "BuiltIn");
@@ -3991,11 +4044,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         foreach (var department in departments)
         {
-            result.Add(CreateGroup(company, DepartmentUserGroupName(department), "Security", "Global", false, groupsOu, $"Baseline access for {department.Name}"));
-            result.Add(CreateGroup(company, DepartmentDistributionGroupName(department), "Distribution", "Universal", true, groupsOu, $"Mail distribution for {department.Name}"));
-            result.Add(CreateGroup(company, DepartmentLeadershipGroupName(department), "Distribution", "Universal", true, groupsOu, $"Management and leads for {department.Name}"));
-            result.Add(CreateGroup(company, DepartmentFileAccessGroupName(department), "Security", "DomainLocal", false, groupsOu, $"{department.Name} departmental file share access"));
-            result.Add(CreateGroup(company, DepartmentMailboxAccessGroupName(department), "Security", "DomainLocal", false, groupsOu, $"{department.Name} shared mailbox delegation"));
+            result.Add(CreateGroup(company, DepartmentUserGroupName(naming, department), "Security", "Global", false, groupsOu, $"Baseline access for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentDistributionGroupName(naming, department), "Distribution", "Universal", true, groupsOu, $"Mail distribution for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentLeadershipGroupName(naming, department), "Distribution", "Universal", true, groupsOu, $"Management and leads for {department.Name}"));
+            result.Add(CreateGroup(company, DepartmentFileAccessGroupName(naming, department), "Security", "DomainLocal", false, groupsOu, $"{department.Name} departmental file share access"));
+            result.Add(CreateGroup(company, DepartmentMailboxAccessGroupName(naming, department), "Security", "DomainLocal", false, groupsOu, $"{department.Name} shared mailbox delegation"));
         }
 
         result.Add(CreateGroup(company, AllEmployeesSecurityGroupName(), "Security", "Global", false, groupsOu, "All employee baseline access"));
@@ -4033,8 +4086,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         foreach (var team in teams)
         {
             var department = departments.FirstOrDefault(candidate => candidate.Id == team.DepartmentId);
-            result.Add(CreateGroup(company, TeamUserGroupName(department, team), "Security", "Global", false, groupsOu, $"Team access for {team.Name}"));
-            result.Add(CreateGroup(company, TeamDistributionGroupName(department, team), "Distribution", "Universal", true, groupsOu, $"Mail distribution for {team.Name}"));
+            result.Add(CreateGroup(company, TeamUserGroupName(naming, department, team), "Security", "Global", false, groupsOu, $"Team access for {team.Name}"));
+            result.Add(CreateGroup(company, TeamDistributionGroupName(naming, department, team), "Distribution", "Universal", true, groupsOu, $"Mail distribution for {team.Name}"));
         }
 
         foreach (var sharedAccount in accounts.Where(account => account.CompanyId == company.Id && account.AccountType == "Shared"))
@@ -4093,7 +4146,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 GroupType = "Security",
                 Scope = group.Scope,
                 MailEnabled = false,
-                DistinguishedName = $"CN={group.Name},{group.ContainerDn}",
+                DistinguishedName = $"CN={EscapeDn(group.Name)},{group.ContainerDn}",
                 OuId = string.Empty,
                 Purpose = group.Purpose,
                 AdministrativeTier = group.Tier
@@ -4110,6 +4163,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Person> people,
         IReadOnlyList<DirectoryGroup> groups,
         IReadOnlyList<DirectoryAccount> accounts,
+        DepartmentDirectoryNaming naming,
         bool includeAdministrativeTiers)
     {
         var results = new List<DirectoryGroupMembership>();
@@ -4167,11 +4221,11 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
         foreach (var department in departments)
         {
-            var sg = FindGroup(groups, company.Id, DepartmentUserGroupName(department));
-            var dl = FindGroup(groups, company.Id, DepartmentDistributionGroupName(department));
-            var leadershipDl = FindGroup(groups, company.Id, DepartmentLeadershipGroupName(department));
-            var fileShareGroup = FindGroup(groups, company.Id, DepartmentFileAccessGroupName(department));
-            var mailboxAccessGroup = FindGroup(groups, company.Id, DepartmentMailboxAccessGroupName(department));
+            var sg = FindGroup(groups, company.Id, DepartmentUserGroupName(naming, department));
+            var dl = FindGroup(groups, company.Id, DepartmentDistributionGroupName(naming, department));
+            var leadershipDl = FindGroup(groups, company.Id, DepartmentLeadershipGroupName(naming, department));
+            var fileShareGroup = FindGroup(groups, company.Id, DepartmentFileAccessGroupName(naming, department));
+            var mailboxAccessGroup = FindGroup(groups, company.Id, DepartmentMailboxAccessGroupName(naming, department));
 
             if (allEmployeesGroup is not null && sg is not null)
             {
@@ -4230,8 +4284,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         foreach (var team in teams)
         {
             var department = departments.FirstOrDefault(candidate => candidate.Id == team.DepartmentId);
-            var teamSg = FindGroup(groups, company.Id, TeamUserGroupName(department, team));
-            var teamDl = FindGroup(groups, company.Id, TeamDistributionGroupName(department, team));
+            var teamSg = FindGroup(groups, company.Id, TeamUserGroupName(naming, department, team));
+            var teamDl = FindGroup(groups, company.Id, TeamDistributionGroupName(naming, department, team));
 
             foreach (var person in people.Where(p => p.CompanyId == company.Id && p.TeamId == team.Id))
             {
@@ -4254,7 +4308,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 continue;
             }
 
-            foreach (var departmentGroup in ResolveSharedMailboxDepartmentGroups(sharedAccount, groups, departments, company.Id))
+            foreach (var departmentGroup in ResolveSharedMailboxDepartmentGroups(sharedAccount, groups, departments, naming, company.Id))
             {
                 AddMembershipIfPresent(results, mailboxGroup, departmentGroup.Id, "Group");
             }
@@ -5142,7 +5196,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         IReadOnlyList<Person> externalPeople,
         IReadOnlyList<DirectoryAccount> externalAccounts,
         IReadOnlyList<DirectoryGroup> groups,
-        IReadOnlyList<Department> departments)
+        IReadOnlyList<Department> departments,
+        DepartmentDirectoryNaming naming)
     {
         var results = new List<DirectoryGroupMembership>();
         var contractorsGroup = FindGroup(groups, company.Id, ExternalContractorsGroupName());
@@ -5160,7 +5215,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
                 continue;
             }
 
-            var departmentGroup = FindDepartmentGroup(groups, departments, person.DepartmentId);
+            var departmentGroup = FindDepartmentGroup(groups, departments, naming, person.DepartmentId);
             switch (account.AccountType)
             {
                 case "Contractor":
@@ -6118,6 +6173,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             return;
         }
 
+        (targetType, targetId) = ResolveDirectoryObjectTarget(world, targetType, targetId);
+        inheritanceScope = ResolveInheritanceScope(targetType, inheritanceScope);
+
         // Scope is part of the identity of an entry: the same principal can hold the same right on
         // the same object once for the object alone and once for its descendants.
         if (world.AccessControlEvidence.Any(evidence =>
@@ -6151,6 +6209,69 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         });
     }
 
+    /// <summary>
+    /// Resolves the object an entry is actually held on. An organizational unit is mirrored by an
+    /// <see cref="EnvironmentContainer"/> so that a policy can be linked to it, but the unit and the
+    /// container are the same directory object, and the unit is the one whose security descriptor
+    /// holds the entry. Naming the mirror instead would leave a reader two places to look for the
+    /// same thing, so an entry aimed at an organizational-unit-backed container is recorded against
+    /// the unit. Containers that are not organizational units - a directory domain, a default
+    /// directory container, an administrative unit, a subscription, a resource group - are left
+    /// exactly as they are, and none of them is an organizational unit, so the target type alone
+    /// tells the two concepts apart.
+    /// </summary>
+    private static (string TargetType, string TargetId) ResolveDirectoryObjectTarget(
+        SyntheticEnterpriseWorld world,
+        string targetType,
+        string targetId)
+    {
+        if (!string.Equals(targetType, "Container", StringComparison.OrdinalIgnoreCase))
+        {
+            return (targetType, targetId);
+        }
+
+        var container = world.Containers.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, targetId, StringComparison.OrdinalIgnoreCase));
+        if (container is null
+            || !string.Equals(container.SourceEntityType, nameof(DirectoryOrganizationalUnit), StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(container.SourceEntityId))
+        {
+            return (targetType, targetId);
+        }
+
+        return (nameof(DirectoryOrganizationalUnit), container.SourceEntityId!);
+    }
+
+    /// <summary>
+    /// Every entry on an organizational unit carries a scope, so a reader never has to decide what
+    /// an empty field meant.
+    ///
+    /// A scope is resolved only where the caller states one, which is where the unit the entry sits
+    /// on was chosen for a reason that fixes how far the entry reaches. For every other delegation
+    /// the value is <see cref="AccessControlInheritanceScope.NotRecorded"/>, because there is no
+    /// source for the propagation flag that was set on it.
+    ///
+    /// It is tempting to resolve a right that names something an organizational unit does not itself
+    /// have - a password, a property of a user, a group's membership - on the grounds that applying
+    /// to the unit alone would grant nothing. That argues about the right, not about the flag the
+    /// collector read, and it contradicts the rest of this model: an entry that reaches descendants
+    /// is stored once, on the object it is set on, and is not repeated below, yet these delegations
+    /// are set explicitly on every unit of their family. Entries repeated the whole way down are not
+    /// entries that were set to propagate. So the honest value is that the propagation flag is not
+    /// known, which is what is recorded.
+    /// </summary>
+    private static string? ResolveInheritanceScope(string targetType, string? declaredScope)
+    {
+        if (!string.Equals(targetType, nameof(DirectoryOrganizationalUnit), StringComparison.OrdinalIgnoreCase))
+        {
+            return declaredScope;
+        }
+
+        return string.IsNullOrWhiteSpace(declaredScope)
+            ? AccessControlInheritanceScope.NotRecorded
+            : declaredScope;
+    }
+
     private DirectoryGroup CreateGroup(
         Company company,
         string name,
@@ -6169,7 +6290,9 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             GroupType = groupType,
             Scope = scope,
             MailEnabled = mailEnabled,
-            DistinguishedName = $"CN={name},{groupsOu.DistinguishedName}",
+            // A common name carrying a comma would otherwise read as two components of the
+            // distinguished name, the same escaping every other component here is given.
+            DistinguishedName = $"CN={EscapeDn(name)},{groupsOu.DistinguishedName}",
             OuId = groupsOu.Id,
             Purpose = purpose,
             AdministrativeTier = administrativeTier
@@ -6211,6 +6334,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
     private static DirectoryGroup? FindDepartmentGroup(
         IReadOnlyList<DirectoryGroup> groups,
         IReadOnlyList<Department> departments,
+        DepartmentDirectoryNaming naming,
         string departmentId)
     {
         var department = departments.FirstOrDefault(candidate => candidate.Id == departmentId);
@@ -6220,7 +6344,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
 
         return groups.FirstOrDefault(group =>
-            string.Equals(group.Name, DepartmentUserGroupName(department), StringComparison.OrdinalIgnoreCase));
+            string.Equals(group.Name, DepartmentUserGroupName(naming, department), StringComparison.OrdinalIgnoreCase));
     }
 
     private void AddMembershipIfPresent(List<DirectoryGroupMembership> memberships, DirectoryGroup? group, string? memberObjectId, string memberObjectType)
@@ -6271,6 +6395,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         DirectoryAccount sharedAccount,
         IReadOnlyList<DirectoryGroup> groups,
         IReadOnlyList<Department> departments,
+        DepartmentDirectoryNaming naming,
         string companyId)
     {
         var token = (sharedAccount.SamAccountName ?? string.Empty).ToLowerInvariant();
@@ -6287,7 +6412,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
 
             if (match)
             {
-                var group = FindGroup(groups, companyId, DepartmentUserGroupName(department));
+                var group = FindGroup(groups, companyId, DepartmentUserGroupName(naming, department));
                 if (group is not null)
                 {
                     yield return group;
@@ -6296,26 +6421,86 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         }
     }
 
-    private static string DepartmentUserGroupName(Department department)
-        => $"GG {department.Name} Users";
+    /// <summary>
+    /// The label a department contributes to the common names of the groups derived from it.
+    ///
+    /// Every such group is held in one container, so a group's common name is the only thing that
+    /// tells it apart from the corresponding group of another department. Where two departments of
+    /// a company carry the same name - which is realistic and is kept - the business unit that owns
+    /// each one is carried in the label, so 'GG Commercial Legal Users' and 'GG Technology Legal
+    /// Users' name two groups rather than one name naming two objects. Where a department name
+    /// occurs once in the company the name is used unchanged, which is how an organization names a
+    /// group it has no reason to qualify. The department's own name is never altered, and no number
+    /// is ever appended.
+    ///
+    /// Organizational units need none of this: they are told apart by where they sit in the tree,
+    /// under the unit of the business unit that owns them.
+    /// </summary>
+    private sealed class DepartmentDirectoryNaming
+    {
+        private readonly IReadOnlyDictionary<string, string> _labelsByDepartmentId;
 
-    private static string DepartmentDistributionGroupName(Department department)
-        => $"DL {department.Name}";
+        private DepartmentDirectoryNaming(IReadOnlyDictionary<string, string> labelsByDepartmentId)
+            => _labelsByDepartmentId = labelsByDepartmentId;
 
-    private static string DepartmentLeadershipGroupName(Department department)
-        => $"DL {department.Name} Leadership";
+        public static DepartmentDirectoryNaming Empty { get; } =
+            new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
-    private static string DepartmentFileAccessGroupName(Department department)
-        => $"ACL FS {department.Name} Modify";
+        public static DepartmentDirectoryNaming Build(
+            IReadOnlyList<Department> departments,
+            IReadOnlyList<BusinessUnit> businessUnits)
+        {
+            var businessUnitNamesById = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var businessUnit in businessUnits)
+            {
+                businessUnitNamesById[businessUnit.Id] = businessUnit.Name;
+            }
 
-    private static string DepartmentMailboxAccessGroupName(Department department)
-        => $"ACL MBX {department.Name} Shared";
+            var repeatedNames = departments
+                .GroupBy(department => department.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+                .Select(group => group.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private static string TeamUserGroupName(Department? department, Team team)
-        => department is null ? $"GG {team.Name}" : $"GG {department.Name} {team.Name}";
+            var labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var department in departments)
+            {
+                var businessUnitName = !string.IsNullOrWhiteSpace(department.BusinessUnitId)
+                                       && businessUnitNamesById.TryGetValue(department.BusinessUnitId, out var resolved)
+                    ? resolved
+                    : string.Empty;
+                labels[department.Id] = repeatedNames.Contains(department.Name) && !string.IsNullOrWhiteSpace(businessUnitName)
+                    ? $"{businessUnitName} {department.Name}"
+                    : department.Name;
+            }
 
-    private static string TeamDistributionGroupName(Department? department, Team team)
-        => department is null ? $"DL {team.Name}" : $"DL {department.Name} {team.Name}";
+            return new DepartmentDirectoryNaming(labels);
+        }
+
+        public string Label(Department department)
+            => _labelsByDepartmentId.TryGetValue(department.Id, out var label) ? label : department.Name;
+    }
+
+    private static string DepartmentUserGroupName(DepartmentDirectoryNaming naming, Department department)
+        => $"GG {naming.Label(department)} Users";
+
+    private static string DepartmentDistributionGroupName(DepartmentDirectoryNaming naming, Department department)
+        => $"DL {naming.Label(department)}";
+
+    private static string DepartmentLeadershipGroupName(DepartmentDirectoryNaming naming, Department department)
+        => $"DL {naming.Label(department)} Leadership";
+
+    private static string DepartmentFileAccessGroupName(DepartmentDirectoryNaming naming, Department department)
+        => $"ACL FS {naming.Label(department)} Modify";
+
+    private static string DepartmentMailboxAccessGroupName(DepartmentDirectoryNaming naming, Department department)
+        => $"ACL MBX {naming.Label(department)} Shared";
+
+    private static string TeamUserGroupName(DepartmentDirectoryNaming naming, Department? department, Team team)
+        => department is null ? $"GG {team.Name}" : $"GG {naming.Label(department)} {team.Name}";
+
+    private static string TeamDistributionGroupName(DepartmentDirectoryNaming naming, Department? department, Team team)
+        => department is null ? $"DL {team.Name}" : $"DL {naming.Label(department)} {team.Name}";
 
     private static string SharedMailboxAccessGroupName(DirectoryAccount sharedAccount)
         => $"ACL MBX {ResolveMailboxToken(sharedAccount)} Access";

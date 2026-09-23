@@ -451,8 +451,10 @@ public sealed class IdentityInfrastructureGenerationTests
         Assert.Contains(result.World.PolicyTargetLinks, link =>
             link.TargetType == "IdentityStore"
             && link.AssignmentMode == "Scope");
+        // Apply Group Policy is an entry on the policy object, which is what security filtering is,
+        // and never an entry on an organizational unit.
         Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
+            evidence.TargetType == "Policy"
             && evidence.RightName == "ApplyGroupPolicy"
             && evidence.SourceSystem == "ActiveDirectory");
         Assert.Contains(result.World.AccessControlEvidence, evidence =>
@@ -464,38 +466,64 @@ public sealed class IdentityInfrastructureGenerationTests
             && evidence.RightName == "EditPermissions"
             && evidence.SourceSystem == "ActiveDirectory");
         Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
+            evidence.TargetType == "Policy"
             && evidence.RightName == "ApplyGroupPolicy"
             && evidence.AccessType == "Deny"
             && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "CreateComputerObject"
-            && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "CreateChild"
-            && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "ResetPassword"
-            && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "ReadLapsPassword"
-            && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "RemoteAssist"
-            && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "WriteUserProperties"
-            && evidence.SourceSystem == "ActiveDirectory");
-        Assert.Contains(result.World.AccessControlEvidence, evidence =>
-            evidence.TargetType == "Container"
-            && evidence.RightName == "WriteGroupMembership"
-            && evidence.SourceSystem == "ActiveDirectory");
+        Assert.DoesNotContain(result.World.AccessControlEvidence, evidence =>
+            evidence.RightName == "ApplyGroupPolicy"
+            && evidence.TargetType == nameof(DirectoryOrganizationalUnit));
+
+        // Delegation on an organizational unit has one shape: the entry names the unit, never the
+        // container that mirrors it, and always states how far it reaches.
+        foreach (var rightName in new[]
+                 {
+                     "CreateComputerObject",
+                     "CreateChild",
+                     "ResetPassword",
+                     "ReadLapsPassword",
+                     "RemoteAssist",
+                     "WriteUserProperties",
+                     "WriteGroupMembership",
+                     "LinkGpo"
+                 })
+        {
+            Assert.Contains(result.World.AccessControlEvidence, evidence =>
+                evidence.TargetType == nameof(DirectoryOrganizationalUnit)
+                && evidence.RightName == rightName
+                && evidence.SourceSystem == "ActiveDirectory"
+                && result.World.OrganizationalUnits.Any(ou => ou.Id == evidence.TargetId));
+        }
+
+        var mirroringContainerIds = result.World.Containers
+            .Where(container => container.SourceEntityType == nameof(DirectoryOrganizationalUnit))
+            .Select(container => container.Id)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Assert.NotEmpty(mirroringContainerIds);
+        Assert.DoesNotContain(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == "Container" && mirroringContainerIds.Contains(evidence.TargetId));
+        Assert.DoesNotContain(result.World.AccessControlEvidence, evidence =>
+            evidence.TargetType == nameof(DirectoryOrganizationalUnit)
+            && string.IsNullOrWhiteSpace(evidence.InheritanceScope));
+
+        // A retrofitted delegation has no recorded propagation flag, and none is invented for it.
+        // The entries that do carry a resolved scope are the ones whose position in the tree was
+        // chosen for a reason that fixes how far they reach.
+        Assert.All(
+            result.World.AccessControlEvidence.Where(evidence =>
+                evidence.TargetType == nameof(DirectoryOrganizationalUnit)
+                && evidence.RightName is "ResetPassword" or "ReadLapsPassword" or "ReadUserProperties"
+                    or "WriteUserProperties" or "WriteGroupMembership" or "LinkGpo"
+                    or "CreateComputerObject" or "DeleteComputerObject" or "RemoteAssist" or "ReadPolicy"),
+            evidence => Assert.Equal(AccessControlInheritanceScope.NotRecorded, evidence.InheritanceScope));
+        Assert.Contains(
+            result.World.AccessControlEvidence,
+            evidence => evidence.TargetType == nameof(DirectoryOrganizationalUnit)
+                        && evidence.InheritanceScope == AccessControlInheritanceScope.ThisObjectAndAllDescendants);
+        Assert.Contains(
+            result.World.AccessControlEvidence,
+            evidence => evidence.TargetType == nameof(DirectoryOrganizationalUnit)
+                        && evidence.InheritanceScope == AccessControlInheritanceScope.ThisObjectOnly);
         Assert.Contains(result.World.AccessControlEvidence, evidence =>
             evidence.PrincipalType == "Account"
             && evidence.RightName == "ReplicatingDirectoryChangesAll"

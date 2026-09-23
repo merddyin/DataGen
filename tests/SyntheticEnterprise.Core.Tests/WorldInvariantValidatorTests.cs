@@ -212,4 +212,131 @@ public sealed class WorldInvariantValidatorTests
 
         Assert.DoesNotContain(result.Errors, error => error.Contains("distinguished name", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void Validate_Flags_Organizational_Units_And_Groups_That_Share_A_Distinguished_Name()
+    {
+        // The shape this bug produced: two business units each ran a department called Legal, and the
+        // unit and the groups derived from it were named from the department alone.
+        var validator = new WorldInvariantValidator();
+        var world = new SyntheticEnterpriseWorld();
+        world.OrganizationalUnits.AddRange(
+        [
+            new DirectoryOrganizationalUnit
+            {
+                Id = "OU-1",
+                CompanyId = "COMP-1",
+                Name = "Legal",
+                Purpose = "Department Users",
+                DistinguishedName = "OU=Legal,OU=Employees,DC=duckburg,DC=test"
+            },
+            new DirectoryOrganizationalUnit
+            {
+                Id = "OU-2",
+                CompanyId = "COMP-1",
+                Name = "Legal",
+                Purpose = "Department Users",
+                DistinguishedName = "OU=Legal,OU=Employees,DC=duckburg,DC=test"
+            }
+        ]);
+        world.Groups.AddRange(
+        [
+            new DirectoryGroup
+            {
+                Id = "GRP-1",
+                CompanyId = "COMP-1",
+                Name = "GG Legal Users",
+                DistinguishedName = "CN=GG Legal Users,OU=Groups,DC=duckburg,DC=test"
+            },
+            new DirectoryGroup
+            {
+                Id = "GRP-2",
+                CompanyId = "COMP-1",
+                Name = "GG Legal Users",
+                DistinguishedName = "CN=GG Legal Users,OU=Groups,DC=duckburg,DC=test"
+            }
+        ]);
+
+        var result = validator.Validate(world);
+
+        var error = Assert.Single(
+            result.Errors,
+            candidate => candidate.Contains("duplicate directory object distinguished names", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("2 ", error);
+    }
+
+    [Fact]
+    public void Validate_Flags_An_Access_Control_Entry_Naming_The_Container_That_Mirrors_An_Organizational_Unit()
+    {
+        var validator = new WorldInvariantValidator();
+        var world = new SyntheticEnterpriseWorld();
+        world.OrganizationalUnits.Add(new DirectoryOrganizationalUnit
+        {
+            Id = "OU-1",
+            CompanyId = "COMP-1",
+            Name = "Workstations",
+            Purpose = "Managed Workstations",
+            DistinguishedName = "OU=Workstations,DC=duckburg,DC=test"
+        });
+        world.Containers.Add(new EnvironmentContainer
+        {
+            Id = "CNT-1",
+            CompanyId = "COMP-1",
+            Name = "Workstations",
+            ContainerType = "OrganizationalUnit",
+            ContainerPath = "OU=Workstations,DC=duckburg,DC=test",
+            SourceEntityType = nameof(DirectoryOrganizationalUnit),
+            SourceEntityId = "OU-1"
+        });
+        world.AccessControlEvidence.Add(new AccessControlEvidenceRecord
+        {
+            Id = "ACE-1",
+            CompanyId = "COMP-1",
+            PrincipalObjectId = "GRP-1",
+            PrincipalType = "Group",
+            TargetType = "Container",
+            TargetId = "CNT-1",
+            RightName = "LinkGpo",
+            SourceSystem = "ActiveDirectory"
+        });
+
+        var result = validator.Validate(world);
+
+        Assert.Contains(
+            result.Errors,
+            error => error.Contains("name the container that mirrors an organizational unit", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Validate_Flags_An_Organizational_Unit_Access_Control_Entry_With_No_Inheritance_Scope()
+    {
+        var validator = new WorldInvariantValidator();
+        var world = new SyntheticEnterpriseWorld();
+        world.OrganizationalUnits.Add(new DirectoryOrganizationalUnit
+        {
+            Id = "OU-1",
+            CompanyId = "COMP-1",
+            Name = "Workstations",
+            Purpose = "Managed Workstations",
+            DistinguishedName = "OU=Workstations,DC=duckburg,DC=test"
+        });
+        world.AccessControlEvidence.Add(new AccessControlEvidenceRecord
+        {
+            Id = "ACE-1",
+            CompanyId = "COMP-1",
+            PrincipalObjectId = "GRP-1",
+            PrincipalType = "Group",
+            TargetType = nameof(DirectoryOrganizationalUnit),
+            TargetId = "OU-1",
+            RightName = "LinkGpo",
+            SourceSystem = "ActiveDirectory",
+            InheritanceScope = null
+        });
+
+        var result = validator.Validate(world);
+
+        Assert.Contains(
+            result.Errors,
+            error => error.Contains("carry no inheritance scope", StringComparison.OrdinalIgnoreCase));
+    }
 }

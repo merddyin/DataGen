@@ -20,12 +20,16 @@ public sealed class DirectoryObjectSecurityTests
         Assert.NotEmpty(entries);
         Assert.All(entries, entry =>
         {
+            // Never empty on an entry naming an organizational unit. NotRecorded is a stated value
+            // and not a gap: it says the propagation flag this entry carried was not collected, so a
+            // reader must not resolve it either way.
             Assert.Contains(
                 entry.InheritanceScope,
                 new[]
                 {
                     AccessControlInheritanceScope.ThisObjectOnly,
-                    AccessControlInheritanceScope.ThisObjectAndAllDescendants
+                    AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                    AccessControlInheritanceScope.NotRecorded
                 });
             Assert.Contains(entry.TargetId, world.OrganizationalUnits.Select(ou => ou.Id));
         });

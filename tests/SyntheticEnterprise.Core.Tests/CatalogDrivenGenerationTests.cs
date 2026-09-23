@@ -67,6 +67,37 @@ public sealed class CatalogDrivenGenerationTests
         Assert.DoesNotContain(result.World.Teams, team => team.Name.Contains(" - ", StringComparison.Ordinal));
         Assert.Equal(2, result.World.Departments.Count(department => department.Name == "Planning"));
         Assert.Equal(2, result.World.Teams.Count(team => team.Name == "Operations"));
+
+        // The repeated department name is kept, and the two units are told apart by where they sit -
+        // under the unit of the business unit that owns each one - rather than by a number.
+        var planningOus = result.World.OrganizationalUnits
+            .Where(ou => ou.Name == "Planning" && ou.Purpose == "Department Users")
+            .ToList();
+        Assert.Equal(2, planningOus.Count);
+        Assert.Contains(planningOus, ou => ou.DistinguishedName.StartsWith("OU=Planning,OU=Commercial,OU=Employees,", StringComparison.Ordinal));
+        Assert.Contains(planningOus, ou => ou.DistinguishedName.StartsWith("OU=Planning,OU=Technology,OU=Employees,", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            result.World.OrganizationalUnits.Where(ou => ou.Purpose is "Department Users" or "Business Unit Users"),
+            ou => Regex.IsMatch(ou.Name, @"\s\d+$"));
+
+        // Every group derived from a department is held in one container, so the common name is all
+        // that tells two of them apart: where the department name repeats, it carries the business
+        // unit. Nothing is numbered.
+        Assert.Contains(result.World.Groups, group => group.Name == "GG Commercial Planning Users");
+        Assert.Contains(result.World.Groups, group => group.Name == "GG Technology Planning Users");
+        Assert.DoesNotContain(result.World.Groups, group => group.Name == "GG Planning Users");
+        Assert.DoesNotContain(result.World.Groups, group => Regex.IsMatch(group.Name, @"\s\d+$"));
+
+        // No two directory objects name the same position in the directory.
+        var distinguishedNames = result.World.OrganizationalUnits
+            .Select(ou => ou.DistinguishedName)
+            .Concat(result.World.Groups.Select(group => group.DistinguishedName))
+            .Concat(result.World.Accounts.Select(account => account.DistinguishedName))
+            .Where(value => !string.IsNullOrWhiteSpace(value) && value.Contains('=', StringComparison.Ordinal))
+            .ToList();
+        Assert.Equal(
+            distinguishedNames.Count,
+            distinguishedNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
     }
 
     [Fact]
