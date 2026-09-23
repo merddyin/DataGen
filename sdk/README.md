@@ -12,24 +12,24 @@ This SDK is the starting point for writing external DataGen plugins without havi
 1. Scaffold a new pack package:
    - `New-SEGenerationPluginPackage -Path 'E:\work\plugins\Contoso.RiskOps' -Capability 'Contoso.RiskOps' -DisplayName 'Contoso RiskOps'`
 2. Inspect a plugin root:
-   - `Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
+   - `Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'`
 3. Validate a plugin package:
-   - `Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
+   - `Test-SEGenerationPluginPackage -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'`
    - pack-focused validation: `Test-SEGenerationPluginPackage -PluginRootPath 'E:\work\plugins\Contoso.RiskOps' -ValidatePackContract`
    - bundled first-party pack gate: `.\scripts\validate-first-party-packs.ps1`
 4. Install and register an approved plugin into the managed plugin store:
-   - `Install-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
+   - `Install-SEGenerationPluginPackage -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'`
 5. Register an approved plugin directly from its source root when install is not needed:
-   - `Register-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'`
+   - `Register-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'`
 6. Build the binary sample if needed:
-   - `dotnet build E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj`
+   - `dotnet build .\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj`
 7. Re-inspect or re-validate with trust settings:
-   - `Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins -PluginAllowedContentHash '<hash>'`
+   - `Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins -PluginAllowedContentHash '<hash>'`
 8. Execute with `New-SEEnterpriseWorld` once the plugin is trusted.
 
 ## Documents
-- [Plugin SDK Guide](E:\source\DataGen\sdk\PLUGIN_SDK.md)
-- [Example Plugins](E:\source\DataGen\sdk\examples\README.md)
+- [Plugin SDK Guide](PLUGIN_SDK.md)
+- [Example Plugins](examples/README.md)
 
 ## Safety Model
 - Plugins are data generators or enrichers, not automation scripts.

@@ -175,13 +175,13 @@ New-SEGenerationPluginPackage `
 Inspect discovered plugins:
 
 ```powershell
-Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 ```
 
 Validate a package root:
 
 ```powershell
-Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+Test-SEGenerationPluginPackage -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 ```
 
 Validate the stricter pack contract when authoring a scenario pack:
@@ -196,7 +196,7 @@ For binary plugins, inspect or validate with trust settings:
 
 ```powershell
 Get-SEGenerationPlugin `
-  -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' `
+  -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' `
   -AllowAssemblyPlugins `
   -PluginAllowedContentHash '<hash>'
 ```
@@ -233,13 +233,13 @@ Script plugins carry no compiled package and are unaffected by a DataGen upgrade
 Register a plugin after review so its approved content hash can be reused later:
 
 ```powershell
-Register-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+Register-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 ```
 
 Install a plugin package into the managed plugin root and register it in one step:
 
 ```powershell
-Install-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+Install-SEGenerationPluginPackage -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 ```
 
 List registered plugins:
@@ -258,7 +258,7 @@ Execute using stored approvals:
 
 ```powershell
 New-SEEnterpriseWorld `
-  -ScenarioPath 'E:\source\DataGen\examples\regional-manufacturer.json' `
+  -ScenarioPath '.\examples\regional-manufacturer.json' `
   -EnablePluginCapability CountryTaxIds `
   -UseRegisteredPlugins
 ```
@@ -268,11 +268,11 @@ New-SEEnterpriseWorld `
 Script plugin example:
 
 ```powershell
-$plugin = Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+$plugin = Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 
 New-SEEnterpriseWorld `
-  -ScenarioPath 'E:\source\DataGen\examples\regional-manufacturer.json' `
-  -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script' `
+  -ScenarioPath '.\examples\regional-manufacturer.json' `
+  -PluginRootPath '.\sdk\examples\CountryTaxIds.Script' `
   -EnablePluginCapability CountryTaxIds `
   -RequirePluginHashApproval `
   -PluginAllowedContentHash $plugin.ContentHash
@@ -281,20 +281,20 @@ New-SEEnterpriseWorld `
 Binary plugin example:
 
 ```powershell
-dotnet build 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj'
+dotnet build '.\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj'
 
 $plugin = Get-SEGenerationPlugin `
-  -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' `
+  -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' `
   -AllowAssemblyPlugins
 
 New-SEEnterpriseWorld `
-  -ScenarioPath 'E:\source\DataGen\examples\regional-manufacturer.json' `
-  -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' `
+  -ScenarioPath '.\examples\regional-manufacturer.json' `
+  -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' `
   -EnablePluginCapability CompanyRegistrationIds `
   -AllowAssemblyPlugins `
   -PluginAllowedContentHash $plugin.ContentHash
 ```
 
 ## Example Plugins
-- [CountryTaxIds.Script](E:\source\DataGen\sdk\examples\CountryTaxIds.Script)
-- [CompanyRegistrationIds.Binary](E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary)
+- [CountryTaxIds.Script](examples/CountryTaxIds.Script)
+- [CompanyRegistrationIds.Binary](examples/CompanyRegistrationIds.Binary)

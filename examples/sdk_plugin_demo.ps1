@@ -1,8 +1,9 @@
-Import-Module 'E:\source\DataGen\src\SyntheticEnterprise.PowerShell\bin\Debug\net8.0\SyntheticEnterprise.PowerShell.dll' -Force
+$repoRoot = Split-Path -Parent $PSScriptRoot
+Import-Module (Join-Path $repoRoot 'src\SyntheticEnterprise.PowerShell\bin\Debug\net8.0\SyntheticEnterprise.PowerShell.dll') -Force
 
-$scriptRoot = 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
-$binaryRoot = 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary'
-$scenarioPath = 'E:\source\DataGen\examples\regional-manufacturer.json'
+$scriptRoot = Join-Path $repoRoot 'sdk\examples\CountryTaxIds.Script'
+$binaryRoot = Join-Path $repoRoot 'sdk\examples\CompanyRegistrationIds.Binary'
+$scenarioPath = Join-Path $repoRoot 'examples\regional-manufacturer.json'
 
 Write-Host 'Inspecting script plugin...'
 $scriptPlugin = Get-SEGenerationPlugin -PluginRootPath $scriptRoot
