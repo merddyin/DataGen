@@ -5,6 +5,9 @@ using System.Text.Json;
 using SyntheticEnterprise.Contracts.Configuration;
 using SyntheticEnterprise.Contracts.Plugins;
 using SyntheticEnterprise.Contracts.Scenarios;
+using SyntheticEnterprise.Core.Abstractions;
+using SyntheticEnterprise.Core.Catalogs;
+using SyntheticEnterprise.Core.Generation.Organization;
 using SyntheticEnterprise.Core.Plugins;
 
 public interface IScenarioTemplateRegistry
@@ -906,6 +909,7 @@ public sealed class ScenarioValidator : IScenarioValidator
     private readonly IScenarioDefaultsResolver _resolver;
     private readonly IScenarioPluginProfileHydrator _pluginProfileHydrator;
     private readonly IScenarioPluginContributionResolver _pluginContributionResolver;
+    private readonly Lazy<CatalogSet> _catalogs;
 
     public ScenarioValidator()
         : this(
@@ -929,18 +933,25 @@ public sealed class ScenarioValidator : IScenarioValidator
                         new FileSystemExternalGenerationPluginCatalog(
                             new GenerationPluginManifestValidator(new DataOnlyGenerationPluginSecurityPolicy()),
                             new DataOnlyGenerationPluginSecurityPolicy(),
-                            new AllowListExternalPluginTrustPolicy())))))
+                            new AllowListExternalPluginTrustPolicy())))),
+            new FileSystemCatalogLoader())
     {
     }
 
     public ScenarioValidator(
         IScenarioDefaultsResolver resolver,
         IScenarioPluginProfileHydrator pluginProfileHydrator,
-        IScenarioPluginContributionResolver pluginContributionResolver)
+        IScenarioPluginContributionResolver pluginContributionResolver,
+        ICatalogLoader catalogLoader)
     {
         _resolver = resolver;
         _pluginProfileHydrator = pluginProfileHydrator;
         _pluginContributionResolver = pluginContributionResolver;
+
+        // Primary domains are resolved from the same catalogs generation defaults to, so validation
+        // judges the domains a world would actually be given. Loading is deferred because only a
+        // multi-company scenario can collide.
+        _catalogs = new Lazy<CatalogSet>(catalogLoader.LoadDefault);
     }
 
     public ScenarioValidationResult Validate(object scenario)
@@ -1033,6 +1044,7 @@ public sealed class ScenarioValidator : IScenarioValidator
             }
         }
 
+        messages.AddRange(CheckPrimaryDomainsAreDistinct(resolved.Companies));
         messages.AddRange(contributionResolution.Messages);
 
         return new ScenarioValidationResult
@@ -1043,6 +1055,44 @@ public sealed class ScenarioValidator : IScenarioValidator
             AuthoringHints = contributionResolution.AuthoringHints,
             ResolvedScenario = resolved
         };
+    }
+
+    /// <summary>
+    /// A company's primary domain becomes the root of its directory naming context, so two companies
+    /// resolving to one domain would place both directories in the same namespace and mint the same
+    /// distinguished names twice. A distinguished name names a real position in a directory and so
+    /// cannot be disambiguated away; the only honest resolution is for the author to rename a
+    /// company, which is why this is rejected here rather than modelled.
+    /// </summary>
+    private IEnumerable<ScenarioValidationMessage> CheckPrimaryDomainsAreDistinct(
+        IReadOnlyCollection<ScenarioCompanyDefinition> companies)
+    {
+        if (companies.Count < 2)
+        {
+            return Array.Empty<ScenarioValidationMessage>();
+        }
+
+        var catalogs = _catalogs.Value;
+
+        return companies
+            .Select(company => new
+            {
+                company.Name,
+                Domain = CompanyPrimaryDomainResolver.Resolve(
+                    company.Name,
+                    CompanyPrimaryDomainResolver.ResolvePrimaryCountry(company.Countries),
+                    catalogs)
+            })
+            .GroupBy(entry => entry.Domain, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => new ScenarioValidationMessage(
+                "company-primary-domain-collision",
+                ScenarioValidationSeverity.Error,
+                "$.companies[].name",
+                $"Companies {string.Join(", ", group.Select(entry => $"'{entry.Name}'"))} all resolve to primary domain '{group.Key}'. "
+                + "Each company must resolve to its own primary domain, because every directory distinguished name is derived from it. "
+                + "Rename all but one of these companies so their names no longer reduce to the same domain label."))
+            .ToList();
     }
 }
 

@@ -96,13 +96,26 @@ public sealed class AccountIdentityIntegrityTests
     [Fact]
     public void Generated_World_Issues_No_Duplicate_Account_Upn_Or_Mail_Address()
     {
-        // Two company names that reduce to the same domain slug, so both companies share a root
-        // domain and mint the same principal shapes. This is the condition under which mail
-        // addresses collide; without issuance-side deduplication nothing prevents it.
-        var world = GenerateWorld("Aurora Logistics", "Aurora-Logistics").World;
+        // This fact was originally proven on two company names that reduce to one domain slug. That
+        // world is no longer generatable: a shared root domain also mints byte-identical
+        // distinguished names, which a disambiguating suffix cannot honestly repair, so the scenario
+        // is refused. See CompanyPrimaryDomainCollisionTests for the rejection itself.
+        //
+        // What each assertion below is worth, so nobody reads more coverage into it than it carries:
+        // the user principal name assertion is live, and the world-scoped registry does real work for
+        // it - a 1200-person company issues 1128 principal names bearing a disambiguating suffix,
+        // because duplicate person names inside one company are common. The mail assertions are not
+        // independently enforced. Every account derives its mail from its own user principal name,
+        // so mail is unique exactly because principal names are, and no generatable world reaches the
+        // mail registry's disambiguation branch: measured across a 1200-person single company, this
+        // two-company world and a three-company world, zero of 1289, 544 and 1299 mailboxes carry a
+        // mail address differing from their own principal name. The registry and its invariant are
+        // defence in depth, and WorldInvariantValidatorTests plus the hand-built worlds below are
+        // what actually prove they fire.
+        var world = GenerateWorld("Aurora Logistics", "Borealis Freight").World;
 
         Assert.Equal(2, world.Companies.Count);
-        Assert.Single(world.Companies.Select(company => company.PrimaryDomain).Distinct(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(2, world.Companies.Select(company => company.PrimaryDomain).Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
         var mailAddresses = world.Accounts
             .Select(account => account.Mail)

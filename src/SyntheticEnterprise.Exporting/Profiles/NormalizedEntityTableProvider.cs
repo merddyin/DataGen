@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
@@ -825,9 +825,6 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "person_id",
                     "account_type",
                     "display_name",
-                    "given_name",
-                    "surname",
-                    "description",
                     "sam_account_name",
                     "user_principal_name",
                     "mail",
@@ -869,7 +866,10 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "last_access_review_at",
                     "access_review_status",
                     "previous_invited_by_account_id",
-                    "sponsor_last_changed_at"
+                    "sponsor_last_changed_at",
+                    "given_name",
+                    "surname",
+                    "description"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.Accounts,
                 RowProjector = account => new Dictionary<string, object?>
