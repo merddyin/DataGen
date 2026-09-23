@@ -38,6 +38,7 @@ This SDK is the starting point for writing external DataGen plugins without havi
 - Binary plugins require explicit opt-in and hash approval by default.
 - The orchestrator owns logging, export, and snapshot side effects.
 - Registrations persist approved hashes so trusted plugins can be reused with `-UseRegisteredPlugins`.
+- An approval binds the **built** plugin, not its source. A binary plugin's hash includes every file in its entry point's output directory, which is where the build places DataGen's own assemblies, so a DataGen version change invalidates every approved binary-plugin registration and each must be re-approved. Plan for that when you upgrade; see [Registration and Reuse](PLUGIN_SDK.md#registration-and-reuse).
 
 ## Architectural Boundary
 - DataGen's job is to procedurally generate synthetic enterprise data.

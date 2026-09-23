@@ -141,7 +141,7 @@ public sealed class WorldExportCoordinatorTests
         try
         {
             var resolver = new ExportPathResolver();
-            var resolved = resolver.ResolveRoot(temp, artifactPrefix: null);
+            var resolved = resolver.ResolveRoot(temp, artifactPrefix: null, DateTimeOffset.Parse("2026-07-22T00:00:00Z"));
 
             Assert.Equal(Path.GetFullPath(temp), resolved);
         }
@@ -2032,6 +2032,156 @@ public sealed class WorldExportCoordinatorTests
         {
             Directory.Delete(temp, true);
         }
+    }
+
+    [Fact]
+    public void Export_DerivesDirectoryNameFromSuppliedTimestampSoRepeatedRunsArePathIdentical()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var exportedAt = DateTimeOffset.Parse("2026-07-22T13:45:09Z");
+
+            var first = Export(temp, exportedAt);
+            var second = Export(temp, exportedAt, overwrite: true);
+
+            Assert.Equal(first.OutputPath, second.OutputPath);
+            Assert.Equal(
+                Path.Combine(Path.GetFullPath(temp), "synthetic_enterprise_export_20260722_134509"),
+                first.OutputPath);
+
+            // A different export timestamp must still resolve somewhere else, or the name would carry no identity.
+            var other = Export(temp, DateTimeOffset.Parse("2026-07-22T13:45:10Z"));
+            Assert.NotEqual(first.OutputPath, other.OutputPath);
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_ResolvedRootIsIndependentOfTheLocalTimeZoneOffset()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var resolver = new ExportPathResolver();
+            var utc = DateTimeOffset.Parse("2026-07-22T13:45:09Z");
+            var sameInstantElsewhere = utc.ToOffset(TimeSpan.FromHours(9));
+
+            Assert.Equal(
+                resolver.ResolveRoot(temp, artifactPrefix: null, utc),
+                resolver.ResolveRoot(temp, artifactPrefix: null, sameInstantElsewhere));
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_RefusesToWriteIntoAnOccupiedExportRootWithoutOverwrite()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var exportedAt = DateTimeOffset.Parse("2026-07-22T13:45:09Z");
+            var first = Export(temp, exportedAt);
+
+            var error = Assert.Throws<IOException>(() => Export(temp, exportedAt));
+
+            Assert.Contains(first.OutputPath, error.Message, StringComparison.Ordinal);
+            Assert.Contains("-Overwrite", error.Message, StringComparison.Ordinal);
+            // The first export must survive the refusal untouched.
+            Assert.True(File.Exists(Path.Combine(first.OutputPath, "manifest.json")));
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_OverwriteReplacesThePreviousExportInsteadOfMergingIntoIt()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        Directory.CreateDirectory(temp);
+
+        try
+        {
+            var exportedAt = DateTimeOffset.Parse("2026-07-22T13:45:09Z");
+            var first = Export(temp, exportedAt);
+
+            // Stand in for an artifact an earlier, larger export wrote that this one does not produce. Merging would
+            // leave it behind and yield a tree matching neither export.
+            var stalePath = Path.Combine(first.OutputPath, "entities", "retired_table.json");
+            File.WriteAllText(stalePath, "[]");
+
+            var second = Export(temp, exportedAt, overwrite: true);
+
+            Assert.Equal(first.OutputPath, second.OutputPath);
+            Assert.False(File.Exists(stalePath));
+            Assert.True(File.Exists(Path.Combine(second.OutputPath, "manifest.json")));
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    [Fact]
+    public void Export_RefusesToOverwriteADirectoryHoldingContentItDidNotExport()
+    {
+        var temp = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var root = Path.Combine(temp, "occupied");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "quarterly-report.xlsx"), "not an export");
+
+        try
+        {
+            var error = Assert.Throws<IOException>(
+                () => Export(temp, DateTimeOffset.Parse("2026-07-22T13:45:09Z"), overwrite: true, artifactPrefix: "occupied"));
+
+            Assert.Contains("quarterly-report.xlsx", error.Message, StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(root, "quarterly-report.xlsx")));
+        }
+        finally
+        {
+            Directory.Delete(temp, true);
+        }
+    }
+
+    private static ExportManifestV2 Export(
+        string outputPath,
+        DateTimeOffset exportedAtUtc,
+        bool overwrite = false,
+        string? artifactPrefix = null)
+    {
+        var coordinator = new WorldExportCoordinator(
+            new CultureSensitiveEntityTableProvider(),
+            new EmptyLinkTableProvider(),
+            new JsonArtifactWriter(),
+            new ExportManifestBuilder(),
+            new ExportSummaryBuilder(),
+            new ExportPathResolver());
+
+        return coordinator.Export(new { }, new ExportRequest
+        {
+            Format = ExportSerializationFormat.Json,
+            OutputPath = outputPath,
+            ArtifactPrefix = artifactPrefix,
+            IncludeManifest = true,
+            IncludeSummary = true,
+            Overwrite = overwrite,
+            ExportedAtUtc = exportedAtUtc
+        });
     }
 
     private sealed class EmptyEntityTableProvider : IEntityTableProvider

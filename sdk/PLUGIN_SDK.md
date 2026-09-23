@@ -203,6 +203,33 @@ Get-SEGenerationPlugin `
 
 ## Registration and Reuse
 
+### What an approval binds
+
+The approved content hash covers the built plugin, not its source:
+
+| Component | Script plugin | Binary plugin |
+| --- | --- | --- |
+| Manifest bytes | yes | yes |
+| Entry point (script / assembly) bytes | yes | yes |
+| Plugin-local data files | yes | yes |
+| Recursive inventory of the entry point's output directory | no | yes |
+
+For a binary plugin the last row is the consequential one. The build copies DataGen's own assemblies (such as `SyntheticEnterprise.Contracts.dll`) into the entry point's output directory, and those files are inside the hash. Identical plugin source compiled against a different DataGen version therefore yields a different content hash.
+
+**A DataGen version change invalidates every approved binary-plugin registration.** An approval cannot be carried across versions. This is correct for a trust boundary — the thing approved is the thing that runs, and an assembly compiled against different dependencies is a different artifact — but it means re-approval is part of taking an upgrade, not an optional follow-up.
+
+At upgrade time, for each binary plugin:
+
+1. Rebuild against the new DataGen version.
+2. Read the new hash with `Get-SEGenerationPlugin -PluginRootPath '<path>' -AllowAssemblyPlugins`.
+3. Re-run `Register-SEGenerationPlugin`, or update any hash you pin to `-PluginAllowedContentHash`. A pinned hash checked into source control is version-specific; update it in the same change that takes the upgrade.
+
+Any rebuild changes the hash, so a Debug/Release switch or a non-deterministic compile has the same effect. If a hash changes when you did not expect it to, confirm the package is the one you intend to run before re-approving it.
+
+Script plugins carry no compiled package and are unaffected by a DataGen upgrade.
+
+### Commands
+
 Register a plugin after review so its approved content hash can be reused later:
 
 ```powershell

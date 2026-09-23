@@ -61,7 +61,10 @@ Run `scripts/new-determinism-receipt.ps1` only after both generation invocations
 - An explicit expected invocation digest consistent with the expected argument/redaction contract and matching both sidecars.
 - Sidecar source, version, runtime, and inputs equal to the receipt tool's current expected identities.
 - Each sidecar payload hash/counts equal to a fresh inventory of its candidate root.
+- A non-empty payload inventory for each candidate. Two runs that both produced nothing agree on the aggregate hash of an empty inventory, which would otherwise read as `passed: true`; a candidate root with no artifacts is refused instead.
 - Equal payload hashes/counts between candidates for `passed: true`.
+
+Comparison is by normalized relative path within each candidate root, never by absolute path, so candidates in differently named roots remain comparable. Export directory names produced by `Export-SEEnterpriseWorld` are derived from the supplied export timestamp rather than the wall clock, so a pinned rerun resolves to the same path; the export refuses to write into an occupied export root unless `-Overwrite` is supplied, which keeps a partial tree from a failed run from being silently compared against.
 
 The canonical receipt uses `candidate-1` and `candidate-2` labels and relative artifact inventories. It does not contain either absolute candidate root. The receipt output must be outside both candidate roots.
 

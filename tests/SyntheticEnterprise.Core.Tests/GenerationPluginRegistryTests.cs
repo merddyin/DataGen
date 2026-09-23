@@ -300,6 +300,49 @@ public sealed class GenerationPluginRegistryTests
     }
 
     [Fact]
+    public void TrustPolicy_Hash_Rejection_Names_Version_Change_As_A_Probable_Cause_For_Assembly_Plugins()
+    {
+        var trustPolicy = new AllowListExternalPluginTrustPolicy();
+
+        var assemblyReason = Assert.Single(trustPolicy.Evaluate(
+            new GenerationPluginManifest
+            {
+                Capability = "Cards",
+                DisplayName = "Cards",
+                PluginKind = "Manifest",
+                ExecutionMode = PluginExecutionMode.DotNetAssembly,
+                EntryPoint = @"C:\plugins\cards.dll",
+                Provenance = new PluginProvenance { ContentHash = "ABC123", EntryPointHash = "ENTRY123" }
+            },
+            new ExternalPluginExecutionSettings { AllowAssemblyPlugins = true }).Reasons);
+
+        // The bare "hashes differ" statement stays, because that is what happened.
+        Assert.Contains("allowed hash list", assemblyReason, StringComparison.OrdinalIgnoreCase);
+        // A reader at upgrade time needs to know a version change alone invalidates an approval.
+        Assert.Contains("DataGen version", assemblyReason, StringComparison.Ordinal);
+        Assert.Contains("Register-SEGenerationPlugin", assemblyReason, StringComparison.Ordinal);
+        // It must be offered as a probable cause, not asserted as the only one.
+        Assert.Contains("tampered", assemblyReason, StringComparison.OrdinalIgnoreCase);
+
+        var scriptReason = Assert.Single(trustPolicy.Evaluate(
+            new GenerationPluginManifest
+            {
+                Capability = "TaxIds",
+                DisplayName = "TaxIds",
+                PluginKind = "Manifest",
+                ExecutionMode = PluginExecutionMode.PowerShellScript,
+                EntryPoint = @"C:\plugins\tax-ids.ps1",
+                Provenance = new PluginProvenance { ContentHash = "ABC123", EntryPointHash = "ENTRY123" }
+            },
+            new ExternalPluginExecutionSettings { RequireContentHashAllowList = true }).Reasons);
+
+        // A script plugin carries no compiled package, so its approval does not depend on the DataGen version and
+        // the message must not claim otherwise.
+        Assert.Contains("allowed hash list", scriptReason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("DataGen version", scriptReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TrustPolicy_Rejects_Assembly_Plugins_With_Incomplete_Provenance()
     {
         var trustPolicy = new AllowListExternalPluginTrustPolicy();

@@ -926,9 +926,39 @@ public sealed class AllowListExternalPluginTrustPolicy : IExternalPluginTrustPol
                 ? new()
                 : new()
                 {
-                    $"Plugin content hash '{contentHash}' is not in the allowed hash list."
+                    BuildHashRejectionReason(manifest, contentHash)
                 }
         };
+    }
+
+    /// <summary>
+    /// Explains a content-hash rejection in terms an operator can act on.
+    /// </summary>
+    /// <remarks>
+    /// Reporting only that the hashes differ is true and useless at the moment it is read. An approval pins the
+    /// built artifact rather than the source, so a rebuild - including one caused by nothing but a DataGen upgrade -
+    /// legitimately produces a new hash. That is the most common cause and is named as such, but it is not asserted
+    /// as the only one: an edited or tampered package produces the same symptom, and the operator is told to confirm
+    /// which before re-approving. The package-hash component exists only for assembly plugins, so only they inherit
+    /// the coupling to the DataGen version; the script wording does not claim otherwise.
+    /// </remarks>
+    private static string BuildHashRejectionReason(GenerationPluginManifest manifest, string contentHash)
+    {
+        var common = $"Plugin content hash '{contentHash}' is not in the allowed hash list. "
+            + "An approval pins the built plugin, not its source, so the hash changes whenever the approved bytes change.";
+
+        var cause = manifest.ExecutionMode == PluginExecutionMode.DotNetAssembly
+            ? " For an assembly plugin the hash covers the manifest, the entry-point assembly, plugin-local data, and "
+              + "every file in the entry point's output directory - including the DataGen assemblies the build copies "
+              + "beside it. Rebuilding the plugin against a different DataGen version therefore changes this hash on "
+              + "its own and invalidates an approval made under the previous version; that is the usual cause after an "
+              + "upgrade. An edited, replaced or tampered package produces the same symptom."
+            : " For a script plugin the hash covers the manifest, the entry-point script, and plugin-local data, so any "
+              + "edit to those files changes it.";
+
+        return common + cause
+            + " Confirm the package is the one you intend to run, then re-approve it with Register-SEGenerationPlugin "
+            + "or by passing the new hash to -PluginAllowedContentHash.";
     }
 
     private static bool HasCompleteProvenance(GenerationPluginManifest manifest)
