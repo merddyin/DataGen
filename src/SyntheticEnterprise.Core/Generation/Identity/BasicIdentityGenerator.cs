@@ -185,6 +185,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             CreateDirectoryPolicies(world, company, includeAdministrativeTiers);
             CreateCrossTenantPolicyObjects(world, company);
             CreateTargetEnvironmentGpoSlice(world, company, rootDomain);
+            CreateDirectoryObjectSecurity(world, company, ous);
         }
     }
 
@@ -2345,7 +2346,16 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         var computers = CreateOu(company, "Endpoints", null, $"OU=Endpoints,{dc}", "Managed Computers");
         var workstations = CreateOu(company, "Workstations", computers.Id, $"OU=Workstations,{computers.DistinguishedName}", "Managed Workstations");
         var servers = CreateOu(company, "Servers", computers.Id, $"OU=Servers,{computers.DistinguishedName}", "Managed Servers");
-        var productionServers = CreateOu(company, "Production", servers.Id, $"OU=Production,{servers.DistinguishedName}", "Production Servers");
+        // Production server objects are held away from delegations set higher in the endpoint tree,
+        // so the access control list on this organizational unit is protected from inheritance. This
+        // is the object's own security descriptor, unrelated to Group Policy link inheritance.
+        var productionServers = CreateOu(
+            company,
+            "Production",
+            servers.Id,
+            $"OU=Production,{servers.DistinguishedName}",
+            "Production Servers",
+            daclInheritanceProtected: true);
         var stagingServers = CreateOu(company, "Staging", servers.Id, $"OU=Staging,{servers.DistinguishedName}", "Staging Servers");
         var developmentServers = CreateOu(company, "Development", servers.Id, $"OU=Development,{servers.DistinguishedName}", "Development Servers");
         var workstationStandard = CreateOu(company, "Corporate Standard", workstations.Id, $"OU=Corporate Standard,{workstations.DistinguishedName}", "Corporate workstation baseline");
@@ -5369,7 +5379,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         string? parentOuId,
         string distinguishedName,
         string purpose,
-        string environmentRole = "Source")
+        string environmentRole = "Source",
+        bool daclInheritanceProtected = false)
     {
         return new DirectoryOrganizationalUnit
         {
@@ -5379,7 +5390,8 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             ParentOuId = parentOuId,
             DistinguishedName = distinguishedName,
             Purpose = purpose,
-            EnvironmentRole = environmentRole
+            EnvironmentRole = environmentRole,
+            DaclInheritanceProtected = daclInheritanceProtected
         };
     }
 
@@ -5909,6 +5921,99 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         return $@"{rootHive}\Software\Policies\{vendorNode}\{Slug(policyName)}\{Slug(settingCategory)}\{Slug(settingName)}";
     }
 
+    /// <summary>
+    /// Emits the explicit access control entries held on the security descriptors of organizational
+    /// unit objects. Only explicit entries are emitted, which is what a directory collector reads:
+    /// an entry that reaches a descendant by inheritance is stored once, on the object it is set on,
+    /// and is not repeated further down. Effective access on any given organizational unit is
+    /// obtained by walking <see cref="DirectoryOrganizationalUnit.ParentOuId"/> upwards, honouring
+    /// each entry's <see cref="AccessControlEvidenceRecord.InheritanceScope"/> and stopping at the
+    /// first ancestor-or-self whose <see cref="DirectoryOrganizationalUnit.DaclInheritanceProtected"/>
+    /// is set.
+    /// </summary>
+    private void CreateDirectoryObjectSecurity(
+        SyntheticEnterpriseWorld world,
+        Company company,
+        IReadOnlyList<DirectoryOrganizationalUnit> ous)
+    {
+        var entries = new (string OuName, string OuPurpose, string GroupName, string RightName, string AccessType, string InheritanceScope, string Notes)[]
+        {
+            (
+                "Endpoints",
+                "Managed Computers",
+                BackupOperatorsGroupName(),
+                "GenericRead",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                "Delegated read of endpoint objects, set once at the subtree root and inheritable downwards"),
+            (
+                "Endpoints",
+                "Managed Computers",
+                GroupPolicyEditorsGroupName(),
+                "WriteProperty",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectOnly,
+                "Applies to the Endpoints organizational unit object itself and to no descendant"),
+            (
+                "Servers",
+                "Managed Servers",
+                ServerRemoteDesktopAdminsGroupName(),
+                "ReadProperty",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                "Delegated read of server objects, inheritable from the Servers organizational unit downwards"),
+            (
+                "Production",
+                "Production Servers",
+                SqlAdminsGroupName(),
+                "CreateChild",
+                "Allow",
+                AccessControlInheritanceScope.ThisObjectAndAllDescendants,
+                "Set directly on Production because that organizational unit's access control list is protected from inheritance"),
+            (
+                "Production",
+                "Production Servers",
+                B2BGuestsGroupName(),
+                "GenericRead",
+                "Deny",
+                AccessControlInheritanceScope.ThisObjectOnly,
+                "Guest principals denied read on the Production organizational unit object itself")
+        };
+
+        foreach (var entry in entries)
+        {
+            var ou = FindOu(ous, company.Id, entry.OuName, entry.OuPurpose);
+            var group = FindGroup(world.Groups, company.Id, entry.GroupName);
+            if (ou is null || group is null)
+            {
+                continue;
+            }
+
+            AddAccessControlEvidence(
+                world,
+                company.Id,
+                group.Id,
+                "Group",
+                nameof(DirectoryOrganizationalUnit),
+                ou.Id,
+                entry.RightName,
+                entry.AccessType,
+                isInherited: false,
+                "ActiveDirectory",
+                notes: entry.Notes,
+                inheritanceScope: entry.InheritanceScope);
+        }
+    }
+
+    private static DirectoryOrganizationalUnit? FindOu(
+        IReadOnlyList<DirectoryOrganizationalUnit> ous,
+        string companyId,
+        string name,
+        string purpose)
+        => ous.FirstOrDefault(ou => ou.CompanyId == companyId
+                                    && string.Equals(ou.Name, name, StringComparison.OrdinalIgnoreCase)
+                                    && string.Equals(ou.Purpose, purpose, StringComparison.OrdinalIgnoreCase));
+
     private void AddAccessControlEvidence(
         SyntheticEnterpriseWorld world,
         string companyId,
@@ -5921,20 +6026,24 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
         bool isInherited,
         string sourceSystem,
         string? inheritanceSourceId = null,
-        string? notes = null)
+        string? notes = null,
+        string? inheritanceScope = null)
     {
         if (string.IsNullOrWhiteSpace(principalObjectId) || string.IsNullOrWhiteSpace(targetId))
         {
             return;
         }
 
+        // Scope is part of the identity of an entry: the same principal can hold the same right on
+        // the same object once for the object alone and once for its descendants.
         if (world.AccessControlEvidence.Any(evidence =>
                 evidence.CompanyId == companyId
                 && string.Equals(evidence.PrincipalObjectId, principalObjectId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(evidence.TargetType, targetType, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(evidence.TargetId, targetId, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(evidence.RightName, rightName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(evidence.AccessType, accessType, StringComparison.OrdinalIgnoreCase)))
+                && string.Equals(evidence.AccessType, accessType, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(evidence.InheritanceScope, inheritanceScope, StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -5953,6 +6062,7 @@ public sealed class BasicIdentityGenerator : IIdentityGenerator
             IsDefaultEntry = false,
             SourceSystem = sourceSystem,
             InheritanceSourceId = inheritanceSourceId,
+            InheritanceScope = inheritanceScope,
             Notes = notes
         });
     }

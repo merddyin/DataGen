@@ -9,6 +9,17 @@ public record DirectoryOrganizationalUnit
     public string? ParentOuId { get; init; }
     public string Purpose { get; init; } = "";
     public string EnvironmentRole { get; init; } = "Source";
+
+    /// <summary>
+    /// True when the discretionary access control list on this organizational unit is protected from
+    /// inheritance, so no inheritable access control entry set above it reaches it or anything below
+    /// it. This is the SE_DACL_PROTECTED bit of the object's own security descriptor.
+    ///
+    /// It is not Group Policy link inheritance blocking. That is a separate, independent aspect of
+    /// the same object, carried on <see cref="EnvironmentContainer.BlocksPolicyInheritance"/>. An
+    /// organizational unit may have either, both or neither.
+    /// </summary>
+    public bool DaclInheritanceProtected { get; init; }
 }
 
 public record IdentityStore

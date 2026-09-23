@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using SyntheticEnterprise.Contracts.Abstractions;
@@ -410,7 +410,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "distinguished_name",
                     "parent_ou_id",
                     "purpose",
-                    "environment_role"
+                    "environment_role",
+                    "dacl_inheritance_protected"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.OrganizationalUnits,
                 RowProjector = ou => new Dictionary<string, object?>
@@ -421,7 +422,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["distinguished_name"] = ou.DistinguishedName,
                     ["parent_ou_id"] = ou.ParentOuId,
                     ["purpose"] = ou.Purpose,
-                    ["environment_role"] = ou.EnvironmentRole
+                    ["environment_role"] = ou.EnvironmentRole,
+                    ["dacl_inheritance_protected"] = ou.DaclInheritanceProtected
                 },
                 SortKeySelector = ou => ou.Id
             },
@@ -576,7 +578,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     "is_default_entry",
                     "source_system",
                     "inheritance_source_id",
-                    "notes"
+                    "notes",
+                    "inheritance_scope"
                 ],
                 RecordAccessor = result => GetGenerationResult(result).World.AccessControlEvidence,
                 RowProjector = evidence => new Dictionary<string, object?>
@@ -593,7 +596,8 @@ public sealed class NormalizedEntityTableProvider : IEntityTableProvider, IExpor
                     ["is_default_entry"] = evidence.IsDefaultEntry,
                     ["source_system"] = evidence.SourceSystem,
                     ["inheritance_source_id"] = evidence.InheritanceSourceId,
-                    ["notes"] = evidence.Notes
+                    ["notes"] = evidence.Notes,
+                    ["inheritance_scope"] = evidence.InheritanceScope
                 },
                 SortKeySelector = evidence => evidence.Id
             },
