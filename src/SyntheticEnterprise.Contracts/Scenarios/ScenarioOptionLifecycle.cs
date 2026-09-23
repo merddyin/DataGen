@@ -52,7 +52,11 @@ public sealed class ScenarioOptionLifecycleRegistry
         new(
             "$.infrastructure.effectiveSecurityConfigurationEndpointCount",
             "0.13.0",
-            "Number of Windows endpoints that receive an effective local security policy object.")
+            "Number of Windows endpoints that receive an effective local security policy object."),
+        new(
+            "$.identity.accountOwnershipConditionCount",
+            "0.13.0",
+            "Number of times each documented directory account ownership condition is emitted per company.")
     };
 
     private static readonly ScenarioOptionRetirement[] DefaultRetirements =

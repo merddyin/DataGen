@@ -1031,6 +1031,38 @@ public sealed class ScenarioValidator : IScenarioValidator
                 "The scenario must include workstations or servers, and the largest company must contain at least as many employees as the requested effective security configuration endpoints."));
         }
 
+        var accountOwnershipConditionCount = resolved.Identity.AccountOwnershipConditionCount;
+        if (accountOwnershipConditionCount < 0
+            || accountOwnershipConditionCount > IdentityProfile.MaximumAccountOwnershipConditionCount)
+        {
+            messages.Add(new ScenarioValidationMessage(
+                "identity-account-ownership-condition-count",
+                ScenarioValidationSeverity.Error,
+                "$.identity.accountOwnershipConditionCount",
+                $"AccountOwnershipConditionCount must be between 0 and {IdentityProfile.MaximumAccountOwnershipConditionCount}."));
+        }
+
+        // The conditions are built from people and shared mailboxes the company already has, and
+        // several of them consume a person each, so the option is only feasible where the largest
+        // company holds enough employees and at least one shared mailbox to attach access to.
+        const int PeoplePerAccountOwnershipCondition = 5;
+        var largestCompanySharedMailboxCount = resolved.Companies
+            .Select(company => company.SharedMailboxCount)
+            .DefaultIfEmpty(0)
+            .Max();
+        if (accountOwnershipConditionCount > 0
+            && (accountOwnershipConditionCount * PeoplePerAccountOwnershipCondition > largestCompanyPopulation
+                || accountOwnershipConditionCount > largestCompanySharedMailboxCount))
+        {
+            messages.Add(new ScenarioValidationMessage(
+                "identity-account-ownership-condition-population",
+                ScenarioValidationSeverity.Error,
+                "$.identity.accountOwnershipConditionCount",
+                $"The largest company must contain at least {PeoplePerAccountOwnershipCondition} employees and one shared mailbox "
+                + "for every requested account ownership condition, because the conditions are built from people and shared "
+                + "mailboxes the company already has."));
+        }
+
         foreach (var company in resolved.Companies)
         {
             if (company.EmployeeCount <= 0)
