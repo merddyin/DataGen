@@ -37,6 +37,20 @@ Scenarios can additionally opt into the endpoint side. `infrastructure.effective
 
 These are separate policy objects from the friendly-named baselines DataGen already emitted, which are unchanged. See [Normalized Export](/integrations/normalized-export) for the canonical key forms, the value shapes, and how an endpoint policy joins back to its endpoint.
 
+## What a directory object states about itself
+
+Directory accounts carry their raw name attributes — `GivenName`, `Surname` and `Description` — as the object holds them. A person-backed account carries the person's names; a built-in, service, shared-mailbox or machine account carries none, because such an object names no person and inventing a name would fabricate a fact. Every account carries a description of what it is for.
+
+Identifier issuance is scoped the way each attribute is really scoped: principal name and mail across the whole generated world, and `sAMAccountName` per root domain, because that attribute carries no domain component precisely for being unique within one. Display names still repeat within a company.
+
+Organizational units carry the security-descriptor facts of the directory object itself: each access control entry records its inheritance scope, and a unit records whether its discretionary access control list is protected from inheritance. Only explicit entries are emitted, so effective access on a unit is derived by walking the parent chain rather than read off a row. That flag is the `SE_DACL_PROTECTED` bit and is independent of Group Policy link inheritance blocking, which is a separate aspect of the same object.
+
+### Account ownership conditions
+
+`identity.accountOwnershipConditionCount`, bounded at 25 and defaulting to 0, emits the account objects a directory accumulates over its life: a second account a person genuinely holds, an object whose name evidence names a former holder while its link names the current one, a second object shaped exactly like a primary, a disabled object retained after it was superseded, an object carrying a real name with no person link, a retained service account recording no owner, one whose only ownership record is prose, and an existing shared mailbox connected to the several people who use it.
+
+Three are deliberately negative cases — the conflicting holder, the second primary and the unlinked named object — present to be got wrong by a consumer that trusts one field over another. Primary accounts are untouched, no existing link is rewritten, and the person count is unchanged. See [Normalized Export](/integrations/normalized-export) for what each condition puts in the emitted record.
+
 ## Access evidence
 
 DataGen intentionally separates access evidence from inferred effective access.

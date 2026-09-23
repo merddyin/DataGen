@@ -110,12 +110,27 @@ Key off `policy_path`, not `setting_category`. `setting_category` describes the 
 
 Every value in these families is written in the shape produced by the tool that collects it, not in a normalized form:
 
-- **Audit inclusion settings** use the `auditpol` and `audit.csv` vocabulary: `No Auditing`, `Success`, `Failure`, and the combined form `Success and Failure`. A Group Policy audit backup writes the combined value with the word `and`, not a comma, and that is what these rows carry. A consumer parsing this family has to match that form.
+- **Audit inclusion settings** use the vocabulary of the tool that collected them: `No Auditing`, `Success`, `Failure`, and a combined value that is spelled two different ways depending on the collection route. Both spellings are emitted; see [Both spellings of a combined audit value](#both-spellings-of-a-combined-audit-value) for which route produces which.
 - **Principals** are the display names a collection resolves them to. Well-known identities use curated names — `BUILTIN\Administrators`, `BUILTIN\Users`, `Authenticated Users`, `Local System`, `Local Service`, `Network Service`, `Creator Owner`, `Everyone`, `Anonymous`. Identities outside that set use the live Windows translation, so the deny-logon rights carry forms such as `NT AUTHORITY\Local account` and `NT AUTHORITY\Local account and member of Administrators group`, upper-case and sentence-case inconsistencies included. Generated domain principals use the `NETBIOS\SamAccountName` form and resolve to real groups and accounts in the same company. Bare SIDs are never emitted, because a collection on a Windows host does not produce them.
 - **Multiple principals** on one right are joined with a comma and no space. A right granted to nobody carries an empty value, matching `secedit` output.
 - **Security descriptors** are ordinary SDDL strings in the usual owner, group, and DACL container, with inherited, explicit, and deny entries present.
 
 These forms are a deliberate mirror of what a real collection returns. If the collection method's resolution behavior changes upstream, the emitted values change with it as a documented breaking change; they are not an independent DataGen vocabulary.
+
+### Both spellings of a combined audit value
+
+A combined audit value has two real spellings, and a row carries the one its collection route writes:
+
+| Value | Collection route | `setting_category` | `source_system` | `source_reference` |
+| --- | --- | --- | --- | --- |
+| `Success and Failure` | a Group Policy backup's `audit.csv`, and `auditpol` | `AuditPolicy` | `AuditCsv` | `Group Policy audit backup audit.csv` |
+| `Success, Failure` | a Group Policy report export, which carries the numeric code `3` that a report reader renders with a comma | `AuditPolicyReport` | `GPO` | `Group Policy report export gpreport.xml` |
+
+Neither spelling is normalized into the other, and a row's spelling and its recorded source always agree: a row carrying the comma form resolves to the report source, never to the backup source.
+
+The two spellings live on separate policy objects rather than on two copies of one configuration. `Windows Advanced Audit Policy Template` carries all 34 subcategories in the backup spelling. `Domain Controller Audit Baseline` is an additional `GroupPolicyObject` per company, category `AuditPolicy`, linked to that company's `Domain Controllers` container, carrying the 14 subcategories a domain controller audit policy sets, in the report spelling. Restating one configuration in a second spelling would assert that an estate holds it twice, which is not a fact; collecting different policy objects by different routes is what an estate actually does.
+
+`policy_path` is unaffected by the route. Both baselines build an audit key the same way, so the same subcategory carries the same `Audit:<SubcategoryDisplayName>` key on both objects and only the value differs.
 
 ### Configuration profiles
 
@@ -144,6 +159,154 @@ The directory-side templates need no option. They are ordinary facts of a Window
 
 ### Consumer compatibility
 
-No column and no schema version changed for this family. The normalized export schema remains `2.1.0`. Endpoint linkage reuses `source_entity_type` and `source_entity_id`, which `policies` already exported, and the canonical keys reuse `policy_path`, which `policy_settings` already exported. An adapter written against an earlier export continues to read these artifacts without modification.
+This family added no column of its own. Endpoint linkage reuses `source_entity_type` and `source_entity_id`, which `policies` already exported, and the canonical keys reuse `policy_path`, which `policy_settings` already exported. An adapter written against an earlier export continues to read these artifacts without modification. The release as a whole does add columns elsewhere and advances the schema version accordingly; see [Export schema 2.2.0](#export-schema-220).
 
 The new records are additive. The friendly-named Windows baselines emitted before this release are unchanged and still present, so an adapter reading them keeps working; the canonical-key rows live in separate policy objects rather than inside those baselines. An adapter that wants only the directory side can filter on a `policy_type` of `GroupPolicyObject`, and one that wants only endpoint configuration can filter on `LocalSecurityPolicy`. An export produced before v0.13.0 contains no `LocalSecurityPolicy` rows at all; treat their absence as a dataset without an endpoint side rather than as endpoints reported to have no configuration.
+
+## Directory account name evidence
+
+The `accounts` artifact carries the raw name attributes a directory object holds, alongside the `display_name` it already exported:
+
+- `given_name` and `surname`: the name attributes as the object carries them
+- `description`: what the object is for, in the object's own words
+
+Which of these an account carries follows what the object is, not what would be convenient to read:
+
+| Account class | `given_name` and `surname` | `description` |
+| --- | --- | --- |
+| Person-backed — user, secondary, privileged, guest, contractor, managed service provider | the person's own given name and surname | present |
+| Built-in, service, shared mailbox, machine | empty | present |
+
+A service account has no given name, and a machine account has no surname. Those fields are empty because the object states nothing there, and inventing a value would fabricate a fact. Read an empty `given_name` as an object that names no person, not as a value DataGen failed to fill.
+
+`display_name` is unchanged and still repeats within a company, because repeated display names are a fact real directories contain.
+
+## Identifier uniqueness
+
+Identifier issuance is scoped the way each attribute is really scoped, and the generation-time invariants judge them on the same scope:
+
+| Column | Scope of uniqueness | Why |
+| --- | --- | --- |
+| `user_principal_name` | the whole generated world | a principal name is a routable identifier and carries its own domain |
+| `mail` | the whole generated world | a mailbox address is routable in the same way |
+| `sam_account_name` | one root domain, not the world | the attribute carries no domain component precisely because it is unique within a domain and not beyond it; a second forest's `Administrator` is a real `Administrator` |
+| `distinguished_name` | directory accounts across the world | a distinguished name states where an object sits, so it names exactly one object |
+
+Group by `domain` together with `sam_account_name` when you need the unique key for that attribute. Grouping by `sam_account_name` alone will report cross-domain repeats that a real estate also contains.
+
+The operative change was making principal-name issuance world-scoped, where it had previously been scoped per company. Mailbox uniqueness follows from it: every mailbox-enabled account takes its own principal name as its mail value, so unique principal names produce unique mail values. The mail registry, the `duplicate_account_mail` metric and the invariant behind it are defence in depth against a path no valid scenario reaches; they are not what makes mailboxes unique. The duplicate mailbox values seen before this release were a symptom of company-scoped identifier issuance.
+
+Two directory accounts never share a principal name, a mail value or a distinguished name in a generated world, including the ownership conditions below. Where a condition is about two objects naming one person, it is the name evidence and the person link that conflict, never an identifier.
+
+## Account ownership conditions
+
+`identity.accountOwnershipConditionCount` is an opt-in switch on the identity profile. It defaults to `0`, which emits none of these objects, and is bounded at `25`. Scenario validation rejects a value outside that range, and rejects a nonzero value the largest company cannot supply the people and shared mailboxes for.
+
+Each unit of the count adds, per company, seven account objects and one set of shared-mailbox memberships. Every object is identifiable from the emitted record alone, without knowing which generator produced it:
+
+| Condition | What the emitted record carries |
+| --- | --- |
+| Held secondary | the person's own given name and surname, the person's employee link, its own identifiers, and a description naming the primary account it sits beside |
+| Conflicting holder | name attributes, `sam_account_name` and `mail` that all name a former holder the directory keeps no person record for, while `person_id` links the person who now uses it |
+| Second primary | a second object shaped exactly like a primary account, carrying the same holder's employee identifier, so neither record declares which of the two is the primary |
+| Disabled | a former primary retained rather than deleted, `enabled` false, with the created, modified, last-logon and password dates a retained object carries |
+| Unlinked secondary | a real given name and surname with no `person_id` at all |
+| Ownerless | a retained service account with no person link, no name attributes, and a description stating that no owner is recorded |
+| Free-text owner | ownership stated only as prose in `description`, naming a team and a contact; no identifier is emitted for either, because the directory holds none |
+| Shared access | an existing shared mailbox, with real group memberships added for several named people, and a description stating that access is held by named people |
+
+Three of these are deliberately negative cases, present so that a consumer which trusts one field over another gets them wrong:
+
+- **Conflicting holder** — the name evidence names one person and the link names another. Both are on the object, they disagree, and that disagreement is the object.
+- **Second primary** — nothing on either object says which one is the primary. A consumer that assumes one object per person has no field to settle it with.
+- **Unlinked secondary** — the object carries a person's name and no link to that person. The named person keeps their own primary account and its link.
+
+The remaining conditions are ordinary directory facts rather than traps: a person genuinely holding a second account, a disabled object retained after it was superseded, a service account whose owner the directory never recorded, and one whose only ownership record is prose.
+
+Shared access is not a multi-owner field. DataGen adds real group memberships from real people to shared mailboxes the company already has, so the access is a membership fact rather than an assertion. No mailbox is created for it.
+
+Primary accounts are untouched. These conditions add objects beside the existing population: no person's primary account changes, no existing link is rewritten, and the person count is unchanged. A company that cannot supply the people or the shared mailbox a condition needs emits that condition fewer times, because neither is invented to reach the count.
+
+## Organizational unit directory object security
+
+An organizational unit carries the security-descriptor facts of the directory object itself. These are distinct from the file and registry security descriptors shipped as policy settings in the Windows policy families above: different source, different object, different consumer.
+
+- `access_control_evidence.inheritance_scope`: how far an entry reaches from the object it is set on — `ThisObjectOnly` or `ThisObjectAndAllDescendants`. It is null where the collection source expresses no directory-object scope, as for an entry read from a policy object or an identity store; defaulting those would assert a fact with no source behind it.
+- `organizational_units.dacl_inheritance_protected`: true when the unit's discretionary access control list is protected from inheritance, so no inheritable entry set above it reaches it or anything below it. This is the `SE_DACL_PROTECTED` bit of the object's own security descriptor.
+
+`dacl_inheritance_protected` is not Group Policy link inheritance blocking. That is a separate, independent aspect of the same object, carried on `EnvironmentContainer.BlocksPolicyInheritance`, and a unit may have either, both or neither. No access control entry names a right containing `BlockInheritance`, because no collection method produces one.
+
+### Only explicit entries are emitted
+
+An entry that reaches a descendant by inheritance is stored once, on the object it is set on, and is not repeated further down. That is what a directory collector reads; storing it again on every descendant would repeat one fact many times.
+
+Effective access on a unit is therefore derived by the consumer rather than read off a row. Walk `parent_ou_id` upwards from the unit, honouring each entry's `inheritance_scope`, and stop at the first ancestor-or-self whose `dacl_inheritance_protected` is set.
+
+The generated hierarchy carries the four conditions that make that walk exercisable: an entry at a parent that inherits downwards, an entry on the same unit that applies to that object only, a unit partway down the tree with inheritance protection enabled, and real descendants both above and below it. The inheriting and this-object-only entries sit on the same unit deliberately, so scope is the only thing separating them: were scope ignored, both would appear to reach the child and the difference would be invisible.
+
+## Directory account configuration items
+
+The `configuration_items` artifact carries one item per directory account, alongside the platform, application, server, device, network, telephony, database, file share and collaboration items it already held. An account item has `ci_type` `Identity`, `source_entity_type` `DirectoryAccount`, `source_entity_id` set to the account's identifier, and a `ci_key` of the form `directory-account:<account id>`. Its `ci_class` follows the account class — `UserAccount`, `SecondaryAccount`, `PrivilegedAccount`, `ServiceAccount`, `SharedMailboxAccount`, `BuiltInAccount`, `MachineAccount`, `GuestAccount`, `ContractorAccount` or `ManagedServiceProviderAccount`.
+
+Ownership is carried on both sides of the split this export already uses, because the two answer different questions:
+
+| Side | Column | For an account item |
+| --- | --- | --- |
+| Canonical | `configuration_items.business_owner_person_id` | the account's resolved person link, unchanged |
+| Observed | `cmdb_source_records.observed_business_owner` | the name a discovery source read off the object: its `given_name` and `surname` as text |
+
+A source reads attributes; it does not resolve links. That is why the observed side carries name text rather than an identifier, and why the two sides can differ:
+
+- For an ordinary user account the two agree.
+- For a service, machine, shared or built-in account neither side carries an owner, because the object states none. No owner, technical owner or support group is invented for it.
+- For a **conflicting holder** object the two genuinely disagree: the canonical side carries the linked person, the observed side carries the former holder's name. That disagreement is a property of the object, not an inconsistency in the export.
+
+`technical_owner_person_id` is populated only for an invited account, from the person behind the sponsoring account, because a sponsor is the only party a directory records as answerable for an object it did not create for one of its own people. `support_team_id` is never set on an account item: a directory holds no support group for an account object. `notes` carries the object's own `description` verbatim, and nothing is read out of that prose into an owner column.
+
+The existing source-record realism degradation still layers on the observed side unchanged, so observed values on an account item vary by source system the same way they do for every other item class.
+
+## Scenario rejections
+
+Two scenario shapes are rejected at validation rather than generating data that does not match their author's intent.
+
+### A retired option
+
+A scenario that still sets an option DataGen no longer reads used to deserialize cleanly with the option silently dropped, then generate data its author did not ask for, with nothing reported. Validation now reports a `retired-scenario-option` error naming the option, the version that retired it and its replacement, and scenario loading refuses the document outright rather than only warning about it.
+
+| Retired option | Retired in | Replacement |
+| --- | --- | --- |
+| `identity.legacyDirectoryIdentifierVariantCount` | `0.13.0` | the account ownership conditions described above, opted into through `identity.accountOwnershipConditionCount` |
+
+That option existed only in unreleased work and was never published, so no released version is affected and no scenario in use needs to change.
+
+A property that is merely unknown is still accepted. Only a property registered as retired is rejected, so forward-compatible fields and third-party additions keep working exactly as before.
+
+### Companies that resolve to one primary domain
+
+Two companies whose names reduce to the same primary domain are rejected, with a `company-primary-domain-collision` error naming every company in the colliding group and the domain they resolved to.
+
+Such a world previously generated cleanly and was impossible. Principal names and mail were disambiguated by world-scoped issuance, but a distinguished name is derived from directory position and was not: the second company's built-in `Administrator` carried a `sam_account_name` of `Administrator2` while its distinguished name stayed byte-identical to the first company's. Two directory objects cannot share a distinguished name.
+
+Distinguished names are deliberately not rewritten to dodge the collision. A distinguished name describes where an object really sits, and renaming it to avoid a clash would fabricate the fact the rejection exists to prevent. Rename all but one of the colliding companies so their names no longer reduce to the same domain label.
+
+## Export schema 2.2.0
+
+The normalized export schema advances from `2.1.0` to `2.2.0` in this release. Five columns are added:
+
+| Table | Column |
+| --- | --- |
+| `accounts` | `given_name` |
+| `accounts` | `surname` |
+| `accounts` | `description` |
+| `organizational_units` | `dacl_inheritance_protected` |
+| `access_control_evidence` | `inheritance_scope` |
+
+### Consumer compatibility
+
+The additions are purely additive, and all five columns are appended at the end of their table, so no existing column changes position. An adapter that reads by column name is unaffected, and so is one that reads by column index: every previously exported column keeps the index it had.
+
+An export produced before v0.13.0 carries none of these columns. Treat their absence as a dataset without that evidence rather than as objects reported to have no name attributes, no inheritance scope and no inheritance protection. Within an export that has them, an empty value is the object's own statement rather than a gap: `given_name` and `surname` are empty for an account class that names no person, and `inheritance_scope` is null for an entry whose source expresses no directory-object scope.
+
+Directory account configuration items add no column. `configuration_items` and `cmdb_source_records` already carried every field they use and both were already exported, so an adapter reading those artifacts sees additional rows of new `ci_class` values and nothing else. An adapter that enumerates classes explicitly should add the account classes listed above; one that passes `ci_class` through needs no change.
+
+The `Domain Controller Audit Baseline` policy object likewise adds rows, not columns: one more `GroupPolicyObject` per company in `policies`, and its settings in `policy_settings`.
