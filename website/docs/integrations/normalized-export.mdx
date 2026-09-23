@@ -119,7 +119,9 @@ These forms are a deliberate mirror of what a real collection returns. If the co
 
 ### Both spellings of a combined audit value
 
-A combined audit value has two real spellings, and a row carries the one its collection route writes:
+A combined audit value has two real spellings, and a row carries the one its collection route writes.
+
+These two are the real spellings, not the only strings a generated world contains. Read the table below as the reference shapes rather than as an inventory of the export.
 
 | Value | Collection route | `setting_category` | `source_system` | `source_reference` |
 | --- | --- | --- | --- | --- |
@@ -131,6 +133,21 @@ Neither spelling is normalized into the other, and a row's spelling and its reco
 The two spellings live on separate policy objects rather than on two copies of one configuration. `Windows Advanced Audit Policy Template` carries all 34 subcategories in the backup spelling. `Domain Controller Audit Baseline` is an additional `GroupPolicyObject` per company, category `AuditPolicy`, linked to that company's `Domain Controllers` container, carrying the 14 subcategories a domain controller audit policy sets, in the report spelling. Restating one configuration in a second spelling would assert that an estate holds it twice, which is not a fact; collecting different policy objects by different routes is what an estate actually does.
 
 `policy_path` is unaffected by the route. Both baselines build an audit key the same way, so the same subcategory carries the same `Audit:<SubcategoryDisplayName>` key on both objects and only the value differs.
+
+#### Legacy audit values retained outside those two spellings
+
+A generated world also contains the string `Success,Failure`, with no space, on policy objects that predate the canonical baselines. It is not one of the two spellings above and no collection route writes it. These objects are preserved deliberately, so that a consumer built against an earlier release keeps reading the values it already reads; they are legacy output rather than a reference shape, and nothing here should be treated as the form a tool produces.
+
+It is emitted unconditionally, at 24 sites per company across four policy objects:
+
+| Policy object | Settings carrying `Success,Failure` |
+| --- | --- |
+| `Windows Advanced Audit Baseline` | 19 of its 37 settings |
+| `Security Audit and Logging Baseline` | 3 |
+| `Default Domain Policy` | 1 |
+| `Target Server Security Baseline` | 1 |
+
+Note the string differs from the real `Success, Failure` by the space: the spaced form is what a Group Policy report export writes, and it carries the report source accordingly. When you model audit values, take `Windows Advanced Audit Policy Template` and `Domain Controller Audit Baseline` as the reference objects and treat the values above as the legacy output they are.
 
 ### Configuration profiles
 
@@ -159,9 +176,9 @@ The directory-side templates need no option. They are ordinary facts of a Window
 
 ### Consumer compatibility
 
-This family added no column of its own. Endpoint linkage reuses `source_entity_type` and `source_entity_id`, which `policies` already exported, and the canonical keys reuse `policy_path`, which `policy_settings` already exported. An adapter written against an earlier export continues to read these artifacts without modification. The release as a whole does add columns elsewhere and advances the schema version accordingly; see [Export schema 2.2.0](#export-schema-220).
+This family added no column of its own. Endpoint linkage reuses `source_entity_type` and `source_entity_id`, which `policies` already exported, and the canonical keys reuse `policy_path`, which `policy_settings` already exported. An adapter written against an earlier export continues to read these artifacts without modification. v0.13.0 as a whole did add columns elsewhere and advanced the schema version accordingly; see [Export schema 2.2.0](#export-schema-220).
 
-The new records are additive. The friendly-named Windows baselines emitted before this release are unchanged and still present, so an adapter reading them keeps working; the canonical-key rows live in separate policy objects rather than inside those baselines. An adapter that wants only the directory side can filter on a `policy_type` of `GroupPolicyObject`, and one that wants only endpoint configuration can filter on `LocalSecurityPolicy`. An export produced before v0.13.0 contains no `LocalSecurityPolicy` rows at all; treat their absence as a dataset without an endpoint side rather than as endpoints reported to have no configuration.
+The new records are additive. The friendly-named Windows baselines emitted before v0.13.0 are unchanged and still present, so an adapter reading them keeps working; the canonical-key rows live in separate policy objects rather than inside those baselines. An adapter that wants only the directory side can filter on a `policy_type` of `GroupPolicyObject`, and one that wants only endpoint configuration can filter on `LocalSecurityPolicy`. An export produced before v0.13.0 contains no `LocalSecurityPolicy` rows at all; treat their absence as a dataset without an endpoint side rather than as endpoints reported to have no configuration.
 
 ## Directory account name evidence
 
@@ -196,18 +213,33 @@ Group by `domain` together with `sam_account_name` when you need the unique key 
 
 `devices.distinguished_name` and `servers.distinguished_name` are outside that pool, permanently: each is a copy of the asset's own machine account's distinguished name rather than the name of a further object, so counting them again would report every domain-joined asset as a duplicate of itself.
 
-### Where a department name repeats
+### An object that sits in no directory tree
 
-Two business units of one company may each run a department of the same name. That is realistic and the names are kept — neither is numbered, and neither is rewritten. What changed is where the derived directory objects sit:
+`accounts.distinguished_name` is empty for a cloud-joined device account — an `accounts` row whose `account_type` is `Device` and whose `identity_provider` is `EntraID`. A cloud-only object holds no position in a directory, so it has no distinguished name to state. Before v0.14.0 the column carried the bare host name, which names no position in a directory and so could not be judged for uniqueness at all; the value is now empty. A hybrid-joined device has both accounts: its on-premises machine account is a separate `accounts` row, is unaffected, and still carries a `CN=<hostname>` distinguished name naming its position. A cloud-only device has no such row, so the empty value is the only distinguished name it states.
 
-- A department's organizational unit is placed under the unit of the business unit that owns it: `OU=Legal,OU=Commercial,OU=Employees,DC=…` and `OU=Legal,OU=Technology,OU=Employees,DC=…`. The tree follows the organization chart, which is where a real directory holds it, and position rather than a suffix tells the two units apart. This applies to every department unit, not only repeated ones, so a department unit is now one level deeper than in v0.13.0 and a business-unit level appears between `OU=Employees` and the departments. The new units carry `purpose` `Business Unit Users`.
+Read the empty value as an object that sits in no directory tree, not as a value DataGen failed to fill. The uniqueness pool skips it for being blank, which is the honest reason to skip it.
+
+### Organizational unit placement and derived group names
+
+A department's organizational unit is now placed under the unit of the business unit that owns it. That placement is unconditional: it applies to every department whose business unit resolves, not only to a department whose name repeats. A repeated name affects one thing and one thing only — the label used in the names of the groups derived from that department. The two are separate changes and should not be read together.
+
+Two business units of one company may each run a department of the same name. That is realistic and both names are kept — neither is numbered, and neither is rewritten. What changed is where the derived directory objects sit, and what the derived groups are called:
+
+- A department's organizational unit is placed under the unit of the business unit that owns it: `OU=Legal,OU=Commercial,OU=Employees,DC=…` and `OU=Legal,OU=Technology,OU=Employees,DC=…`. The tree follows the organization chart, which is where a real directory holds it, and position rather than a suffix tells the two units apart. A tier of units that did not exist in v0.13.0 now appears between `OU=Employees` and the department units, one unit per business unit, carrying `purpose` `Business Unit Users`. These are new rows in `organizational_units`, not moved ones. Every department sits one level deeper than it did, and a department unit's own `name` is unchanged — only its `parent_ou_id` and `distinguished_name` differ. A department that resolved no owning business unit would still be placed directly under `OU=Employees`; the shipped catalogs give every department one, so in practice every department unit gains the level.
 - Every group derived from a department is held in one container, so position cannot separate two of them and the common name must. Where a department name occurs once in the company, its groups keep the unqualified name they had. Where it repeats, the groups of each instance carry the owning business unit: `GG Commercial Legal Users` beside `GG Technology Legal Users`, and the same for the `DL`, `ACL FS`, `ACL MBX` and team groups derived from those departments. A world with no repeated department name sees no group name change at all.
+- A group's distinguished name now escapes its common name component, which was previously interpolated raw. Account and organizational unit distinguished names already escaped theirs before v0.14.0, so this brings groups into line rather than introducing escaping to the export. A component holding a comma — or any of `+`, `"`, `\`, `<`, `>`, `;`, `=` — would otherwise read as more components than the object has.
+
+  The shipped catalogs do contain values that would require escaping. `locality_reference` holds office city names containing commas and parentheses, and an office city becomes a `Location Users` unit name; `surnames_reference` holds the values `Trease,` and `Vernal;Cooper`, which would reach an account's common name through a person's display name. Both of those components already escaped before v0.14.0, so neither is new here. No shipped department or organization-template name carries such a character, so the group change itself is not expected to move a value in a world generated from the shipped catalogs.
+
+  Whether any given world contains an escaped component depends on which catalog rows its seed draws, and a world may well contain none — a comma-bearing city or surname has to actually be selected. Treat escaping as a property of the format rather than as something a particular export is guaranteed to exhibit: parse a distinguished name rather than splitting it on commas, because that is the case this protects against, whether or not the export in front of you happens to contain one.
 - A business unit's name is now unique within its company, because nothing above a business unit distinguishes two of them. A scenario asking for more business units than the catalog has distinct names for will see the surplus suffixed, as departments already were within a business unit.
 - Two departments of the same name previously shared one organizational unit, so the people of the second were held in the first's unit. Each department now has its own unit and its own people.
 
-A consumer holding distinguished names captured from a v0.13.0 export will find the department units and the groups of repeated departments at new values. Everything else keeps the value it had.
+No `accounts.distinguished_name` moves. A person's account is parented by the `Location Users` unit for their office, and location units did not move — that is the whole reason. Office assignment always succeeds, because every person is assigned an office from the company's office list and a `Location Users` unit is created for every distinct office city drawn from that same list, so the container precedence never falls through to its department-unit branch for a person account. Built-in, service, administrative and machine accounts sit in their own branches and are likewise unaffected.
 
-The operative change was making principal-name issuance world-scoped, where it had previously been scoped per company. Mailbox uniqueness follows from it: every mailbox-enabled account takes its own principal name as its mail value, so unique principal names produce unique mail values. The mail registry, the `duplicate_account_mail` metric and the invariant behind it are defence in depth against a path no valid scenario reaches; they are not what makes mailboxes unique. The duplicate mailbox values seen before this release were a symptom of company-scoped identifier issuance.
+So a consumer holding distinguished names captured from a v0.13.0 export will find new values in exactly two places: `organizational_units.distinguished_name` for every department unit, and `groups.name` and `groups.distinguished_name` for the groups of a department whose name repeats in its company. Accounts keep every distinguished name they had. Separately, `organizational_units` carries a tier of `Business Unit Users` rows that did not exist before — new rows to read, not changed values.
+
+The operative change was making principal-name issuance world-scoped, where it had previously been scoped per company. Mailbox uniqueness follows from it: every mailbox-enabled account takes its own principal name as its mail value, so unique principal names produce unique mail values. The mail registry, the `duplicate_account_mail` metric and the invariant behind it are defence in depth against a path no valid scenario reaches; they are not what makes mailboxes unique. The duplicate mailbox values seen before v0.13.0 were a symptom of company-scoped identifier issuance.
 
 Two directory accounts never share a principal name, a mail value or a distinguished name in a generated world, including the ownership conditions below. Where a condition is about two objects naming one person, it is the name evidence and the person link that conflict, never an identifier.
 
@@ -314,7 +346,7 @@ Distinguished names are deliberately not rewritten to dodge the collision. A dis
 
 ## Export schema 2.2.0
 
-The normalized export schema advances from `2.1.0` to `2.2.0` in this release. Five columns are added:
+The normalized export schema stands at `2.2.0`. It advanced from `2.1.0` to `2.2.0` in v0.13.0, which added five columns:
 
 | Table | Column |
 | --- | --- |
@@ -323,6 +355,8 @@ The normalized export schema advances from `2.1.0` to `2.2.0` in this release. F
 | `accounts` | `description` |
 | `organizational_units` | `dacl_inheritance_protected` |
 | `access_control_evidence` | `inheritance_scope` |
+
+v0.14.0 adds no column, removes none and moves none, so the schema version is unchanged at `2.2.0`. There is no new column to look for. What v0.14.0 moved is the value carried in columns that were already exported, and the notes below say which.
 
 ### Consumer compatibility
 
@@ -338,3 +372,11 @@ Two changes since v0.13.0 move existing values rather than adding columns, and n
 Directory account configuration items add no column. `configuration_items` and `cmdb_source_records` already carried every field they use and both were already exported, so an adapter reading those artifacts sees additional rows of new `ci_class` values and nothing else. An adapter that enumerates classes explicitly should add the account classes listed above; one that passes `ci_class` through needs no change.
 
 The `Domain Controller Audit Baseline` policy object likewise adds rows, not columns: one more `GroupPolicyObject` per company in `policies`, and its settings in `policy_settings`.
+
+## Reproducing an export across DataGen versions
+
+A fixed scenario, seed, generation time and export timestamp reproduce an export byte for byte within one DataGen version. They do not carry that guarantee across versions, and v0.14.0 is a release where they do not.
+
+The configuration management layer draws more values from the shared random source than it did in v0.13.0, and it runs before two other layers, so those layers' generated values shift in a world that has configuration management enabled. Row counts are unchanged — no entity appears or disappears because of it — but the values differ. An export produced by v0.13.0 is therefore not reproducible from v0.14.0, in addition to the column values listed above that moved for their own reasons.
+
+If you keep an export as a fixed reference, regenerate it under v0.14.0 and retain the new one, together with the scenario, catalog and version identity that produced it. The DataGen version is already one of the inputs a reproducibility claim has to hold fixed; see [Reproducibility prerequisites](/getting-started/understanding-output#reproducibility-prerequisites).
