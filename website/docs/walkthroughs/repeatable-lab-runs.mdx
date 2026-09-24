@@ -181,27 +181,38 @@ That redaction is intentional: sensitive inputs are excluded from the equality p
 
 For an informal comparison, generate a second run with the same fixed inputs and compare the normalized artifacts.
 
+Compare by path **relative to each export root**, never by full path: the two runs live in different roots, so a full-path comparison finds nothing in common and reports a spurious mismatch. And check that each run actually produced artifacts before trusting the result — two empty directories compare equal, which reads as a pass and is not one.
+
 ```powershell
 $runA = Resolve-Path .\out\general-enterprise-4242\normalized
 $runB = Resolve-Path .\out\general-enterprise-4242-rerun\normalized
 
-$filesA = Get-ChildItem $runA -Recurse -File | ForEach-Object {
-  [pscustomobject]@{
-    RelativePath = $_.FullName.Substring($runA.Path.Length).TrimStart('\')
-    Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+function Get-ExportInventory {
+  param([string]$Root)
+  $files = @(Get-ChildItem -LiteralPath $Root -Recurse -File | ForEach-Object {
+    [pscustomobject]@{
+      RelativePath = [IO.Path]::GetRelativePath($Root, $_.FullName).Replace('\', '/')
+      Hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+    }
+  })
+  if ($files.Count -eq 0) {
+    throw "Export root '$Root' contains no artifacts; there is nothing to compare."
   }
+  $files | Sort-Object RelativePath
 }
-$filesB = Get-ChildItem $runB -Recurse -File | ForEach-Object {
-  [pscustomobject]@{
-    RelativePath = $_.FullName.Substring($runB.Path.Length).TrimStart('\')
-    Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
-  }
-}
+
+$filesA = Get-ExportInventory -Root $runA.Path
+$filesB = Get-ExportInventory -Root $runB.Path
 
 Compare-Object $filesA $filesB -Property RelativePath, Hash
 ```
 
 An empty comparison means the selected files match. If there are differences, first check the scenario, seed, fixed times, DataGen version, source, catalog, public arguments, export profile, and credential mode.
+
+Two more things to confirm before reading a clean comparison as evidence:
+
+- **Neither root is stale.** A run that fails after writing some artifacts leaves a partial tree behind. Generate into roots you created empty for the comparison, and treat an export command that reported an error as producing no comparable output at all.
+- **Both roots came from the runs you think they did.** Re-exporting with a pinned `-ExportedAtUtc` resolves to the same directory each time, so an export that was refused for already existing content leaves the *previous* run's artifacts in place. Check the export commands succeeded rather than assuming the directory contents are fresh.
 
 ## 6. Refresh a populated lab
 

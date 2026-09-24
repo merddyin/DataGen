@@ -9,21 +9,21 @@ This example is a minimal catalog-backed script plugin.
 
 ## Inspect
 ```powershell
-Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 ```
 
 ## Validate
 ```powershell
-Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+Test-SEGenerationPluginPackage -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 ```
 
 ## Execute
 ```powershell
-$plugin = Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script'
+$plugin = Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CountryTaxIds.Script'
 
 New-SEEnterpriseWorld `
-  -ScenarioPath 'E:\source\DataGen\examples\regional-manufacturer.json' `
-  -PluginRootPath 'E:\source\DataGen\sdk\examples\CountryTaxIds.Script' `
+  -ScenarioPath '.\examples\regional-manufacturer.json' `
+  -PluginRootPath '.\sdk\examples\CountryTaxIds.Script' `
   -EnablePluginCapability CountryTaxIds `
   -RequirePluginHashApproval `
   -PluginAllowedContentHash $plugin.ContentHash

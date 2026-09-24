@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using SyntheticEnterprise.Contracts.Abstractions;
 using SyntheticEnterprise.Contracts.Configuration;
+using SyntheticEnterprise.Contracts.Models;
 using SyntheticEnterprise.Core.Abstractions;
 using SyntheticEnterprise.Core.DependencyInjection;
 
@@ -164,5 +165,163 @@ public sealed class CmdbGenerationTests
         Assert.Contains("Medium", criticalities);
         Assert.Contains("High", criticalities);
         Assert.True(criticalities.Count >= 3);
+    }
+
+    /// <summary>
+    /// A configuration management database holds more than one item for the same host or application
+    /// whenever a source filed a record under an identity the database failed to match, and those
+    /// items disagree about criticality because each carries the band its own source stated. Anything
+    /// resolving criticality across a database therefore has a real multi-value group to resolve.
+    /// </summary>
+    [Fact]
+    public void Some_Source_Entities_Are_Described_By_More_Than_One_Item_That_Disagrees_About_Criticality()
+    {
+        var world = GenerateCmdbWorld();
+
+        var targets = world.ConfigurationItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.SourceEntityType) && !string.IsNullOrWhiteSpace(item.SourceEntityId))
+            .GroupBy(item => $"{item.SourceEntityType}|{item.SourceEntityId}", StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var multiItemTargets = targets.Where(group => group.Count() > 1).ToList();
+
+        Assert.NotEmpty(multiItemTargets);
+
+        var disagreeingTargets = multiItemTargets
+            .Where(group => group
+                .Select(item => item.BusinessCriticality)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count() > 1)
+            .ToList();
+
+        Assert.NotEmpty(disagreeingTargets);
+
+        // Every item this generator emits still states a criticality, duplicates included.
+        Assert.DoesNotContain(world.ConfigurationItems, item => string.IsNullOrWhiteSpace(item.BusinessCriticality));
+
+        // The accidental-duplicate guard still holds: the projection describes each source entity
+        // canonically once, and only an identity a source actually filed adds a further item.
+        Assert.All(
+            targets,
+            group => Assert.Single(group, item => !item.CiKey.Contains('#', StringComparison.Ordinal)));
+        Assert.Equal(
+            world.ConfigurationItems.Count,
+            world.ConfigurationItems.Select(item => item.CiKey).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+    }
+
+    /// <summary>
+    /// The disagreement is reported, not invented: each item's criticality is the band stated by a
+    /// source record linked to that item, and the items in a disagreeing group are reached through
+    /// different records.
+    /// </summary>
+    [Fact]
+    public void A_Disagreement_About_Criticality_Traces_To_Distinct_Source_Records()
+    {
+        var world = GenerateCmdbWorld();
+        var recordsById = world.CmdbSourceRecords.ToDictionary(record => record.Id, StringComparer.OrdinalIgnoreCase);
+        var recordsByItemId = world.CmdbSourceLinks
+            .GroupBy(link => link.ConfigurationItemId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .Where(link => recordsById.ContainsKey(link.SourceRecordId))
+                    .Select(link => recordsById[link.SourceRecordId])
+                    .ToArray(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var disagreeingTargets = world.ConfigurationItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.SourceEntityType) && !string.IsNullOrWhiteSpace(item.SourceEntityId))
+            .GroupBy(item => $"{item.SourceEntityType}|{item.SourceEntityId}", StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1
+                            && group.Select(item => item.BusinessCriticality).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            .ToList();
+
+        Assert.NotEmpty(disagreeingTargets);
+        Assert.All(disagreeingTargets, group =>
+        {
+            var recordIdsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in group)
+            {
+                Assert.True(recordsByItemId.TryGetValue(item.Id, out var records), $"Item {item.Id} is reached by no source record.");
+                Assert.Contains(
+                    records!,
+                    record => string.Equals(record.ObservedBusinessCriticality, item.BusinessCriticality, StringComparison.OrdinalIgnoreCase));
+                Assert.All(records!, record => Assert.True(recordIdsSeen.Add(record.Id)));
+            }
+        });
+
+        // The record that named the thing differently is the one the database failed to match.
+        Assert.Contains(world.CmdbSourceRecords, record => record.MatchStatus == "Unreconciled");
+        Assert.Contains(world.CmdbSourceLinks, link => link.LinkType == "Duplicate");
+        Assert.All(
+            world.CmdbSourceRecords.Where(record => record.MatchStatus == "Unreconciled"),
+            record => Assert.NotEqual("CMDB", record.SourceSystem));
+    }
+
+    /// <summary>
+    /// A source can also state a band the database disagrees with on a record the database did match,
+    /// which is the plain observed-versus-canonical divergence the rest of this layer already models.
+    /// </summary>
+    [Fact]
+    public void A_Matched_Source_Record_Can_State_A_Criticality_The_Item_Does_Not()
+    {
+        var world = GenerateCmdbWorld();
+        var itemsById = world.ConfigurationItems.ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+
+        var divergent = world.CmdbSourceLinks
+            .Where(link => link.LinkType == "Matched")
+            .Join(world.CmdbSourceRecords, link => link.SourceRecordId, record => record.Id, (link, record) => (link, record))
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.record.ObservedBusinessCriticality)
+                           && itemsById.TryGetValue(pair.link.ConfigurationItemId, out var item)
+                           && !string.Equals(item.BusinessCriticality, pair.record.ObservedBusinessCriticality, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        Assert.NotEmpty(divergent);
+        Assert.All(divergent, pair => Assert.NotEqual("CMDB", pair.record.SourceSystem));
+    }
+
+    private static SyntheticEnterpriseWorld GenerateCmdbWorld()
+    {
+        var services = new ServiceCollection()
+            .AddSyntheticEnterpriseCore()
+            .BuildServiceProvider();
+
+        return services.GetRequiredService<IWorldGenerator>().Generate(
+            new GenerationContext
+            {
+                Seed = 20260923,
+                GeneratedAt = new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero),
+                Scenario = new ScenarioDefinition
+                {
+                    Name = "CMDB Multi Item",
+                    IndustryProfile = "Manufacturing",
+                    Cmdb = new CmdbProfile { IncludeConfigurationManagement = true },
+                    Applications = new ApplicationProfile
+                    {
+                        IncludeApplications = true,
+                        BaseApplicationCount = 6,
+                        IncludeLineOfBusinessApplications = true,
+                        IncludeSaaSApplications = true
+                    },
+                    Companies = new()
+                    {
+                        new ScenarioCompanyDefinition
+                        {
+                            Name = "Multi Item Manufacturing",
+                            Industry = "Manufacturing",
+                            EmployeeCount = 400,
+                            BusinessUnitCount = 3,
+                            DepartmentCountPerBusinessUnit = 3,
+                            TeamCountPerDepartment = 2,
+                            OfficeCount = 2,
+                            ServerCount = 20,
+                            DatabaseCount = 10,
+                            FileShareCount = 8,
+                            CollaborationSiteCount = 10,
+                            Countries = new() { "United States" }
+                        }
+                    }
+                }
+            },
+            new CatalogSet()).World;
     }
 }

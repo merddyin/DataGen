@@ -379,3 +379,6 @@ docs/DataGen_DTEnvDiscovery_Mapping_Matrix.md
 # beads runtime artifacts
 .beads/proxieddb/
 *.gate.lock*
+
+# Claude Code agent worktrees (transient, and each is its own git repository)
+.claude/worktrees/

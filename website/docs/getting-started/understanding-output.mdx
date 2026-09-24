@@ -53,6 +53,8 @@ The same seed alone is not enough to make an equality claim. For two independent
 
 When those inputs are fixed, the deterministic-generation receipt tooling can compare complete payload inventories. It deliberately excludes declared sensitive inputs from its equality proof. Outputs that intentionally generate credential material can therefore differ even when the non-sensitive world and export contract are the same.
 
+The DataGen version is on that list for a reason. A release may change what generation emits for the same inputs, including how many values a layer draws from the shared random source, which shifts the values later layers generate even where row counts are unchanged. An equality claim therefore holds within one version, not across an upgrade. v0.14.0 is such a release; see [What's New](/about/whats-new) for what moved and regenerate any export you keep as a fixed reference.
+
 ## What realism means in practice
 
 Generated output is not meant to be perfectly neat unless you ask for it. Depending on the scenario and deviation profile, you may see:

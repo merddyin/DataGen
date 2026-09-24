@@ -208,7 +208,7 @@ $certificate.Thumbprint
     $attestation = (Get-Content -LiteralPath $attestationPath -Raw).Trim()
     & "$PSHOME\pwsh.exe" -NoLogo -NoProfile -NonInteractive -File (Join-Path $candidateRoot 'scripts\assert-release-preflight-attestation.ps1') `
         -Attestation $attestation `
-        -ExpectedVersion '0.13.0' `
+        -ExpectedVersion '0.14.0' `
         -ExpectedSourceCommit $candidateCommit `
         -ExpectedSourceTreeId $candidateTree `
         -PublicCertificatePath $publicCertificatePath

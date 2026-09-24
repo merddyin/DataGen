@@ -405,9 +405,9 @@ public sealed class BasicCloudTenantGenerator : ICloudTenantGenerator
             "AuditCredentialValidation",
             "AuditPolicy",
             "String",
-            "Success,Failure",
+            "Success and Failure",
             "AuditCsv",
-            policyPath: "Audit:Credential Validation",
+            policyPath: "Audit:Audit Credential Validation",
             sourceReference: "gpo-intune-v1-008-audit-category");
         AddPolicyParitySetting(
             world,

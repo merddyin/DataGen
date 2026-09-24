@@ -33,6 +33,24 @@ Get-SEGenerationPlugin -PluginRootPath .\plugins
 
 and verify the manifest, capability declaration, and trust settings.
 
+## A plugin is skipped with "not in the allowed hash list"
+
+Generation still succeeds, but the plugin's records are absent. The reason is in the warnings, not in the terminal output:
+
+```powershell
+$world = New-SEEnterpriseWorld -ScenarioPath .\scenario.json -Seed 4242 -UseRegisteredPlugins
+$world.Warnings
+```
+
+If this started right after a DataGen upgrade, the usual cause is that the approval was made under the previous version. An approval pins the built plugin, and for a binary plugin the hash includes the DataGen assemblies your build copies next to it, so rebuilding against a new DataGen version changes the hash on its own. Re-approve:
+
+```powershell
+Get-SEGenerationPlugin -PluginRootPath .\plugins -AllowAssemblyPlugins | Select-Object Capability, ContentHash
+Register-SEGenerationPlugin -PluginRootPath .\plugins -AllowAssemblyPlugins
+```
+
+A rebuild is not the only cause — an edited, replaced, or tampered package looks the same from the outside. Confirm the package is the one you intend to run before re-approving it. See [Binary Plugin Guide](../sdk/binary-plugin-guide.mdx#an-approval-pins-the-built-artifact-not-the-source).
+
 ## Export output is unexpectedly sparse
 
 Check:

@@ -68,7 +68,11 @@ public sealed class BasicOrganizationGenerator : IOrganizationGenerator
         var templateNames = SelectOrganizationTemplates(catalogs, "BusinessUnit", companyDefinition.Industry, companyDefinition.EmployeeCount)
             .Select(template => template.Name)
             .ToList();
-        var names = ExpandOrganizationNames(templateNames, fallbackNames, companyDefinition.BusinessUnitCount);
+        // A business unit sits at the top of the company, so nothing above it distinguishes two of
+        // them: a repeated name would name the same thing twice. A department name may repeat,
+        // because the business unit that owns it tells the two apart, and that repetition is kept.
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = ExpandOrganizationNames(templateNames, fallbackNames, companyDefinition.BusinessUnitCount, usedNames);
 
         var units = new List<BusinessUnit>();
 

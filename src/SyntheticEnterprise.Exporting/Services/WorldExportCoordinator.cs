@@ -47,18 +47,23 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
             linkRequestAware.ApplyRequest(request);
         }
 
-        var outputRoot = _pathResolver.ResolveRoot(request.OutputPath, request.ArtifactPrefix);
+        var outputRoot = _pathResolver.ResolveRoot(request.OutputPath, request.ArtifactPrefix, request.ExportedAtUtc);
+
+        var entityDescriptors = _entityTableProvider.GetDescriptors();
+        var linkDescriptors = _linkTableProvider.GetDescriptors();
+
+        PrepareOutputRoot(outputRoot, request, entityDescriptors, linkDescriptors);
         Directory.CreateDirectory(outputRoot);
 
         var artifacts = new List<ExportArtifactDescriptor>();
 
-        foreach (dynamic descriptor in _entityTableProvider.GetDescriptors())
+        foreach (dynamic descriptor in entityDescriptors)
         {
             var rows = ((IEnumerable<IReadOnlyDictionary<string, object?>>)MaterializeRows(generationResult, descriptor)).ToList();
             artifacts.Add(_artifactWriter.Write(outputRoot, descriptor.RelativePathStem, descriptor.Columns, rows, ExportArtifactKind.EntityTable));
         }
 
-        foreach (dynamic descriptor in _linkTableProvider.GetDescriptors())
+        foreach (dynamic descriptor in linkDescriptors)
         {
             var rows = ((IEnumerable<IReadOnlyDictionary<string, object?>>)MaterializeRows(generationResult, descriptor)).ToList();
             artifacts.Add(_artifactWriter.Write(outputRoot, descriptor.RelativePathStem, descriptor.Columns, rows, ExportArtifactKind.LinkTable));
@@ -105,6 +110,102 @@ public sealed class WorldExportCoordinator : IWorldExportCoordinator
         }
 
         return manifest;
+    }
+
+    /// <summary>
+    /// Decides what happens when the resolved export root already holds content.
+    /// </summary>
+    /// <remarks>
+    /// Because the derived directory name is a function of the export timestamp rather than the wall clock, a
+    /// repeated run with identical inputs now resolves to the directory the previous run wrote. Merging the two
+    /// exports into one directory would be worse than the old behaviour: it would leave artifacts from the earlier
+    /// run in place wherever the later run wrote fewer of them, producing a tree that matches neither export. So a
+    /// non-empty root is refused unless the caller asked for <see cref="ExportRequest.Overwrite"/>, and an overwrite
+    /// replaces the directory outright rather than writing over part of it. An overwrite is additionally refused
+    /// when the root holds anything DataGen did not put there, so that pointing <c>-OutputPath</c> at an occupied
+    /// directory cannot silently destroy unrelated files.
+    /// </remarks>
+    private static void PrepareOutputRoot(
+        string outputRoot,
+        ExportRequest request,
+        IReadOnlyList<object> entityDescriptors,
+        IReadOnlyList<object> linkDescriptors)
+    {
+        if (!Directory.Exists(outputRoot))
+        {
+            return;
+        }
+
+        var existingEntries = Directory.GetFileSystemEntries(outputRoot);
+        if (existingEntries.Length == 0)
+        {
+            return;
+        }
+
+        if (!request.Overwrite)
+        {
+            throw new IOException(
+                $"Export root '{outputRoot}' already exists and is not empty. Export directory names are derived from " +
+                "the export timestamp, so repeating a run with the same inputs resolves to the same directory. Re-run " +
+                "with -Overwrite to replace the previous export, or supply a distinct -ArtifactPrefix or -OutputPath. " +
+                "DataGen will not merge two exports into one directory.");
+        }
+
+        var ownedNames = GetOwnedTopLevelNames(entityDescriptors, linkDescriptors);
+        var foreignNames = existingEntries
+            .Select(entry => Path.GetFileName(Path.TrimEndingDirectorySeparator(entry)))
+            .Where(name => !ownedNames.Contains(name))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        if (foreignNames.Count > 0)
+        {
+            throw new IOException(
+                $"Refusing to overwrite export root '{outputRoot}': it contains entries DataGen did not export " +
+                $"({string.Join(", ", foreignNames)}). Point -OutputPath at a directory used only for exports, or " +
+                "remove the unrelated content first.");
+        }
+
+        Directory.Delete(outputRoot, recursive: true);
+    }
+
+    private static HashSet<string> GetOwnedTopLevelNames(
+        IReadOnlyList<object> entityDescriptors,
+        IReadOnlyList<object> linkDescriptors)
+    {
+        var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "manifest.json",
+            "export_summary.json"
+        };
+
+        foreach (dynamic descriptor in entityDescriptors)
+        {
+            AddOwnedTopLevelNames(owned, (string)descriptor.RelativePathStem);
+        }
+
+        foreach (dynamic descriptor in linkDescriptors)
+        {
+            AddOwnedTopLevelNames(owned, (string)descriptor.RelativePathStem);
+        }
+
+        return owned;
+    }
+
+    private static void AddOwnedTopLevelNames(HashSet<string> owned, string relativePathStem)
+    {
+        var separatorIndex = relativePathStem.IndexOfAny(['/', '\\']);
+        if (separatorIndex >= 0)
+        {
+            // A nested stem such as "entities/companies" owns the "entities" directory at the root.
+            owned.Add(relativePathStem[..separatorIndex]);
+            return;
+        }
+
+        // A flat stem writes a single file at the root; the writer appends the format extension when absent.
+        owned.Add(relativePathStem);
+        owned.Add(relativePathStem + ".json");
+        owned.Add(relativePathStem + ".csv");
     }
 
     private static IEnumerable<IReadOnlyDictionary<string, object?>> MaterializeRows(dynamic generationResult, dynamic descriptor)

@@ -41,8 +41,32 @@ Key parameters:
 - `-IncludeManifest`
 - `-IncludeSummary`
 - `-CredentialExportMode`
+- `-ExportedAtUtc`
 - `-Overwrite`
 - `-PassThru`
+
+### Where the artifacts land
+
+`-OutputPath` is not always the export root:
+
+- If `-ArtifactPrefix` is supplied, artifacts are written to `<OutputPath>\<ArtifactPrefix>`.
+- Otherwise, if the last segment of `-OutputPath` is `normalized`, that directory **is** the export root and artifacts are written directly into it.
+- Otherwise a directory named `synthetic_enterprise_export_<yyyyMMdd_HHmmss>` is created under `-OutputPath`.
+
+The timestamp in that derived name comes from `-ExportedAtUtc`, not from the clock at the moment the command runs. Two runs with the same scenario, seed, `-GeneratedAt` and `-ExportedAtUtc` therefore resolve to the **same** directory, which is what makes an export tree comparable or recordable by path. `-ExportedAtUtc` defaults to the current UTC time, so a run that does not pin it still gets a fresh directory per run.
+
+The returned manifest's `OutputPath` is the resolved export root; use it rather than reconstructing the path yourself.
+
+### Re-running into the same directory
+
+Because the derived name is a function of `-ExportedAtUtc`, repeating a pinned run resolves to the directory the previous run wrote. DataGen will not merge two exports into one directory — that would leave artifacts from the earlier run in place wherever the later run produced fewer of them, giving a tree matching neither export. So:
+
+- If the export root is absent or empty, the export proceeds.
+- If it already holds content and `-Overwrite` was not supplied, the export **fails** and writes nothing. Supply `-Overwrite`, or a distinct `-ArtifactPrefix` or `-OutputPath`.
+- With `-Overwrite`, the export root is replaced outright rather than written over in place.
+- An overwrite is refused if the export root holds anything DataGen did not export, so pointing `-OutputPath` at an occupied directory cannot destroy unrelated files. Use a directory dedicated to exports.
+
+This also protects comparisons from a stale directory: if a run fails after writing some artifacts, the next identical run refuses rather than silently leaving a partial tree in place to be compared against.
 
 ## `New-SECatalogDatabase`
 

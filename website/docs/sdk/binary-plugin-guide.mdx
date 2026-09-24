@@ -21,6 +21,44 @@ Binary plugins are the right choice when your extension needs:
 
 The runtime includes explicit trust and execution controls for external plugins. Those controls are there to protect the host and keep plugin behavior auditable.
 
+### An approval pins the built artifact, not the source
+
+A binary plugin is approved by its **content hash**, and that hash is computed over what will actually run:
+
+- the plugin manifest,
+- the entry-point assembly,
+- every plugin-local data file, and
+- a recursive inventory of **every file in the entry point's output directory**.
+
+That last component is the one to plan around. Your build copies DataGen's own assemblies (for example `SyntheticEnterprise.Contracts.dll`) next to your plugin, so they are inside the hashed package. Identical plugin source compiled against a different DataGen version therefore produces a **different content hash**.
+
+This is deliberate. The thing that was approved should be the thing that runs, and an assembly compiled against different dependencies is a different assembly. But it has a consequence worth knowing before you meet it:
+
+:::warning Upgrading DataGen invalidates every approved binary plugin
+A DataGen version change invalidates existing approvals for binary plugins. An approval cannot be carried across versions. Plan re-approval as part of taking an upgrade.
+:::
+
+At upgrade time:
+
+1. Rebuild the plugin against the new DataGen version.
+2. Re-inspect it to read the new hash:
+   ```powershell
+   Get-SEGenerationPlugin -PluginRootPath .\plugins | Select-Object Capability, ContentHash
+   ```
+3. Re-approve it, either by re-running `Register-SEGenerationPlugin -PluginRootPath .\plugins -AllowAssemblyPlugins`, or by updating whatever pinned value you pass to `-PluginAllowedContentHash`.
+
+A rebuild alone is enough to change the hash, so treat any pinned hash checked into source control as version-specific and update it in the same commit that takes the upgrade.
+
+:::warning The hash is also sensitive to where the package sits
+A content hash is not reproducible from the package's contents alone today. Where a plugin declares local data files, the absolute path of each one is part of the digest, so the same bytes inspected at a second location produce a different hash — normalising file timestamps does not change this. And if the plugin root is a build tree rather than a staged package, the recursive inventory takes in MSBuild intermediates under `obj/`, several of which embed absolute paths in their own content.
+
+Two practical consequences. Re-take the approval whenever the package moves, not only when it is rebuilt. And treat a pinned hash as a change detector for one directory on one machine rather than as a value a second party can independently reproduce — if you need someone else to verify that the approved plugin is the one that ran, this control does not yet give you that.
+
+There is no package layout that makes the hash reproducible, so do not spend time looking for one. Inspecting a staged package rather than a build output directory keeps `obj/` out of the inventory, which is worth doing on its own merits — but it does not make the hash location-independent, because a declared local data file contributes its absolute path whatever the surrounding layout. This has been tested: a clean staged package with no `obj/` still hashes differently at a second location.
+:::
+
+Script plugins are not affected by a DataGen upgrade. Their content hash covers the manifest, the entry-point script, and plugin-local data only — there is no compiled package in it.
+
 When building binary plugins:
 
 - keep the capability surface explicit

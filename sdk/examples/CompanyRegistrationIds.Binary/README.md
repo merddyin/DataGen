@@ -9,26 +9,26 @@ This example is a minimal logic-driven binary plugin.
 
 ## Build
 ```powershell
-dotnet build 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj'
+dotnet build '.\sdk\examples\CompanyRegistrationIds.Binary\CompanyRegistrationIds.Binary.csproj'
 ```
 
 ## Inspect
 ```powershell
-Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins
+Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins
 ```
 
 ## Validate
 ```powershell
-Test-SEGenerationPluginPackage -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins
+Test-SEGenerationPluginPackage -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins
 ```
 
 ## Execute
 ```powershell
-$plugin = Get-SEGenerationPlugin -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins
+$plugin = Get-SEGenerationPlugin -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' -AllowAssemblyPlugins
 
 New-SEEnterpriseWorld `
-  -ScenarioPath 'E:\source\DataGen\examples\regional-manufacturer.json' `
-  -PluginRootPath 'E:\source\DataGen\sdk\examples\CompanyRegistrationIds.Binary' `
+  -ScenarioPath '.\examples\regional-manufacturer.json' `
+  -PluginRootPath '.\sdk\examples\CompanyRegistrationIds.Binary' `
   -EnablePluginCapability CompanyRegistrationIds `
   -AllowAssemblyPlugins `
   -PluginAllowedContentHash $plugin.ContentHash

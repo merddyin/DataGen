@@ -207,7 +207,9 @@ public sealed class ApplicationGenerationTests
         Assert.Contains(result.World.PolicySettings, setting =>
             parityPolicyIds.Contains(setting.PolicyId)
             && setting.Source == "AuditCsv"
-            && setting.PolicyPath == "Audit:Credential Validation"
+            // The subcategory display name carries a leading "Audit ", so the canonical key
+            // doubles the word. It looks wrong and is what a collector reports.
+            && setting.PolicyPath == "Audit:Audit Credential Validation"
             && setting.SourceReference == "gpo-intune-v1-008-audit-category");
         Assert.Contains(result.World.PolicySettings, setting =>
             parityPolicyIds.Contains(setting.PolicyId)

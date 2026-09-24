@@ -1,11 +1,12 @@
 using System;
+using System.Globalization;
 using System.IO;
 
 namespace SyntheticEnterprise.Exporting.Services;
 
 public sealed class ExportPathResolver : IExportPathResolver
 {
-    public string ResolveRoot(string outputPath, string? artifactPrefix)
+    public string ResolveRoot(string outputPath, string? artifactPrefix, DateTimeOffset exportedAtUtc)
     {
         var normalizedOutputPath = Path.GetFullPath(outputPath);
 
@@ -18,8 +19,11 @@ public sealed class ExportPathResolver : IExportPathResolver
             }
         }
 
+        // The derived directory name comes from the supplied export timestamp rather than the wall clock, so that
+        // two runs with identical scenario, seed, generation time and export timestamp are path-identical and can
+        // be compared or recorded by path. The invariant culture keeps the name Gregorian under any current culture.
         var prefix = string.IsNullOrWhiteSpace(artifactPrefix)
-            ? $"synthetic_enterprise_export_{DateTime.UtcNow:yyyyMMdd_HHmmss}"
+            ? "synthetic_enterprise_export_" + exportedAtUtc.UtcDateTime.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture)
             : artifactPrefix.Trim();
 
         return Path.Combine(normalizedOutputPath, prefix);

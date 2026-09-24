@@ -5,6 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
     <GenerateSeededCatalogDatabase>true</GenerateSeededCatalogDatabase>
+    <!--
+      The Content item below cannot keep this copy current on its own: the catalog publisher restores the
+      previous artifact's LastWriteTimeUtc onto a regenerated artifact, so PreserveNewest sees the output
+      copy as already up to date and tests read stale catalog data. VerifyDataGenCatalogOutputCopy in
+      Directory.Build.targets reconciles this path by content hash and fails the build if it cannot.
+    -->
+    <DataGenCatalogOutputRelativePath>catalogs\catalogs.sqlite</DataGenCatalogOutputRelativePath>
   </PropertyGroup>
 
   <PropertyGroup>
